@@ -8,7 +8,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 # Armadillo
 find_package(Armadillo REQUIRED)
 
-# Исполняемый файл и исходники
+# Явные исходники. *.inc.cpp не компилируем.
 add_executable(edge_trader_server
   src/main.cpp
   src/ppo.cpp
@@ -19,20 +19,16 @@ add_executable(edge_trader_server
   src/optim/adam.cpp
   src/features/features.cpp
   src/infer_policy.cpp
+  src/server_accessors.cpp
+
   # Роуты
   src/routes/health.cpp
+  src/routes/health_ai.cpp
   src/routes/infer.cpp
   src/routes/agents.cpp
   src/routes/model.cpp
-  # Инклюд-блоки (подключаются через #include)
-  src/routes/backfill.inc.cpp
-  src/routes/health_base.inc.cpp
-  src/routes/health_ai.inc.cpp
   src/routes/metrics.cpp
-  src/routes/metrics.inc.cpp
-  src/routes/model.inc.cpp
   src/routes/train.cpp
-  src/routes/train.inc.cpp
 )
 
 target_include_directories(edge_trader_server PRIVATE
