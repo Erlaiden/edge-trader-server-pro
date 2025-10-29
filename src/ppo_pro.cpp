@@ -1,3 +1,4 @@
+// === ppo_pro.cpp (fixed: separate Adam for W and b) ===
 #include "ppo_pro.h"
 #include "ppo.h"
 #include "utils.h"
@@ -62,44 +63,52 @@ static arma::vec price_to_returns(const arma::vec& close) {
 }
 static inline double clamp(double v, double a, double b){ return std::max(a, std::min(v, b)); }
 
-// ===== Simple Policy/Value (каркас PRO-режима learn) =====
+// ===== Simple Policy/Value (PRO learn) =====
+// FIX: отдельные Adam для W и для b, чтобы формы совпадали
 struct PolicyNet {
     arma::mat W;  // 1 x D
-    arma::vec b;  // 1
-    Adam opt;
-    PolicyNet(int in_dim, double lr=0.001) : opt(lr) {
+    arma::vec b;  // 1 x 1 (vector of size 1)
+    Adam optW;
+    Adam optB;
+
+    PolicyNet(int in_dim, double lr=0.001) : W(1, in_dim), b(1), optW(lr), optB(lr) {
         W = arma::randn(1, in_dim) * 0.01;
-        b = arma::zeros(1);
+        b.zeros();
     }
     double forward_scalar(const arma::vec& x) const {
-        double z = arma::as_scalar(W * x + b);
+        double z = arma::as_scalar(W * x + b(0));
         return std::tanh(z); // [-1,1]
     }
     void update(const arma::vec& x, double adv, double scale=1.0) {
-        arma::mat gradW = adv * x.t();                 // 1 x D
-        arma::mat gradB(1,1,arma::fill::value(adv));   // 1 x 1
-        W = opt.step(W, gradW * scale);
-        b = opt.step(b, gradB * scale);
+        arma::mat gradW = adv * x.t();          // 1 x D
+        arma::vec gradB(1); gradB(0) = adv;     // 1
+
+        W = optW.step(W, gradW * scale);
+        b = optB.step(b, gradB * scale);
     }
 };
+
 struct ValueNet {
     arma::mat W;  // 1 x D
     arma::vec b;  // 1
-    Adam opt;
-    ValueNet(int in_dim, double lr=0.001) : opt(lr) {
+    Adam optW;
+    Adam optB;
+
+    ValueNet(int in_dim, double lr=0.001) : W(1, in_dim), b(1), optW(lr), optB(lr) {
         W = arma::randn(1, in_dim) * 0.01;
-        b = arma::zeros(1);
+        b.zeros();
     }
     double forward_scalar(const arma::vec& x) const {
-        return arma::as_scalar(W * x + b); // R
+        return arma::as_scalar(W * x + b(0)); // R
     }
     void update(const arma::vec& x, double target, double scale=1.0) {
         double v = forward_scalar(x);
-        double err = v - target; // d/dW (1/2 (v-target)^2) = err * x
-        arma::mat gradW = err * x.t();
-        arma::mat gradB(1,1,arma::fill::value(err));
-        W = opt.step(W, gradW * scale);
-        b = opt.step(b, gradB * scale);
+        double err = v - target;                    // d/dW (1/2 (v-target)^2) = err * x
+        arma::mat gradW = err * x.t();             // 1 x D
+        arma::vec gradB(1); gradB(0) = err;        // 1
+
+        W = optW.step(W, gradW * scale);
+        b = optB.step(b, gradB * scale);
     }
 };
 
@@ -119,12 +128,12 @@ static EvalRes eval_on_range(
     const arma::vec close = M.row(4).t();
     const arma::vec low   = M.row(3).t();
     const arma::vec high  = M.row(2).t();
+
     arma::vec ret = price_to_returns(close);
     arma::vec rma = rolling_mean(ret, ma);
 
     auto sim_side = [&](int sign){
-        double tot=0.0, equity=0.0, peak=0.0, dd=0.0;
-        int trades=0, wins=0;
+        double tot=0.0, equity=0.0, peak=0.0, dd=0.0; int trades=0, wins=0;
         std::vector<double> eq; eq.reserve(end_idx);
         size_t s = std::max(start_idx, (size_t)(ma+1));
         for (size_t i=s; i+1<end_idx; ++i) {
@@ -178,8 +187,7 @@ static std::vector<FoldRes> walk_forward_cv(const arma::mat& M,int folds,double 
     if (usable<(size_t)folds) return out;
     size_t oos_len=std::max((size_t)std::floor((double)usable/folds),(size_t)50);
     for(int k=0;k<folds;++k){
-        size_t is_end=warmup+k*oos_len;
-        if(is_end<=warmup) continue;
+        size_t is_end=warmup+k*oos_len; if(is_end<=warmup) continue;
         size_t oos_start=is_end;
         size_t oos_end=std::min(oos_start+oos_len,N-1);
         EvalRes IS=eval_on_range(M,tp,sl,ma,thr,warmup,is_end);
@@ -212,7 +220,8 @@ static arma::mat zscore_rows(const arma::mat& X) {
 }
 
 // ===== reward from next bar with TP/SL =====
-static inline double nextbar_pnl(const arma::vec& close, const arma::vec& high, const arma::vec& low, size_t i, int sign, double tp, double sl) {
+static inline double nextbar_pnl(const arma::vec& close, const arma::vec& high, const arma::vec& low,
+                                 size_t i, int sign, double tp, double sl) {
     double entry = close(i);
     double tp_p = entry*(1.0+(sign>0?tp:-tp));
     double sl_p = entry*(1.0-(sign>0?sl:-sl));
@@ -223,7 +232,8 @@ static inline double nextbar_pnl(const arma::vec& close, const arma::vec& high, 
 }
 
 // ===== PRO training core: two modes =====
-nlohmann::json trainPPO_pro(const arma::mat& M15,const arma::mat*,const arma::mat*,const arma::mat*,int episodes,double tp_init,double sl_init,int ma_init){
+nlohmann::json trainPPO_pro(const arma::mat& M15,const arma::mat*,const arma::mat*,const arma::mat*,
+                            int episodes,double tp_init,double sl_init,int ma_init){
     if(M15.n_rows<5||M15.n_cols<50) return json{{"ok",false},{"error","not_enough_data"}};
 
     const std::string MODE = get_env_str("ETAI_PRO_MODE","search"); // "search" | "learn"
@@ -233,7 +243,7 @@ nlohmann::json trainPPO_pro(const arma::mat& M15,const arma::mat*,const arma::ma
     if (FOLDS < 3) FOLDS = 3;
     if (FOLDS > 10) FOLDS = 10;
 
-    // ========= MODE: search (старый надёжный перебор) =========
+    // ========= MODE: search (legacy grid) =========
     if (MODE != "learn") {
         std::mt19937_64 rng(seed);
         std::uniform_real_distribution<double>d_thr(0.0003,0.0012);
@@ -293,41 +303,36 @@ nlohmann::json trainPPO_pro(const arma::mat& M15,const arma::mat*,const arma::ma
         };
     }
 
-    // ========= MODE: learn (обучаем policy/value на признаках) =========
-    // 1) данные и признаки
+    // ========= MODE: learn =========
     const arma::vec ts    = M15.row(0).t();
     const arma::vec open  = M15.row(1).t();
     const arma::vec high  = M15.row(2).t();
     const arma::vec low   = M15.row(3).t();
     const arma::vec close = M15.row(4).t();
 
-    arma::mat X = build_feature_matrix(M15);            // D x N
+    arma::mat X = build_feature_matrix(M15); // D x N
     if (X.n_elem == 0) return json{{"ok",false},{"error","features_empty"}};
     X = zscore_rows(X);
 
     const size_t N = X.n_cols;
     if (N < 200) return json{{"ok",false},{"error","not_enough_feature_rows"}};
 
-    // 2) train/OOS split
     const size_t oos_tail = 100;
     const size_t train_end = (N > oos_tail+1) ? (N - oos_tail - 1) : (N-2);
     const size_t warmup = 32;
     if (train_end <= warmup+1) return json{{"ok",false},{"error","not_enough_train_window"}};
 
-    // 3) модели
     const int D = (int)X.n_rows;
     double lr = 0.001;
     PolicyNet policy(D, lr);
     ValueNet  vnet(D, lr);
 
-    // 4) гиперы
     int epochs = 20;
     double tp = std::max(0.001, tp_init);
     double sl = std::max(0.001, sl_init);
-    double act_gate = 0.10;         // минимальная|action| для сделки
-    double adv_scale = 1.0;         // масштаб обновления
+    double act_gate = 0.10;
+    double adv_scale = 1.0;
 
-    // 5) обучение
     for (int ep=0; ep<epochs; ++ep) {
         double ep_reward = 0.0;
         for (size_t i = warmup; i < train_end; ++i) {
@@ -350,7 +355,7 @@ nlohmann::json trainPPO_pro(const arma::mat& M15,const arma::mat*,const arma::ma
         (void)ep_reward;
     }
 
-    // 6) OOS-оценка на последних 100 барах
+    // OOS на последних 100 барах
     double tot=0.0, equity=0.0, peak=0.0, dd=0.0;
     int trades=0, wins=0, tL=0, tS=0;
     std::vector<double> eq; eq.reserve(oos_tail);
@@ -375,7 +380,6 @@ nlohmann::json trainPPO_pro(const arma::mat& M15,const arma::mat*,const arma::ma
     double sh = (sd>1e-12)?(mean/sd):0.0;
     double ex = trades? tot/(double)trades : 0.0;
 
-    // 7) лог и JSON
     fs::create_directories("cache/logs");
     char buf[64];std::time_t tt=ts_now/1000;std::strftime(buf,sizeof(buf),"%Y%m%d_%H%M%S",std::localtime(&tt));
     std::string log_path=std::string("cache/logs/pro_learn_15_")+buf+".json";
@@ -407,7 +411,7 @@ nlohmann::json trainPPO_pro(const arma::mat& M15,const arma::mat*,const arma::ma
         {"tp", tp},
         {"sl", sl},
         {"ma_len", ma_init},
-        {"best_thr", 0.0006}, // совместимость старого инференса
+        {"best_thr", 0.0006}, // compatibility with legacy infer
         {"train_rows_total", (int)M15.n_cols},
         {"warmup_bars", (int)warmup},
         {"train_rows_used", (int)train_used},
