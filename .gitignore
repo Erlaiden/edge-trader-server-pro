@@ -1,0 +1,33 @@
+# Build artifacts
+/build/
+/CMakeFiles/
+/CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# Objects & logs
+*.o
+*.obj
+*.log
+
+# Local caches & data
+/cache/
+/tmp/
+/*.csv
+*.csv.gz
+
+# Backups & temp
+backup_*/
+*.bak
+*.bak.*
+*~ 
+*.tmp
+*_dump.txt
+
+# Systemd local overrides
+*.service.d/
+
+# Editors
+.vscode/
+.idea/
+*.swp
