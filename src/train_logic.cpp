@@ -3,7 +3,7 @@
 #include "ppo_pro.h"
 #include "utils.h"
 #include "rt_metrics.h"
-#include "features/features.h"   // << добавили фичи для policy
+#include "features/features.h"   // фичи для policy
 #include <armadillo>
 #include <filesystem>
 #include <fstream>
@@ -18,7 +18,7 @@ static arma::mat zscore_rows(const arma::mat& X) {
     for (size_t r=0; r<Z.n_rows; ++r) {
         arma::rowvec row = Z.row(r);
         double mean = arma::mean(row);
-        double sd = arma::stddev(row);
+        double sd   = arma::stddev(row);
         if (sd < 1e-12) sd = 1.0;
         Z.row(r) = (row - mean) / sd;
     }
@@ -60,6 +60,7 @@ nlohmann::json run_train_pro_and_save(const std::string& symbol,
         fs::create_directories("cache/models");
         long long now_ms = (long long)time(nullptr)*1000;
 
+        // Метрики в атомики для /metrics
         const auto cv_folds  = (unsigned long long)metrics.value("cv_folds", 0);
         const auto cv_eff    = (unsigned long long)metrics.value("cv_effective_folds", 0);
         const auto is_sum    = metrics.value("is_summary", json::object());
@@ -100,33 +101,51 @@ nlohmann::json run_train_pro_and_save(const std::string& symbol,
             {"oos", metrics.contains("oos") ? metrics["oos"] : metrics.value("oos_summary", json::object())}
         };
 
-        // ---------- Генерация простого policy (эвристика) ----------
-        // Строим фичи и формируем линейную политику: a = tanh(W*x + b).
-        // Это "первый шажок", чтобы включить policy-пайплайн (далее улучшим тренером).
+        // ---------- Policy: берём из metrics если есть, иначе — эвристика ----------
+        bool attached_policy = false;
         try {
-            arma::mat X = etai::build_feature_matrix(M15); // ожидаем D x N
-            if (X.n_rows >= 1 && X.n_cols >= 2) {
-                X = zscore_rows(X);
-                int D = (int)X.n_rows;
-
-                // W — равномерные веса (усреднение по признакам), b = 0
-                std::vector<double> W((size_t)D, (D > 0 ? (1.0 / (double)D) : 0.0));
-                std::vector<double> b(1, 0.0);
-
-                json policy{
-                    {"feat_dim", D},
-                    {"W", W},
-                    {"b", b},
-                    {"note", "heuristic policy; to be replaced by learned weights"}
-                };
-                model["policy"] = policy;
+            if (metrics.contains("policy")
+                && metrics["policy"].is_object()
+                && metrics["policy"].contains("W")
+                && metrics["policy"].contains("b")
+                && metrics["policy"].contains("feat_dim")) {
+                model["policy"] = metrics["policy"];
+                model["policy_source"] = "learn";
+                if (!model["policy"].contains("note")) {
+                    model["policy"]["note"] = "learned_from_train";
+                }
+                attached_policy = true;
             }
         } catch (...) {
-            // policy опционален — если что-то пошло не так, просто пропускаем
+            attached_policy = false;
+        }
+
+        if (!attached_policy) {
+            // Эвристика только если нет выученной policy
+            try {
+                arma::mat X = etai::build_feature_matrix(M15); // ожидаем D x N
+                if (X.n_rows >= 1 && X.n_cols >= 2) {
+                    X = zscore_rows(X);
+                    int D = (int)X.n_rows;
+                    std::vector<double> W((size_t)D, (D > 0 ? (1.0 / (double)D) : 0.0));
+                    std::vector<double> b(1, 0.0);
+                    json policy{
+                        {"feat_dim", D},
+                        {"W", W},
+                        {"b", b},
+                        {"note", "heuristic policy; to be replaced by learned weights"}
+                    };
+                    model["policy"] = policy;
+                    model["policy_source"] = "heuristic";
+                }
+            } catch (...) {
+                // policy опционален — если что-то пошло не так, просто пропускаем
+            }
         }
 
         const std::string path = "cache/models/" + symbol + "_" + interval + "_ppo_pro.json";
-        std::ofstream f(path); if (f) f << model.dump(2);
+        std::ofstream f(path);
+        if (f) f << model.dump(2);
         out["model_path"] = path;
 
         TRAINS_TOTAL.fetch_add(1, std::memory_order_relaxed);
