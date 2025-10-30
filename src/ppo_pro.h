@@ -1,15 +1,18 @@
 #pragma once
-#include "json.hpp"
 #include <armadillo>
+#include "json.hpp"  // проектный nlohmann::json
 
 namespace etai {
-// Расширенная PPO (PRO): совместимая сигнатура, M60/M240/M1440 могут быть nullptr
-nlohmann::json trainPPO_pro(const arma::mat& M15,
-                            const arma::mat* M60,
-                            const arma::mat* M240,
-                            const arma::mat* M1440,
-                            int episodes,
-                            double tp_pct,
-                            double sl_pct,
-                            int ma_len);
+
+// Тренировка PPO_pro v1 на сыром OHLCV. Возвращает JSON с моделью и метриками.
+nlohmann::json trainPPO_pro(
+    const arma::mat& raw15,
+    const arma::mat* raw60,
+    const arma::mat* raw240,
+    const arma::mat* raw1440,
+    int episodes,
+    double tp,
+    double sl,
+    int ma_len);
+
 } // namespace etai
