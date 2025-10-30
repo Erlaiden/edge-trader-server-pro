@@ -1,11 +1,9 @@
 #include "train_logic.h"
-#include "server_accessors.h"   // etai::{get_data_health,set_model_thr,set_model_ma_len,set_current_model}
+#include "server_accessors.h"   // etai::{set_model_thr,set_model_ma_len,set_current_model}
 #include "ppo_pro.h"            // etai::trainPPO_pro(...)
-#include "utils_data.h"         // etai::load_cached_xy(...)
+#include "utils_data.h"         // etai::{load_cached_xy,load_raw_ohlcv}
 #include "json.hpp"
-
 #include <armadillo>
-#include <fstream>
 #include <mutex>
 #include <chrono>
 #include <iostream>
@@ -15,7 +13,6 @@
 using json = nlohmann::json;
 
 namespace etai {
-
 using arma::mat;
 
 static std::mutex train_mutex;
@@ -46,38 +43,40 @@ nlohmann::json run_train_pro_and_save(const std::string& symbol,
     };
 
     try {
-        // 1) sanity по данным
-        json dh = etai::get_data_health();
-        if (!dh.value("has_data", false)) {
-            throw std::runtime_error("no training data available");
-        }
-
+        // 1) X/y для кэша и feat_dim
         arma::mat X, y;
         if (!etai::load_cached_xy(symbol, interval, X, y)) {
-            throw std::runtime_error("failed to load cached XY");
+            throw std::runtime_error("failed to load or build XY from base csv");
         }
         if (X.n_rows == 0 || X.n_cols == 0) {
             throw std::runtime_error("empty feature matrix");
         }
 
-        std::cout << "[TRAIN] PPO_PRO start rows=" << X.n_rows
-                  << " cols=" << X.n_cols
+        // 2) Сырые OHLCV для тренера PRO (ожидает N×6: ts,o,h,l,c,v)
+        arma::mat raw15;
+        if (!etai::load_raw_ohlcv(symbol, interval, raw15)) {
+            throw std::runtime_error("failed to load raw OHLCV from base csv");
+        }
+
+        std::cout << "[TRAIN] PPO_PRO rows=" << raw15.n_rows
+                  << " raw_cols=" << raw15.n_cols
+                  << " feat_cols=" << X.n_cols
                   << " episodes=" << episodes
                   << " tp=" << tp << " sl=" << sl
                   << " ma=" << ma_len << std::endl;
 
-        // 2) обучение (валидационные матрицы не передаем — тренер сам подготовит внутри при необходимости)
-        json metrics = etai::trainPPO_pro(X, nullptr, nullptr, nullptr, episodes, tp, sl, ma_len);
+        // 3) обучение на сыром OHLCV
+        json metrics = etai::trainPPO_pro(raw15, nullptr, nullptr, nullptr, episodes, tp, sl, ma_len);
 
-        // 3) извлекаем ключевые метрики
+        // 4) метрики
         double best_thr = metrics.value("best_thr", 0.001);
         if (!(std::isfinite(best_thr) && best_thr > 0.0 && best_thr < 1.0)) {
-            best_thr = 0.001; // страховка от NaN/Inf/мусора
+            best_thr = 0.001;
         }
         double val_acc = metrics.value("val_accuracy", 0.0);
         double val_rew = metrics.value("val_reward", 0.0);
 
-        // 4) собираем JSON модели (версия 3, schema ppo_pro_v1, feat_version=2)
+        // 5) JSON модели
         json model = {
             {"version", 3},
             {"schema", "ppo_pro_v1"},
@@ -94,7 +93,7 @@ nlohmann::json run_train_pro_and_save(const std::string& symbol,
             {"metrics", metrics}
         };
 
-        // 5) сохраняем на диск
+        // 6) сохранение
         const std::string out_path = "cache/models/" + symbol + "_" + interval + "_ppo_pro.json";
         {
             std::ofstream ofs(out_path);
@@ -102,7 +101,7 @@ nlohmann::json run_train_pro_and_save(const std::string& symbol,
             ofs << model.dump(2);
         }
 
-        // 6) обновляем атомы + текущую модель для health/metrics
+        // 7) атомы
         etai::set_model_thr(best_thr);
         etai::set_model_ma_len(ma_len);
         etai::set_current_model(model);
