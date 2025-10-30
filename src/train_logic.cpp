@@ -2,7 +2,7 @@
 #include "server_accessors.h"
 #include "ppo_pro.h"
 #include "utils_data.h"
-#include "json.hpp"
+#include "http_reply.h"
 #include <armadillo>
 #include <mutex>
 #include <iostream>
@@ -13,16 +13,6 @@ using json = nlohmann::json;
 namespace etai {
 
 static std::mutex train_mutex;
-
-// безопасный доступ к числу
-static double jget(const json& j, const std::string& k) {
-    try {
-        if (!j.contains(k)) return NAN;
-        if (j[k].is_number()) return j[k].get<double>();
-        if (j[k].is_string()) return std::stod(j[k].get<std::string>());
-        return NAN;
-    } catch (...) { return NAN; }
-}
 
 json run_train_pro_and_save(const std::string& symbol,
                             const std::string& interval,
@@ -37,40 +27,32 @@ json run_train_pro_and_save(const std::string& symbol,
     if (!load_raw_ohlcv(symbol, interval, raw))
         throw std::runtime_error("Failed to load OHLCV");
 
-    json result = trainPPO_pro(raw, nullptr, nullptr, nullptr, episodes, tp, sl, ma_len);
+    // 1) тренировка → JSON результата тренера
+    json trainer = trainPPO_pro(raw, nullptr, nullptr, nullptr, episodes, tp, sl, ma_len);
 
-    // ключевой момент — ссылка на вложенный объект
-    json& metrics = result["metrics"];
+    // 2) путь модели и сохранение
+    const std::string model_path = "cache/models/" + symbol + "_" + interval + "_ppo_pro.json";
+    std::ofstream(model_path) << trainer.dump(2);
 
-    double best_thr   = jget(result,  "best_thr");
-    double val_acc    = jget(metrics, "val_accuracy");
-    double val_reward = jget(metrics, "val_reward");
-    double M_labeled  = jget(metrics, "M_labeled");
-    double val_size   = jget(metrics, "val_size");
-
-    set_model_thr(best_thr);
+    // 3) обновляем атомики
+    set_model_thr(trainer.value("best_thr", 0.5));
     set_model_ma_len(ma_len);
-    set_current_model(result);
+    set_current_model(trainer);
 
-    std::string model_path = "cache/models/" + symbol + "_" + interval + "_ppo_pro.json";
-    std::ofstream(model_path) << result.dump(2);
+    // 4) лог для верификации
+    try {
+        const auto& m = trainer.at("metrics");
+        std::cout << "[TRAIN] rows=" << m.value("N_rows", 0)
+                  << " M_labeled=" << m.value("M_labeled", 0)
+                  << " best_thr=" << trainer.value("best_thr", 0.0)
+                  << " acc=" << m.value("val_accuracy", 0.0)
+                  << " rew=" << m.value("val_reward", 0.0) << std::endl;
+    } catch (...) {
+        std::cout << "[TRAIN] metrics missing\n";
+    }
 
-    std::cout << "[TRAIN] rows=" << jget(metrics,"N_rows")
-              << " M_labeled=" << M_labeled
-              << " best_thr=" << best_thr
-              << " acc=" << val_acc
-              << " rew=" << val_reward << std::endl;
-
-    json reply{
-        {"ok", true},
-        {"tp", tp},
-        {"sl", sl},
-        {"ma_len", ma_len},
-        {"best_thr", best_thr},
-        {"metrics", metrics},
-        {"model_path", model_path}
-    };
-    return reply;
+    // 5) стабилизированный ответ (без копирования/ломания метрик)
+    return make_train_reply(trainer, tp, sl, ma_len, model_path);
 }
 
 } // namespace etai
