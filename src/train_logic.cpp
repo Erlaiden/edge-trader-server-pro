@@ -1,160 +1,220 @@
-#include "train_logic.h"
 #include "json.hpp"
-#include "ppo_pro.h"
-#include "utils.h"
-#include "rt_metrics.h"
-#include "features/features.h"   // фичи для policy
 #include <armadillo>
-#include <filesystem>
+#include <cstdio>
+#include <cstring>
+#include <string>
+#include <vector>
 #include <fstream>
+#include <sstream>
 #include <ctime>
+#include <cerrno>
+#include <algorithm>
 
-using json = nlohmann::json;
-namespace fs = std::filesystem;
-
-// простая нормализация строк (z-score по каждой строке)
-static arma::mat zscore_rows(const arma::mat& X) {
-    arma::mat Z = X;
-    for (size_t r=0; r<Z.n_rows; ++r) {
-        arma::rowvec row = Z.row(r);
-        double mean = arma::mean(row);
-        double sd   = arma::stddev(row);
-        if (sd < 1e-12) sd = 1.0;
-        Z.row(r) = (row - mean) / sd;
-    }
-    return Z;
+// Декларация ядра обучения (уже реализовано в ppo_pro.cpp)
+namespace etai {
+  nlohmann::json trainPPO_pro(const arma::mat& raw15,
+                              const arma::mat* raw60,
+                              const arma::mat* raw240,
+                              const arma::mat* raw1440,
+                              int episodes, double tp, double sl, int ma_len);
 }
 
-nlohmann::json run_train_pro_and_save(const std::string& symbol,
-                                      const std::string& interval,
-                                      int episodes, double tp, double sl, int ma_len)
+using json = nlohmann::json;
+using arma::mat;
+
+// --- Утилита: безопасный clamp ---
+static inline double clamp(double v, double lo, double hi){
+  if(v < lo) return lo;
+  if(v > hi) return hi;
+  return v;
+}
+
+// --- Утилита: атомарная запись файла (tmp -> rename) ---
+static bool atomic_write_file(const std::string& path, const std::string& data, std::string& err){
+  std::string tmp = path + ".tmp";
+  {
+    std::ofstream f(tmp, std::ios::binary);
+    if(!f.good()){ err = "open_tmp_fail"; return false; }
+    f.write(data.data(), (std::streamsize)data.size());
+    if(!f.good()){ err = "write_tmp_fail"; return false; }
+    f.flush();
+    if(!f.good()){ err = "flush_tmp_fail"; return false; }
+  }
+  if(std::rename(tmp.c_str(), path.c_str()) != 0){
+    err = std::string("rename_fail: ") + std::strerror(errno);
+    std::remove(tmp.c_str());
+    return false;
+  }
+  return true;
+}
+
+// --- CSV loader: ожидаем cache/SYMBOL_INTERVAL.csv с колонками: ts,open,high,low,close,volume,[turnover?]
+static bool load_cached_ohlcv(const std::string& symbol, const std::string& interval,
+                              arma::mat& out, std::string& err)
 {
-    arma::mat M15 = etai::load_cached_matrix(symbol, interval);
-    if (M15.n_elem == 0) {
-        return json{{"ok",false},{"error","no_cached_data"},{"hint","call /api/backfill first"}};
+  std::string path = "cache/" + symbol + "_" + interval + ".csv";
+  std::ifstream f(path);
+  if(!f.is_open()){ err = "csv_open_fail:" + path; return false; }
+
+  std::vector<double> row; row.reserve(6);
+  std::vector<double> data; data.reserve(7 * 4096);
+  std::string line;
+  bool header_skipped = false;
+
+  while(std::getline(f, line)){
+    if(line.empty()) continue;
+    // Пропускаем хедер, если есть
+    if(!header_skipped){
+      // очень грубо: если первая строка содержит нецифры — считаем заголовком
+      bool looks_header = line.find("ts")!=std::string::npos || line.find("open")!=std::string::npos;
+      if(looks_header){ header_skipped = true; continue; }
+      header_skipped = true;
+    }
+    std::stringstream ss(line);
+    std::string cell;
+    row.clear();
+    while(std::getline(ss, cell, ',')){
+      try{
+        // пустые/NaN -> 0
+        if(cell.empty()){ row.push_back(0.0); continue; }
+        // уберём пробелы
+        size_t a=0,b=cell.size();
+        while(a<b && std::isspace((unsigned char)cell[a])) ++a;
+        while(b>a && std::isspace((unsigned char)cell[b-1])) --b;
+        std::string v = cell.substr(a, b-a);
+        // ts может быть int → double
+        double x = std::stod(v);
+        if(!std::isfinite(x)) x = 0.0;
+        row.push_back(x);
+      }catch(...){
+        row.push_back(0.0);
+      }
+    }
+    if(row.size() < 6) continue;       // нужно хотя бы ts, o, h, l, c, v
+    // Берём первые 6 столбцов
+    for(size_t k=0;k<6;++k) data.push_back(row[k]);
+  }
+
+  if(data.size() < 6*100){ err = "csv_too_small"; return false; }
+
+  // Преобразуем в матрицу: N x 6, порядок по строкам
+  const size_t N = data.size() / 6;
+  out = arma::mat(N, 6);
+  for(size_t i=0;i<N;++i){
+    for(size_t j=0;j<6;++j){
+      out(i,j) = data[i*6 + j];
+    }
+  }
+  return true;
+}
+
+// === ПУБЛИЧНАЯ ФУНКЦИЯ (вызывается из роутера /api/train) ===
+json run_train_pro_and_save(const std::string& symbol,
+                            const std::string& interval,
+                            int episodes,
+                            double tp,
+                            double sl,
+                            int ma_len)
+{
+  json out = json::object();
+  try{
+    // 1) Грузим 15m данные
+    arma::mat raw15;
+    std::string err;
+    if(!load_cached_ohlcv(symbol, interval, raw15, err)){
+      out["ok"] = false;
+      out["error"] = "load_data_fail";
+      out["error_detail"] = err;
+      return out;
     }
 
-    arma::mat M60   = etai::load_cached_matrix(symbol, "60");
-    arma::mat M240  = etai::load_cached_matrix(symbol, "240");
-    arma::mat M1440 = etai::load_cached_matrix(symbol, "1440");
+    // 2) Тренируем (доп. таймфреймы опциональны — передаём nullptr)
+    nlohmann::json M = etai::trainPPO_pro(raw15, nullptr, nullptr, nullptr, episodes, tp, sl, ma_len);
 
-    const arma::mat* p60   = M60.n_elem   ? &M60   : nullptr;
-    const arma::mat* p240  = M240.n_elem  ? &M240  : nullptr;
-    const arma::mat* p1440 = M1440.n_elem ? &M1440 : nullptr;
+    if(!M.is_object() || !M.value("ok", false)){
+      out["ok"] = false;
+      out["error"] = "train_failed";
+      out["model_raw"] = M;
+      return out;
+    }
 
-    json metrics = etai::trainPPO_pro(M15, p60, p240, p1440, episodes, tp, sl, ma_len);
-    metrics["version"] = metrics.value("version", 3);
-    metrics["schema"]  = metrics.value("schema",  std::string("ppo_pro_v1"));
+    // 3) Собираем и нормализуем финальную модель перед сохранением
+    const std::string schema = M.value("schema","ppo_pro_v1");
+    const std::string mode   = M.value("mode","pro");
+    double best_thr = M.value("best_thr", 0.0006);
+    // разумный коридор для 15m BTC; если другие символы — всё равно безопасно
+    best_thr = clamp(best_thr, 1e-4, 1e-2);
 
-    json out{
-        {"ok", metrics.value("ok", false)},
-        {"symbol", symbol},
-        {"interval", interval},
-        {"episodes", episodes},
-        {"tp", tp},
-        {"sl", sl},
-        {"metrics", metrics}
+    // метрики
+    json metrics = json::object();
+    if(M.contains("metrics") && M["metrics"].is_object()){
+      metrics = M["metrics"];
+    }
+    metrics["best_thr"] = best_thr; // ensure clamped value отражается в метриках
+
+    // policy
+    json policy = json::object();
+    if(M.contains("policy")) policy = M["policy"];
+    // минимальная валидация policy
+    int feat_dim = policy.value("feat_dim", 0);
+    if(feat_dim <= 0){
+      // вытянем из W, если есть
+      if(policy.contains("W") && policy["W"].is_array())
+        feat_dim = (int)policy["W"].size();
+      policy["feat_dim"] = feat_dim;
+    }
+    policy["feat_version"] = policy.value("feat_version", 2);
+
+    // финальный объект модели
+    json model = {
+      {"ok", true},
+      {"version", 3},
+      {"schema", schema},
+      {"mode", mode},
+      {"symbol", symbol},
+      {"interval", interval},
+      {"tp", tp},
+      {"sl", sl},
+      {"ma_len", ma_len},
+      {"best_thr", best_thr},
+      {"policy_source", M.value("policy_source","learn")},
+      {"policy", policy},
+      {"metrics", metrics},
+      {"build_ts", (long long) (std::time(nullptr) * 1000LL)}
     };
 
-    if (out["ok"].get<bool>()) {
-        fs::create_directories("cache/models");
-        long long now_ms = (long long)time(nullptr)*1000;
+    // 4) Пишем файл модели
+    std::string dir = "cache/models";
+    std::string path = dir + "/" + symbol + "_" + interval + "_ppo_pro.json";
 
-        // Метрики в атомики для /metrics
-        const auto cv_folds  = (unsigned long long)metrics.value("cv_folds", 0);
-        const auto cv_eff    = (unsigned long long)metrics.value("cv_effective_folds", 0);
-        const auto is_sum    = metrics.value("is_summary", json::object());
-        const auto oos_sum   = metrics.value("oos_summary", json::object());
+    // обеспечим наличие каталога (минимально, через std::system — без <filesystem> зависимостей)
+    std::string mk = "mkdir -p " + dir;
+    std::system(mk.c_str());
 
-        CV_FOLDS.store(cv_folds, std::memory_order_relaxed);
-        CV_EFFECTIVE_FOLDS.store(cv_eff, std::memory_order_relaxed);
-        CV_IS_SHARPE.store(is_sum.value("sharpe", 0.0), std::memory_order_relaxed);
-        CV_OOS_SHARPE.store(oos_sum.value("sharpe", 0.0), std::memory_order_relaxed);
-        CV_IS_EXPEC.store(is_sum.value("expectancy", 0.0), std::memory_order_relaxed);
-        CV_OOS_EXPEC.store(oos_sum.value("expectancy", 0.0), std::memory_order_relaxed);
-        CV_OOS_DD_MAX.store(oos_sum.value("drawdown_max", 0.0), std::memory_order_relaxed);
-
-        // ---------- Сборка модели ----------
-        json model{
-            {"ok", true},
-            {"ts", now_ms},
-            {"symbol", symbol},
-            {"interval", interval},
-            {"mode", "pro"},
-            {"version", metrics.value("version", 3)},
-            {"schema",  metrics.value("schema",  "ppo_pro_v1")},
-            {"build_ts", metrics.value("build_ts", now_ms)},
-            {"ma_len", metrics.value("ma_len", ma_len)},
-            {"best_thr", metrics.value("best_thr", 0.0)},
-            {"tp", metrics.value("tp", 0.0)},
-            {"sl", metrics.value("sl", 0.0)},
-            {"episodes", metrics.value("episodes", episodes)},
-            {"log_path", metrics.value("log_path","")},
-            {"train_rows_total", metrics.value("train_rows_total", 0)},
-            {"warmup_bars", metrics.value("warmup_bars", 0)},
-            {"train_rows_used", metrics.value("train_rows_used", 0)},
-            {"data_time_range", metrics.value("data_time_range", json::object())},
-            {"split_index", metrics.value("split_index", 0)},
-            {"cv_folds", metrics.value("cv_folds", 0)},
-            {"cv_effective_folds", metrics.value("cv_effective_folds", 0)},
-            {"is", metrics.contains("is") ? metrics["is"] : metrics.value("is_summary", json::object())},
-            {"oos", metrics.contains("oos") ? metrics["oos"] : metrics.value("oos_summary", json::object())}
-        };
-
-        // ---------- Policy: берём из metrics если есть, иначе — эвристика ----------
-        bool attached_policy = false;
-        try {
-            if (metrics.contains("policy")
-                && metrics["policy"].is_object()
-                && metrics["policy"].contains("W")
-                && metrics["policy"].contains("b")
-                && metrics["policy"].contains("feat_dim")) {
-                model["policy"] = metrics["policy"];
-                model["policy_source"] = "learn";
-                if (!model["policy"].contains("note")) {
-                    model["policy"]["note"] = "learned_from_train";
-                }
-                attached_policy = true;
-            }
-        } catch (...) {
-            attached_policy = false;
-        }
-
-        if (!attached_policy) {
-            // Эвристика только если нет выученной policy
-            try {
-                arma::mat X = etai::build_feature_matrix(M15); // ожидаем D x N
-                if (X.n_rows >= 1 && X.n_cols >= 2) {
-                    X = zscore_rows(X);
-                    int D = (int)X.n_rows;
-                    std::vector<double> W((size_t)D, (D > 0 ? (1.0 / (double)D) : 0.0));
-                    std::vector<double> b(1, 0.0);
-                    json policy{
-                        {"feat_dim", D},
-                        {"W", W},
-                        {"b", b},
-                        {"note", "heuristic policy; to be replaced by learned weights"}
-                    };
-                    model["policy"] = policy;
-                    model["policy_source"] = "heuristic";
-                }
-            } catch (...) {
-                // policy опционален — если что-то пошло не так, просто пропускаем
-            }
-        }
-
-        const std::string path = "cache/models/" + symbol + "_" + interval + "_ppo_pro.json";
-        std::ofstream f(path);
-        if (f) f << model.dump(2);
-        out["model_path"] = path;
-
-        TRAINS_TOTAL.fetch_add(1, std::memory_order_relaxed);
-        LAST_TRAIN_TS.store(now_ms, std::memory_order_relaxed);
-        TRAIN_ROWS_USED.store(model.value("train_rows_used", 0), std::memory_order_relaxed);
-        MODEL_BUILD_TS.store(model.value("build_ts", now_ms), std::memory_order_relaxed);
-        MODEL_BEST_THR.store(model.value("best_thr", 0.0), std::memory_order_relaxed);
-        MODEL_MA_LEN.store(model.value("ma_len", 0), std::memory_order_relaxed);
+    std::string json_text = model.dump(2);
+    std::string werr;
+    if(!atomic_write_file(path, json_text, werr)){
+      out["ok"] = false;
+      out["error"] = "save_fail";
+      out["error_detail"] = werr;
+      return out;
     }
 
+    // 5) Ответ
+    out["ok"] = true;
+    out["model_path"] = path;
+    out["metrics"] = metrics;
     return out;
+  }
+  catch(const std::exception& e){
+    out["ok"] = false;
+    out["error"] = "train_logic_exception";
+    out["error_detail"] = e.what();
+    return out;
+  }
+  catch(...){
+    out["ok"] = false;
+    out["error"] = "train_logic_unknown_exception";
+    return out;
+  }
 }

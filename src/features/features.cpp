@@ -1,123 +1,152 @@
 #include "features.h"
+#include "json.hpp"
+#include <armadillo>
 #include <cmath>
+#include <algorithm>
+#include <vector>
+
+using json = nlohmann::json;
 
 namespace etai {
 
-arma::vec compute_ema(const arma::vec& x, int period) {
-    arma::vec out(x.n_elem, arma::fill::zeros);
-    if (x.n_elem == 0) return out;
-    double k = 2.0 / (period + 1.0);
-    out(0) = x(0);
-    for (size_t i = 1; i < x.n_elem; ++i)
-        out(i) = x(i) * k + out(i - 1) * (1.0 - k);
+constexpr int FEAT_VERSION = 2;
+
+// ---------- вспомогательные функции ----------
+static double ema_one(const std::vector<double>& v, int period, size_t i) {
+    if (i + 1 < (size_t)period) return NAN;
+    double k = 2.0 / (period + 1);
+    double e = v[i - period + 1];
+    for (size_t j = i - period + 2; j <= i; ++j)
+        e = v[j] * k + e * (1.0 - k);
+    return e;
+}
+
+static double sma_one(const std::vector<double>& v, int period, size_t i) {
+    if (i + 1 < (size_t)period) return NAN;
+    double s = 0;
+    for (size_t j = i + 1 - period; j <= i; ++j) s += v[j];
+    return s / period;
+}
+
+static double rsi_one(const std::vector<double>& c, int period, size_t i) {
+    if (i + 1 < (size_t)period + 1) return NAN;
+    double gain = 0, loss = 0;
+    for (size_t j = i + 1 - period; j <= i; ++j) {
+        double diff = c[j] - c[j - 1];
+        if (diff >= 0)
+            gain += diff;
+        else
+            loss -= diff;
+    }
+    if (loss == 0) return 100.0;
+    double rs = gain / loss;
+    return 100.0 - (100.0 / (1.0 + rs));
+}
+
+static double atr_one(const std::vector<double>& h,
+                      const std::vector<double>& l,
+                      const std::vector<double>& c,
+                      int period,
+                      size_t i) {
+    if (i + 1 < (size_t)period + 1) return NAN;
+    double s = 0;
+    for (size_t j = i + 1 - period; j <= i; ++j) {
+        double tr = std::max({h[j] - l[j],
+                              std::fabs(h[j] - c[j - 1]),
+                              std::fabs(l[j] - c[j - 1])});
+        s += tr;
+    }
+    return s / period;
+}
+
+// ---------- построение матрицы признаков ----------
+
+arma::Mat<double> build_feature_matrix(const arma::Mat<double>& raw) {
+    // raw: columns = [ts, open, high, low, close, volume]
+    if (raw.n_rows < 30 || raw.n_cols < 6) return arma::Mat<double>();
+
+    size_t n = raw.n_rows;
+    std::vector<double> open(n), high(n), low(n), close(n), vol(n);
+    for (size_t i = 0; i < n; ++i) {
+        open[i]  = raw(i, 1);
+        high[i]  = raw(i, 2);
+        low[i]   = raw(i, 3);
+        close[i] = raw(i, 4);
+        vol[i]   = raw(i, 5);
+    }
+
+    std::vector<double> ema_fast(n), ema_slow(n), rsi_v(n),
+        macd_v(n), macd_signal(n), macd_hist(n),
+        atr_v(n), bb_width(n), volr_v(n);
+
+    for (size_t i = 0; i < n; ++i) {
+        ema_fast[i] = ema_one(close, 12, i);
+        ema_slow[i] = ema_one(close, 26, i);
+        rsi_v[i]    = rsi_one(close, 14, i);
+        atr_v[i]    = atr_one(high, low, close, 14, i);
+
+        if (i >= 20) {
+            double sma20 = sma_one(close, 20, i);
+            double sd = 0;
+            for (size_t j = i + 1 - 20; j <= i; ++j)
+                sd += std::pow(close[j] - sma20, 2);
+            sd = std::sqrt(sd / 20);
+            bb_width[i] = (sma20 != 0) ? (4.0 * sd / sma20) : NAN;
+        } else
+            bb_width[i] = NAN;
+
+        volr_v[i] =
+            (i >= 20 && sma_one(vol, 20, i) > 0) ? vol[i] / sma_one(vol, 20, i) : NAN;
+    }
+
+    // MACD
+    for (size_t i = 0; i < n; ++i) {
+        macd_v[i] = ema_fast[i] - ema_slow[i];
+        macd_signal[i] = ema_one(macd_v, 9, i);
+        macd_hist[i]   = macd_v[i] - macd_signal[i];
+    }
+
+    // Сборка в матрицу признаков
+    size_t D = 8;
+    arma::Mat<double> F(n, D, arma::fill::zeros);
+
+    for (size_t i = 0; i < n; ++i) {
+        F(i, 0) = ema_fast[i] - ema_slow[i];   // trend spread
+        F(i, 1) = rsi_v[i] / 100.0;            // норм. RSI
+        F(i, 2) = macd_v[i];
+        F(i, 3) = macd_hist[i];
+        F(i, 4) = atr_v[i];
+        F(i, 5) = bb_width[i];
+        F(i, 6) = volr_v[i];
+        F(i, 7) = (close[i] - open[i]) / open[i]; // дневной % change
+    }
+
+    // заменяем NaN на 0
+    F.replace(arma::datum::nan, 0.0);
+    return F;
+}
+
+// ---------- вспомогательная make_features (для JSON экспорта) ----------
+json make_features(const std::vector<double>& o,
+                   const std::vector<double>& h,
+                   const std::vector<double>& l,
+                   const std::vector<double>& c,
+                   const std::vector<double>& v) {
+    arma::Mat<double> raw(o.size(), 6, arma::fill::zeros);
+    for (size_t i = 0; i < o.size(); ++i) {
+        raw(i, 1) = o[i];
+        raw(i, 2) = h[i];
+        raw(i, 3) = l[i];
+        raw(i, 4) = c[i];
+        raw(i, 5) = v[i];
+    }
+    arma::Mat<double> F = build_feature_matrix(raw);
+
+    json out;
+    out["version"] = FEAT_VERSION;
+    out["rows"] = F.n_rows;
+    out["cols"] = F.n_cols;
     return out;
 }
 
-arma::vec compute_rsi(const arma::vec& close, int period) {
-    if (close.n_elem == 0) return arma::vec();
-    arma::vec delta = arma::diff(close);
-    arma::vec up = arma::clamp(delta, 0, arma::datum::inf);
-    arma::vec down = arma::clamp(-delta, 0, arma::datum::inf);
-    arma::vec ema_up = compute_ema(up, period);
-    arma::vec ema_down = compute_ema(down, period);
-    // защита от деления на 0
-    ema_down.transform([](double v){ return v < 1e-12 ? 1e-12 : v; });
-    arma::vec rs = ema_up / ema_down;
-    arma::vec rsi = 100.0 - (100.0 / (1.0 + rs));
-    // выравниваем размер до close.n_elem
-    rsi.insert_rows(0, 1);
-    rsi(0) = rsi(1);
-    return rsi;
-}
-
-arma::vec compute_momentum(const arma::vec& close, int period) {
-    arma::vec mom(close.n_elem, arma::fill::zeros);
-    for (size_t i = period; i < close.n_elem; ++i)
-        mom(i) = close(i) - close(i - period);
-    return mom;
-}
-
-arma::mat compute_macd(const arma::vec& close, int fast, int slow, int signal) {
-    arma::vec ema_fast = compute_ema(close, fast);
-    arma::vec ema_slow = compute_ema(close, slow);
-    arma::vec macd = ema_fast - ema_slow;
-    arma::vec sig = compute_ema(macd, signal);
-    arma::vec hist = macd - sig;
-    // 2 x N: [macd; hist]
-    arma::mat out = arma::join_cols(macd.t(), hist.t());
-    return out;
-}
-
-arma::vec compute_atr(const arma::vec& high, const arma::vec& low, const arma::vec& close, int period) {
-    arma::vec tr(high.n_elem, arma::fill::zeros);
-    for (size_t i = 1; i < high.n_elem; ++i) {
-        double hl = high(i) - low(i);
-        double hc = std::abs(high(i) - close(i-1));
-        double lc = std::abs(low(i) - close(i-1));
-        tr(i) = std::max({hl, hc, lc});
-    }
-    return compute_ema(tr, period);
-}
-
-arma::mat compute_bb_width(const arma::vec& close, int period) {
-    arma::vec ma(close.n_elem, arma::fill::zeros);
-    arma::vec sd(close.n_elem, arma::fill::zeros);
-    if (close.n_elem == 0) return arma::mat();
-    for (size_t i = period-1; i < close.n_elem; ++i) {
-        arma::vec win = close.subvec(i - period + 1, i);
-        ma(i) = arma::mean(win);
-        sd(i) = arma::stddev(win);
-    }
-    // защита от нулевого ma
-    arma::vec ma_safe = ma;
-    ma_safe.transform([](double v){ return std::abs(v) < 1e-12 ? 1e-12 : v; });
-    arma::vec width = (sd / ma_safe) * 100.0;
-    // 2 x N: [ma; width]
-    arma::mat out = arma::join_cols(ma.t(), width.t());
-    return out;
-}
-
-static inline void vstack_inplace(arma::mat& X, const arma::mat& B) {
-    if (X.n_elem == 0) {
-        X = B;
-    } else if (B.n_elem != 0) {
-        X = arma::join_cols(X, B);
-    }
-}
-
-arma::mat build_feature_matrix(const arma::mat& M) {
-    // ожидаемый формат:
-    // row0: ts, row1: open, row2: high, row3: low, row4: close, row5: volume
-    if (M.n_rows < 5 || M.n_cols == 0) return arma::mat();
-
-    const arma::vec close = M.row(4).t();
-    const arma::vec high  = M.row(2).t();
-    const arma::vec low   = M.row(3).t();
-
-    arma::vec rsi = compute_rsi(close, 14);
-    arma::vec ema_fast = compute_ema(close, 8);
-    arma::vec ema_slow = compute_ema(close, 21);
-    arma::vec mom = compute_momentum(close, 10);
-    arma::vec atr = compute_atr(high, low, close, 14);
-    arma::mat macd = compute_macd(close, 12, 26, 9);   // 2xN
-    arma::mat bb   = compute_bb_width(close, 20);      // 2xN
-
-    // 1xN представления
-    arma::rowvec rsi_r = rsi.t();
-    arma::rowvec emas_r = (ema_fast - ema_slow).t();
-    arma::rowvec mom_r = mom.t();
-    arma::rowvec atr_r = atr.t();
-
-    // поочередная вертикальная склейка
-    arma::mat X; // пустая, потом наращиваем
-    vstack_inplace(X, rsi_r);
-    vstack_inplace(X, emas_r);
-    vstack_inplace(X, mom_r);
-    vstack_inplace(X, atr_r);
-    vstack_inplace(X, macd);
-    vstack_inplace(X, bb);
-
-    return X;
-}
-
-} // namespace etai
+}  // namespace etai
