@@ -7,7 +7,9 @@
 #include "routes/infer.h"
 #include "routes/agents.h"
 #include "routes/model.h"
-#include "routes/metrics.h"   // <-- добавили
+#include "routes/metrics.h"
+#include "routes/train.h"      // <== добавлено
+#include "routes/backfill.inc.cpp" // <== чтобы регистрировать /api/backfill
 
 #include "utils.h"
 #include "fetch.h"
@@ -20,22 +22,24 @@
 #include <string>
 
 int main(int argc, char** argv) {
-  int port = 3000;
-  if (argc > 1) port = std::atoi(argv[1]);
+    int port = 3000;
+    if (argc > 1) port = std::atoi(argv[1]);
 
-  httplib::Server srv;
+    httplib::Server srv;
 
-  register_health_routes(srv);
+    // --- базовые маршруты ---
+    register_health_routes(srv);
+    register_infer_routes(srv);
+    register_agents_routes(srv);
+    register_model_routes(srv);
+    register_metrics_routes(srv);
+    register_backfill_routes(srv);
+    register_train_routes(srv); // <== восстановлен train API
 
-  // Инициализируем атомы из диска, чтобы thr/ma были корректны
-  etai::init_model_atoms_from_disk();
+    // --- инициализация атомов модели ---
+    etai::init_model_atoms_from_disk();
 
-  register_infer_routes(srv);
-  register_agents_routes(srv);
-  register_model_routes(srv);
-  register_metrics_routes(srv); // <-- новый маршрут
-
-  std::printf("[SERVER] Edge Trader Server PRO-only running on :%d\n", port);
-  srv.listen("0.0.0.0", port);
-  return 0;
+    std::printf("[SERVER] Edge Trader Server PRO-only running on :%d\n", port);
+    srv.listen("0.0.0.0", port);
+    return 0;
 }
