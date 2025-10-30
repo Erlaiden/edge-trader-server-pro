@@ -6,6 +6,9 @@
 #include <string>
 #include <algorithm>
 
+#include "server_accessors.h"  // etai::get_current_model(), get_model_thr(), get_model_ma_len(), get_data_health()
+#include "utils_model.h"       // safe_read_json_file(), make_model()
+
 using json = nlohmann::json;
 
 namespace etai {
@@ -13,12 +16,6 @@ namespace etai {
     double    get_model_thr();
     long long get_model_ma_len();
     json      get_data_health();
-}
-
-static inline json safe_read_json_file(const std::string& p){
-    std::ifstream f(p);
-    if(!f.good()) return json::object();
-    try{ json j; f >> j; return j; } catch(...){ return json::object(); }
 }
 
 static inline json policy_stats_from(const json& disk){
@@ -36,23 +33,6 @@ static inline json policy_stats_from(const json& disk){
     }
     if(P.contains("b") && P["b"].is_array()) out["b_len"] = (unsigned)P["b"].size();
     return out;
-}
-
-// Build exact model. Only whitelisted keys. Then normalize via dump+parse.
-static inline json make_model(double thr, long long ma, const json& disk){
-    json m = json::object();
-    m["best_thr"] = thr;
-    m["ma_len"]   = ma;
-    m["schema"]   = "ppo_pro_v1";
-    m["mode"]     = "pro";
-    if(disk.is_object()){
-        if(disk.contains("policy"))        m["policy"]        = disk["policy"];
-        if(disk.contains("policy_source")) m["policy_source"] = disk["policy_source"];
-        if(disk.contains("symbol"))        m["symbol"]        = disk["symbol"];
-        if(disk.contains("interval"))      m["interval"]      = disk["interval"];
-    }
-    // normalize to avoid any implicit aliasing or non-finite quirks
-    try { return json::parse(m.dump()); } catch (...) { return m; }
 }
 
 void register_health_ai(httplib::Server& srv){

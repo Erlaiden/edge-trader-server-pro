@@ -1,4 +1,3 @@
-#include "server_accessors.h"
 // ===== Edge Trader Server (PRO-only): main.cpp =====
 #include "httplib.h"
 #include "json.hpp"
@@ -8,12 +7,13 @@
 #include "routes/infer.h"
 #include "routes/agents.h"
 #include "routes/model.h"
+#include "routes/metrics.h"   // <-- добавили
 
-// Остальные include из твоего проекта
 #include "utils.h"
 #include "fetch.h"
 #include "ppo.h"
 #include "ppo_pro.h"
+#include "server_accessors.h"
 
 #include <ctime>
 #include <cstdio>
@@ -25,17 +25,17 @@ int main(int argc, char** argv) {
 
   httplib::Server srv;
 
-  // Регистрируем вынесенные роуты
   register_health_routes(srv);
-  // Initialize model atoms from disk so health_ai shows actual thr/ma_len
+
+  // Инициализируем атомы из диска, чтобы thr/ma были корректны
   etai::init_model_atoms_from_disk();
+
   register_infer_routes(srv);
   register_agents_routes(srv);
   register_model_routes(srv);
+  register_metrics_routes(srv); // <-- новый маршрут
 
-  // Остальные твои роуты (если появятся дополнительные)
-  printf("[SERVER] Edge Trader Server PRO-only running on :%d\n", port);
-  // Initialize model atoms from disk so health_ai shows actual thr/ma_len
+  std::printf("[SERVER] Edge Trader Server PRO-only running on :%d\n", port);
   srv.listen("0.0.0.0", port);
   return 0;
 }
