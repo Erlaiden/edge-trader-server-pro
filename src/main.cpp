@@ -1,3 +1,4 @@
+#include "server_accessors.h"
 // ===== Edge Trader Server (PRO-only): main.cpp =====
 #include "httplib.h"
 #include "json.hpp"
@@ -26,12 +27,15 @@ int main(int argc, char** argv) {
 
   // Регистрируем вынесенные роуты
   register_health_routes(srv);
+  // Initialize model atoms from disk so health_ai shows actual thr/ma_len
+  etai::init_model_atoms_from_disk();
   register_infer_routes(srv);
   register_agents_routes(srv);
   register_model_routes(srv);
 
   // Остальные твои роуты (если появятся дополнительные)
   printf("[SERVER] Edge Trader Server PRO-only running on :%d\n", port);
+  // Initialize model atoms from disk so health_ai shows actual thr/ma_len
   srv.listen("0.0.0.0", port);
   return 0;
 }

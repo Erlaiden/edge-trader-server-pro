@@ -1,141 +1,87 @@
-// Extended AI health: adds train_telemetry and policy_stats.
-//
-// This file provides register_health_ai(httplib::Server&) to match health.cpp call.
+// health_ai: strict, deterministic model object.
 
 #include "json.hpp"
 #include "httplib.h"
 #include <fstream>
-#include <sstream>
 #include <string>
-#include <vector>
 #include <algorithm>
-#include <cmath>
 
 using json = nlohmann::json;
 
-// Forward declarations from the server core.
-// These should already exist elsewhere in the codebase.
 namespace etai {
-    // Returns current in-memory model JSON (or null json if not loaded).
-    json get_current_model();
-    // Exported scalar settings
-    double get_model_thr();
-    int    get_model_ma_len();
-    // Optional: data health summary; if not linked we guard by try/catch.
-    json   get_data_health();
+    json      get_current_model();
+    double    get_model_thr();
+    long long get_model_ma_len();
+    json      get_data_health();
 }
 
-// ---- helpers ----
-static inline json safe_read_json_file(const std::string& path) {
-    std::ifstream f(path);
-    if (!f.good()) return json(); // null
-    try {
-        json j; f >> j;
-        return j;
-    } catch (...) {
-        return json(); // null
-    }
+static inline json safe_read_json_file(const std::string& p){
+    std::ifstream f(p);
+    if(!f.good()) return json::object();
+    try{ json j; f >> j; return j; } catch(...){ return json::object(); }
 }
 
-static inline json build_policy_stats(const json& model) {
+static inline json policy_stats_from(const json& disk){
     json out = json::object();
-    if (!model.is_object() || !model.contains("policy")) return out;
-
-    const json& P = model["policy"];
-    out["source"]   = model.value("policy_source", std::string()); // "learn" | "heuristic" | ""
+    if(!disk.is_object() || !disk.contains("policy")) return out;
+    const json& P = disk["policy"];
+    out["source"]   = disk.value("policy_source", std::string());
     out["feat_dim"] = P.value("feat_dim", 0);
-
-    if (P.contains("W") && P["W"].is_array()) {
+    if(P.contains("W") && P["W"].is_array()){
         const auto& W = P["W"];
         out["W_len"] = (unsigned)W.size();
-
-        // first 8 weights
         json head = json::array();
-        for (size_t i = 0; i < std::min<size_t>(8, W.size()); ++i) head.push_back(W[i]);
+        for(size_t i=0;i<std::min<size_t>(8,W.size());++i) head.push_back(W[i]);
         out["W_head"] = head;
-
-        // uniq/min/max/mean
-        std::vector<double> wv; wv.reserve(W.size());
-        for (const auto& v : W) {
-            if (v.is_number()) wv.push_back(v.get<double>());
-            else if (v.is_string()) {
-                try { wv.push_back(std::stod(v.get<std::string>())); } catch (...) {}
-            }
-        }
-        std::sort(wv.begin(), wv.end());
-        int uniq = 0;
-        for (size_t i=0;i<wv.size();) {
-            size_t j=i+1;
-            while (j<wv.size() && std::fabs(wv[j]-wv[i])<1e-15) ++j;
-            ++uniq; i=j;
-        }
-        out["uniq_W"] = uniq;
-        if (!wv.empty()) {
-            double mn = wv.front(), mx = wv.back(), s = 0.0;
-            for (double x: wv) s += x;
-            out["W_min"]  = mn;
-            out["W_max"]  = mx;
-            out["W_mean"] = s / (double)wv.size();
-        }
     }
-    if (P.contains("b") && P["b"].is_array()) {
-        out["b_len"] = (unsigned)P["b"].size();
-    }
+    if(P.contains("b") && P["b"].is_array()) out["b_len"] = (unsigned)P["b"].size();
     return out;
 }
 
-// ---- public entry point called from health.cpp ----
-void register_health_ai(httplib::Server& srv) {
-    // Base: /api/health/ai
-    srv.Get(R"(/api/health/ai)",
-        [](const httplib::Request& req, httplib::Response& res){
-            json out;
-            out["ok"] = true;
+// Build exact model. Only whitelisted keys. Then normalize via dump+parse.
+static inline json make_model(double thr, long long ma, const json& disk){
+    json m = json::object();
+    m["best_thr"] = thr;
+    m["ma_len"]   = ma;
+    m["schema"]   = "ppo_pro_v1";
+    m["mode"]     = "pro";
+    if(disk.is_object()){
+        if(disk.contains("policy"))        m["policy"]        = disk["policy"];
+        if(disk.contains("policy_source")) m["policy_source"] = disk["policy_source"];
+        if(disk.contains("symbol"))        m["symbol"]        = disk["symbol"];
+        if(disk.contains("interval"))      m["interval"]      = disk["interval"];
+    }
+    // normalize to avoid any implicit aliasing or non-finite quirks
+    try { return json::parse(m.dump()); } catch (...) { return m; }
+}
 
-            // model basics
-            json model = etai::get_current_model();
-            out["model"]        = model.is_null() ? json() : model;
-            out["model_thr"]    = etai::get_model_thr();
-            out["model_ma_len"] = etai::get_model_ma_len();
+void register_health_ai(httplib::Server& srv){
+    auto handler = [](bool extended){
+        return [extended](const httplib::Request&, httplib::Response& res){
+            const double    thr = etai::get_model_thr();
+            const long long ma  = etai::get_model_ma_len();
+            const json disk     = etai::get_current_model();
 
-            // optional data health
-            try {
+            json out = json::object();
+            out["ok"]           = true;
+            out["model"]        = make_model(thr, ma, disk);
+            out["model_thr"]    = thr;
+            out["model_ma_len"] = ma;
+
+            try{
                 json d = etai::get_data_health();
-                if (!d.is_null()) out["data"] = d;
-            } catch (...) {}
+                if(d.is_object()) out["data"] = d;
+            }catch(...){}
 
-            // training telemetry (if exists)
-            json telem = safe_read_json_file("cache/logs/last_train_telemetry.json");
-            if (!telem.is_null()) out["train_telemetry"] = telem;
+            if(extended){
+                out["train_telemetry"] = safe_read_json_file("cache/logs/last_train_telemetry.json");
+            }
 
-            // compact policy stats
-            out["policy_stats"] = build_policy_stats(model);
-
+            out["policy_stats"] = policy_stats_from(disk);
             res.set_content(out.dump(2), "application/json");
-        }
-    );
+        };
+    };
 
-    // Explicit extended view
-    srv.Get(R"(/api/health/ai/extended)",
-        [](const httplib::Request& req, httplib::Response& res){
-            json out;
-            out["ok"] = true;
-
-            json model = etai::get_current_model();
-            out["model"]        = model.is_null() ? json() : model;
-            out["model_thr"]    = etai::get_model_thr();
-            out["model_ma_len"] = etai::get_model_ma_len();
-
-            try {
-                json d = etai::get_data_health();
-                if (!d.is_null()) out["data"] = d;
-            } catch (...) {}
-
-            json telem = safe_read_json_file("cache/logs/last_train_telemetry.json");
-            out["train_telemetry"] = telem.is_null() ? json() : telem;
-            out["policy_stats"]    = build_policy_stats(model);
-
-            res.set_content(out.dump(2), "application/json");
-        }
-    );
+    srv.Get("/api/health/ai", handler(false));
+    srv.Get("/api/health/ai/extended", handler(true));
 }

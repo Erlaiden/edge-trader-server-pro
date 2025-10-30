@@ -1,26 +1,23 @@
 #pragma once
 #include "json.hpp"
 
-// Реализации accessor-функций, которых не хватало линковщику.
-// Нейтральные, без побочных эффектов. Все в namespace etai.
-
+// Набор accessor-функций для health_ai и инициализации модельных атомиков.
 namespace etai {
 
-/// Текущая модель (читается с диска из cache/models/<SYMBOL>_<INTERVAL>_ppo_pro.json)
-/// SYMBOL берется из ETAI_SYMBOL или "BTCUSDT"; INTERVAL из ETAI_INTERVAL или "15".
-/// Возвращает {} если файла нет или ошибка чтения.
+// Текущая модель: чтение с диска из cache/models/<SYMBOL>_<INTERVAL>_ppo_pro.json
+// SYMBOL из ETAI_SYMBOL или "BTCUSDT"; INTERVAL из ETAI_INTERVAL или "15".
+// Возвращает {} если файла нет или ошибка чтения.
 nlohmann::json get_current_model();
 
-/// Текущий лучший порог модели (best_thr). Берется из атомика MODEL_BEST_THR.
-/// Если атомик не инициализирован, вернёт 0.0.
-double get_model_thr();
+// Текущий лучший порог модели и MA-длина из атомиков (0 если не инициализировано).
+double     get_model_thr();
+long long  get_model_ma_len();
 
-/// Текущая длина MA модели (ma_len). Берется из атомика MODEL_MA_LEN.
-/// Если не инициализирован, вернёт 0.
-long long get_model_ma_len();
-
-/// Сводка по данным (health). Делает отчёт по 15/60/240/1440 для SYMBOL.
-/// SYMBOL берется из ETAI_SYMBOL или "BTCUSDT".
+// Сводка по данным по всем МТF для SYMBOL.
 nlohmann::json get_data_health();
+
+// Инициализация атомиков модели с диска. Безопасно вызывать на старте.
+// Если модель существует, выставит MODEL_BEST_THR, MODEL_MA_LEN, MODEL_BUILD_TS.
+void init_model_atoms_from_disk();
 
 } // namespace etai
