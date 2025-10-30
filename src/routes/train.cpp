@@ -11,26 +11,22 @@ static inline std::string qs(const Request& req, const char* k, const char* defv
     return req.has_param(k) ? req.get_param_value(k) : std::string(defv);
 }
 
-static inline bool qs_bool(const Request& req, const char* k, bool defv){
-    if(!req.has_param(k)) return defv;
-    auto v = req.get_param_value(k);
-    return (v=="1"||v=="true"||v=="yes"||v=="on");
-}
-
-static json flatten_metrics(json j){
-    try{
-        if(j.contains("metrics") && j["metrics"].is_object()){
-            const auto& m = j["metrics"];
-            auto put = [&](const char* key){
-                if(m.contains(key)) j[key] = m.at(key);
-            };
-            put("val_accuracy");
-            put("val_reward");
-            put("M_labeled");
-            put("val_size");
-        }
-    }catch(...){}
-    return j;
+// Поднимаем ключевые метрики из .metrics на верхний уровень (дублируем, не ломаем контракт)
+static void promote_metrics(json& j){
+    if(!j.contains("metrics") || !j["metrics"].is_object()) return;
+    const json& m = j["metrics"];
+    auto copy = [&](const char* k){
+        if(m.contains(k)) j[k] = m.at(k);
+    };
+    // основные
+    copy("val_accuracy");
+    copy("val_reward");
+    copy("M_labeled");
+    copy("val_size");
+    // расширенные
+    copy("N_rows");
+    copy("raw_cols");
+    copy("feat_cols");
 }
 
 void register_train_routes(Server& svr){
@@ -38,6 +34,7 @@ void register_train_routes(Server& svr){
         try{
             const std::string symbol   = qs(req, "symbol",   "BTCUSDT");
             const std::string interval = qs(req, "interval", "15");
+
             int    episodes = 40;
             double tp = 0.008, sl = 0.0032;
             int    ma = 12;
@@ -49,10 +46,8 @@ void register_train_routes(Server& svr){
 
             json out = etai::run_train_pro_and_save(symbol, interval, episodes, tp, sl, ma);
 
-            // Если flat=1 — развернём метрики на верхний уровень (для стабильного клиента)
-            if (qs_bool(req, "flat", false)) {
-                out = flatten_metrics(out);
-            }
+            // Всегда дублируем ключевые метрики на верхний уровень
+            promote_metrics(out);
 
             res.set_content(out.dump(2), "application/json");
         }catch(const std::exception& e){
