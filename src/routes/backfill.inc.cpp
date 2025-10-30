@@ -1,9 +1,10 @@
+#include "utils_data.h"
 #pragma once
 #include "httplib.h"
 #include "json.hpp"
 #include "http_helpers.h"   // qp()
 #include "utils.h"          // etai::backfill_last_months
-#include "utils_data.h"     // data_health_report()
+#include "utils_data.h"     // etai::data_health_report()
 #include "rt_metrics.h"     // REQ_BACKFILL
 #include <set>
 #include <string>
@@ -43,7 +44,7 @@ static inline void register_backfill_routes(httplib::Server& srv){
         {"symbol",symbol},{"interval",tf},{"months",months},
         {"ok", r.value("ok", false)}, {"rows", r.value("rows", 0)}
       });
-      auto h = data_health_report(symbol, tf);
+      auto h = etai::data_health_report(symbol, tf);
       h["interval"] = tf; h["symbol"] = symbol;
       health.push_back(h);
     };

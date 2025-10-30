@@ -1,220 +1,129 @@
+#include "train_logic.h"
+#include "server_accessors.h"   // etai::{get_data_health,set_model_thr,set_model_ma_len,set_current_model}
+#include "ppo_pro.h"            // etai::trainPPO_pro(...)
+#include "utils_data.h"         // etai::load_cached_xy(...)
 #include "json.hpp"
-#include <armadillo>
-#include <cstdio>
-#include <cstring>
-#include <string>
-#include <vector>
-#include <fstream>
-#include <sstream>
-#include <ctime>
-#include <cerrno>
-#include <algorithm>
 
-// Декларация ядра обучения (уже реализовано в ppo_pro.cpp)
-namespace etai {
-  nlohmann::json trainPPO_pro(const arma::mat& raw15,
-                              const arma::mat* raw60,
-                              const arma::mat* raw240,
-                              const arma::mat* raw1440,
-                              int episodes, double tp, double sl, int ma_len);
-}
+#include <armadillo>
+#include <fstream>
+#include <mutex>
+#include <chrono>
+#include <iostream>
+#include <stdexcept>
+#include <cmath>
 
 using json = nlohmann::json;
+
+namespace etai {
+
 using arma::mat;
 
-// --- Утилита: безопасный clamp ---
-static inline double clamp(double v, double lo, double hi){
-  if(v < lo) return lo;
-  if(v > hi) return hi;
-  return v;
+static std::mutex train_mutex;
+
+static inline long long now_ms() {
+    return static_cast<long long>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()
+        ).count()
+    );
 }
 
-// --- Утилита: атомарная запись файла (tmp -> rename) ---
-static bool atomic_write_file(const std::string& path, const std::string& data, std::string& err){
-  std::string tmp = path + ".tmp";
-  {
-    std::ofstream f(tmp, std::ios::binary);
-    if(!f.good()){ err = "open_tmp_fail"; return false; }
-    f.write(data.data(), (std::streamsize)data.size());
-    if(!f.good()){ err = "write_tmp_fail"; return false; }
-    f.flush();
-    if(!f.good()){ err = "flush_tmp_fail"; return false; }
-  }
-  if(std::rename(tmp.c_str(), path.c_str()) != 0){
-    err = std::string("rename_fail: ") + std::strerror(errno);
-    std::remove(tmp.c_str());
-    return false;
-  }
-  return true;
-}
-
-// --- CSV loader: ожидаем cache/SYMBOL_INTERVAL.csv с колонками: ts,open,high,low,close,volume,[turnover?]
-static bool load_cached_ohlcv(const std::string& symbol, const std::string& interval,
-                              arma::mat& out, std::string& err)
+nlohmann::json run_train_pro_and_save(const std::string& symbol,
+                                      const std::string& interval,
+                                      int episodes,
+                                      double tp,
+                                      double sl,
+                                      int ma_len)
 {
-  std::string path = "cache/" + symbol + "_" + interval + ".csv";
-  std::ifstream f(path);
-  if(!f.is_open()){ err = "csv_open_fail:" + path; return false; }
+    std::lock_guard<std::mutex> lk(train_mutex);
 
-  std::vector<double> row; row.reserve(6);
-  std::vector<double> data; data.reserve(7 * 4096);
-  std::string line;
-  bool header_skipped = false;
-
-  while(std::getline(f, line)){
-    if(line.empty()) continue;
-    // Пропускаем хедер, если есть
-    if(!header_skipped){
-      // очень грубо: если первая строка содержит нецифры — считаем заголовком
-      bool looks_header = line.find("ts")!=std::string::npos || line.find("open")!=std::string::npos;
-      if(looks_header){ header_skipped = true; continue; }
-      header_skipped = true;
-    }
-    std::stringstream ss(line);
-    std::string cell;
-    row.clear();
-    while(std::getline(ss, cell, ',')){
-      try{
-        // пустые/NaN -> 0
-        if(cell.empty()){ row.push_back(0.0); continue; }
-        // уберём пробелы
-        size_t a=0,b=cell.size();
-        while(a<b && std::isspace((unsigned char)cell[a])) ++a;
-        while(b>a && std::isspace((unsigned char)cell[b-1])) --b;
-        std::string v = cell.substr(a, b-a);
-        // ts может быть int → double
-        double x = std::stod(v);
-        if(!std::isfinite(x)) x = 0.0;
-        row.push_back(x);
-      }catch(...){
-        row.push_back(0.0);
-      }
-    }
-    if(row.size() < 6) continue;       // нужно хотя бы ts, o, h, l, c, v
-    // Берём первые 6 столбцов
-    for(size_t k=0;k<6;++k) data.push_back(row[k]);
-  }
-
-  if(data.size() < 6*100){ err = "csv_too_small"; return false; }
-
-  // Преобразуем в матрицу: N x 6, порядок по строкам
-  const size_t N = data.size() / 6;
-  out = arma::mat(N, 6);
-  for(size_t i=0;i<N;++i){
-    for(size_t j=0;j<6;++j){
-      out(i,j) = data[i*6 + j];
-    }
-  }
-  return true;
-}
-
-// === ПУБЛИЧНАЯ ФУНКЦИЯ (вызывается из роутера /api/train) ===
-json run_train_pro_and_save(const std::string& symbol,
-                            const std::string& interval,
-                            int episodes,
-                            double tp,
-                            double sl,
-                            int ma_len)
-{
-  json out = json::object();
-  try{
-    // 1) Грузим 15m данные
-    arma::mat raw15;
-    std::string err;
-    if(!load_cached_ohlcv(symbol, interval, raw15, err)){
-      out["ok"] = false;
-      out["error"] = "load_data_fail";
-      out["error_detail"] = err;
-      return out;
-    }
-
-    // 2) Тренируем (доп. таймфреймы опциональны — передаём nullptr)
-    nlohmann::json M = etai::trainPPO_pro(raw15, nullptr, nullptr, nullptr, episodes, tp, sl, ma_len);
-
-    if(!M.is_object() || !M.value("ok", false)){
-      out["ok"] = false;
-      out["error"] = "train_failed";
-      out["model_raw"] = M;
-      return out;
-    }
-
-    // 3) Собираем и нормализуем финальную модель перед сохранением
-    const std::string schema = M.value("schema","ppo_pro_v1");
-    const std::string mode   = M.value("mode","pro");
-    double best_thr = M.value("best_thr", 0.0006);
-    // разумный коридор для 15m BTC; если другие символы — всё равно безопасно
-    best_thr = clamp(best_thr, 1e-4, 1e-2);
-
-    // метрики
-    json metrics = json::object();
-    if(M.contains("metrics") && M["metrics"].is_object()){
-      metrics = M["metrics"];
-    }
-    metrics["best_thr"] = best_thr; // ensure clamped value отражается в метриках
-
-    // policy
-    json policy = json::object();
-    if(M.contains("policy")) policy = M["policy"];
-    // минимальная валидация policy
-    int feat_dim = policy.value("feat_dim", 0);
-    if(feat_dim <= 0){
-      // вытянем из W, если есть
-      if(policy.contains("W") && policy["W"].is_array())
-        feat_dim = (int)policy["W"].size();
-      policy["feat_dim"] = feat_dim;
-    }
-    policy["feat_version"] = policy.value("feat_version", 2);
-
-    // финальный объект модели
-    json model = {
-      {"ok", true},
-      {"version", 3},
-      {"schema", schema},
-      {"mode", mode},
-      {"symbol", symbol},
-      {"interval", interval},
-      {"tp", tp},
-      {"sl", sl},
-      {"ma_len", ma_len},
-      {"best_thr", best_thr},
-      {"policy_source", M.value("policy_source","learn")},
-      {"policy", policy},
-      {"metrics", metrics},
-      {"build_ts", (long long) (std::time(nullptr) * 1000LL)}
+    json out = {
+        {"ok", false},
+        {"model_path", nullptr},
+        {"metrics", json::object()},
+        {"error", nullptr},
+        {"error_detail", nullptr}
     };
 
-    // 4) Пишем файл модели
-    std::string dir = "cache/models";
-    std::string path = dir + "/" + symbol + "_" + interval + "_ppo_pro.json";
+    try {
+        // 1) sanity по данным
+        json dh = etai::get_data_health();
+        if (!dh.value("has_data", false)) {
+            throw std::runtime_error("no training data available");
+        }
 
-    // обеспечим наличие каталога (минимально, через std::system — без <filesystem> зависимостей)
-    std::string mk = "mkdir -p " + dir;
-    std::system(mk.c_str());
+        arma::mat X, y;
+        if (!etai::load_cached_xy(symbol, interval, X, y)) {
+            throw std::runtime_error("failed to load cached XY");
+        }
+        if (X.n_rows == 0 || X.n_cols == 0) {
+            throw std::runtime_error("empty feature matrix");
+        }
 
-    std::string json_text = model.dump(2);
-    std::string werr;
-    if(!atomic_write_file(path, json_text, werr)){
-      out["ok"] = false;
-      out["error"] = "save_fail";
-      out["error_detail"] = werr;
-      return out;
+        std::cout << "[TRAIN] PPO_PRO start rows=" << X.n_rows
+                  << " cols=" << X.n_cols
+                  << " episodes=" << episodes
+                  << " tp=" << tp << " sl=" << sl
+                  << " ma=" << ma_len << std::endl;
+
+        // 2) обучение (валидационные матрицы не передаем — тренер сам подготовит внутри при необходимости)
+        json metrics = etai::trainPPO_pro(X, nullptr, nullptr, nullptr, episodes, tp, sl, ma_len);
+
+        // 3) извлекаем ключевые метрики
+        double best_thr = metrics.value("best_thr", 0.001);
+        if (!(std::isfinite(best_thr) && best_thr > 0.0 && best_thr < 1.0)) {
+            best_thr = 0.001; // страховка от NaN/Inf/мусора
+        }
+        double val_acc = metrics.value("val_accuracy", 0.0);
+        double val_rew = metrics.value("val_reward", 0.0);
+
+        // 4) собираем JSON модели (версия 3, schema ppo_pro_v1, feat_version=2)
+        json model = {
+            {"version", 3},
+            {"schema", "ppo_pro_v1"},
+            {"mode", "pro"},
+            {"best_thr", best_thr},
+            {"ma_len", ma_len},
+            {"tp", tp},
+            {"sl", sl},
+            {"build_ts", now_ms()},
+            {"policy", {
+                {"feat_dim", static_cast<int>(X.n_cols)},
+                {"feat_version", 2}
+            }},
+            {"metrics", metrics}
+        };
+
+        // 5) сохраняем на диск
+        const std::string out_path = "cache/models/" + symbol + "_" + interval + "_ppo_pro.json";
+        {
+            std::ofstream ofs(out_path);
+            if (!ofs) throw std::runtime_error("failed to open model file for write: " + out_path);
+            ofs << model.dump(2);
+        }
+
+        // 6) обновляем атомы + текущую модель для health/metrics
+        etai::set_model_thr(best_thr);
+        etai::set_model_ma_len(ma_len);
+        etai::set_current_model(model);
+
+        out["ok"] = true;
+        out["model_path"] = out_path;
+        out["metrics"] = {
+            {"best_thr", best_thr},
+            {"val_accuracy", val_acc},
+            {"val_reward", val_rew}
+        };
+        return out;
+    } catch (const std::exception& e) {
+        out["error"] = "train_pro_exception";
+        out["error_detail"] = e.what();
+        return out;
+    } catch (...) {
+        out["error"] = "train_pro_unknown";
+        out["error_detail"] = "unknown error";
+        return out;
     }
-
-    // 5) Ответ
-    out["ok"] = true;
-    out["model_path"] = path;
-    out["metrics"] = metrics;
-    return out;
-  }
-  catch(const std::exception& e){
-    out["ok"] = false;
-    out["error"] = "train_logic_exception";
-    out["error_detail"] = e.what();
-    return out;
-  }
-  catch(...){
-    out["ok"] = false;
-    out["error"] = "train_logic_unknown_exception";
-    return out;
-  }
 }
+
+} // namespace etai

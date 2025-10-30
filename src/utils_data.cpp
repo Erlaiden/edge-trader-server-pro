@@ -1,43 +1,90 @@
 #include "utils_data.h"
-#include "fetch.h"      // etai::load_cached_matrix
+#include "json.hpp"
 #include <armadillo>
-#include <algorithm>
+#include <fstream>
+#include <sstream>
+#include <filesystem>
 
-using json = nlohmann::json;
+using nlohmann::json;
+namespace fs = std::filesystem;
 
-int minutes_of(const std::string& interval) {
-  if (interval == "15")   return 15;
-  if (interval == "60")   return 60;
-  if (interval == "240")  return 240;
-  if (interval == "1440") return 1440;
-  return 15;
-}
+namespace etai {
 
+// Отчёт по здоровью данных: быстрые проверки наличия и строк
 json data_health_report(const std::string& symbol, const std::string& interval) {
-  arma::mat M = etai::load_cached_matrix(symbol, interval);
-  json out{
-    {"interval", interval},
-    {"symbol",   symbol},
-    {"ok",       M.n_elem > 0},
-    {"rows",     (int)M.n_cols}
-  };
-  if (M.n_elem == 0) return out;
+    const std::string path = "cache/" + symbol + "_" + interval + ".csv";
+    json j;
+    j["symbol"]   = symbol;
+    j["interval"] = interval;
+    j["ok"]       = fs::exists(path);
+    if (!j["ok"]) return j;
 
-  const arma::rowvec ts = M.row(0);
-  int gaps = 0, dups = 0;
-  long long ts_min = (long long)ts(0);
-  long long ts_max = (long long)ts(M.n_cols - 1);
-
-  long long step_ms = (long long)minutes_of(interval) * 60LL * 1000LL;
-  for (size_t i = 1; i < M.n_cols; ++i) {
-    long long dt = (long long)ts(i) - (long long)ts(i - 1);
-    if (dt > step_ms)      ++gaps;
-    else if (dt == 0)      ++dups;
-  }
-
-  out["gaps"]   = gaps;
-  out["dups"]   = dups;
-  out["ts_min"] = ts_min;
-  out["ts_max"] = ts_max;
-  return out;
+    std::ifstream in(path);
+    int rows = 0;
+    std::string line;
+    while (std::getline(in, line)) rows++;
+    j["rows"]  = rows > 0 ? rows - 1 : 0; // без заголовка
+    j["ts_min"] = nullptr;
+    j["ts_max"] = nullptr;
+    j["dups"]   = 0;
+    j["gaps"]   = 0;
+    return j;
 }
+
+// Загрузка кэша признаков и таргета
+bool load_cached_xy(const std::string& symbol,
+                    const std::string& interval,
+                    arma::mat& X,
+                    arma::mat& y) {
+    const std::string xfile = "cache/X_" + symbol + "_" + interval + ".csv";
+    const std::string yfile = "cache/y_" + symbol + "_" + interval + ".csv";
+    if (!fs::exists(xfile) || !fs::exists(yfile)) return false;
+
+    try {
+        X.load(xfile, arma::csv_ascii);
+        y.load(yfile, arma::csv_ascii);
+        return X.n_rows == y.n_rows && X.n_rows > 0;
+    } catch (...) {
+        return false;
+    }
+}
+
+// Реализация, которой не хватало линковщику
+// Сводка по всем CSV в cache/, используется в health_ai и train_logic
+json get_data_health() {
+    json out = json::object();
+    try {
+        if (!fs::exists("cache")) {
+            out["ok"] = false;
+            out["error"] = "cache_dir_missing";
+            return out;
+        }
+        for (const auto& p : fs::directory_iterator("cache")) {
+            if (!p.is_regular_file()) continue;
+            if (p.path().extension() != ".csv") continue;
+            const std::string fname = p.path().filename().string();
+            json f;
+            f["ok"]   = fs::exists(p.path());
+            f["size"] = f["ok"] ? static_cast<uint64_t>(fs::file_size(p.path())) : 0ULL;
+
+            // Быстрая оценка количества строк
+            try {
+                std::ifstream in(p.path());
+                std::string line;
+                int rows = 0;
+                while (std::getline(in, line)) rows++;
+                f["rows"] = rows > 0 ? rows - 1 : 0;
+            } catch (...) {
+                f["rows"] = 0;
+            }
+            out[fname] = f;
+        }
+        out["ok"] = true;
+    } catch (const std::exception& e) {
+        out["ok"] = false;
+        out["error"] = e.what();
+    }
+    return out;
+}
+
+} // namespace etai

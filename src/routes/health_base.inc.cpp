@@ -1,8 +1,9 @@
+#include "utils_data.h"
 #pragma once
 #include "rt_metrics.h"      // атомики и PROCESS_START_MS
 #include "http_helpers.h"    // qp()
 #include "utils.h"           // minutes_of()
-#include "utils_data.h"      // data_health_report()
+#include "utils_data.h"      // etai::data_health_report()
 #include "json.hpp"
 #include <ctime>
 
@@ -10,10 +11,10 @@ using json = nlohmann::json;
 
 // локальный хелпер: гарантируем, что атомики data_rows инициализированы реальными числами из кеша
 static inline void ensure_data_rows_initialized(const std::string& symbol){
-  auto r15   = data_health_report(symbol, "15");
-  auto r60   = data_health_report(symbol, "60");
-  auto r240  = data_health_report(symbol, "240");
-  auto r1440 = data_health_report(symbol, "1440");
+  auto r15   = etai::data_health_report(symbol, "15");
+  auto r60   = etai::data_health_report(symbol, "60");
+  auto r240  = etai::data_health_report(symbol, "240");
+  auto r1440 = etai::data_health_report(symbol, "1440");
 
   // Если нули — устанавливаем из отчётов (safe, relaxed)
   if (DATA_ROWS_15.load()   == 0 && r15.value("rows",0)   > 0) DATA_ROWS_15.store(  r15.value("rows",0),   std::memory_order_relaxed);

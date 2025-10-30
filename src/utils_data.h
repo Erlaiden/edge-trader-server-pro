@@ -1,9 +1,19 @@
 #pragma once
-#include <string>
 #include "json.hpp"
+#include <armadillo>
+#include <string>
 
-// Возвращает размер шага таймфрейма в минутах
-int minutes_of(const std::string& interval);
+namespace etai {
 
-// Краткий отчёт по кешированной матрице данных (наличие, строки, разрывы и т.д.)
+// Отчёт по здоровью данных (у тебя уже был)
 nlohmann::json data_health_report(const std::string& symbol, const std::string& interval);
+
+// === НОВОЕ ОБЪЯВЛЕНИЕ ===
+// Загрузка кэша признаков/таргета для обучения
+// Возвращает true при успешной загрузке
+bool load_cached_xy(const std::string& symbol,
+                    const std::string& interval,
+                    arma::mat& X,
+                    arma::mat& y);
+
+} // namespace etai

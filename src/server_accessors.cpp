@@ -1,92 +1,91 @@
 #include "server_accessors.h"
-
-#include <cstdlib>
-#include <filesystem>
+#include <atomic>
 #include <fstream>
-#include <string>
-#include <type_traits>
-
-#include "rt_metrics.h"
-#include "utils_data.h"
+#include <filesystem>
 #include "json.hpp"
+#include "utils_model.h"  // safe_read_json_file(...) если у тебя уже есть
 
-using json = nlohmann::json;
 namespace fs = std::filesystem;
-
-namespace {
-
-// getenv с дефолтом
-static std::string env_or(const char* key, const char* defval) {
-    const char* v = std::getenv(key);
-    return (v && *v) ? std::string(v) : std::string(defval);
-}
-
-static inline std::string model_path_of(const std::string& symbol, const std::string& interval) {
-    return "cache/models/" + symbol + "_" + interval + "_ppo_pro.json";
-}
-
-template<typename T>
-static T jnum(const json& j, const char* k, T dflt) {
-    try {
-        if (j.contains(k)) return j.at(k).get<T>();
-    } catch (...) {}
-    return dflt;
-}
-
-} // namespace
+using nlohmann::json;
 
 namespace etai {
 
-json get_current_model() {
-    const std::string symbol   = env_or("ETAI_SYMBOL",   "BTCUSDT");
-    const std::string interval = env_or("ETAI_INTERVAL", "15");
-    const std::string path     = model_path_of(symbol, interval);
+  // --- атомарные параметры модели (дефолты безопасные) ---
+  std::atomic<double>     MODEL_THR{0.01};
+  std::atomic<long long>  MODEL_MA_LEN{12};
+  std::atomic<int>        MODEL_FEAT_DIM{8};
 
-    if (!fs::exists(path)) return json::object();
+  // --- текущая модель целиком ---
+  static json CURRENT_MODEL = json::object();
 
+  // --- threshold ---
+  double get_model_thr()                { return MODEL_THR.load(); }
+  void   set_model_thr(double v)        { MODEL_THR.store(v); }
+
+  // --- MA len ---
+  long long get_model_ma_len()          { return MODEL_MA_LEN.load(); }
+  void      set_model_ma_len(long long v){ MODEL_MA_LEN.store(v); }
+
+  // --- feat_dim ---
+  int  get_model_feat_dim()             { return MODEL_FEAT_DIM.load(); }
+  void set_model_feat_dim(int v)        { MODEL_FEAT_DIM.store(v); }
+
+  // --- current model ---
+  const json& get_current_model()       { return CURRENT_MODEL; }
+  void        set_current_model(const json& m)
+  {
+    CURRENT_MODEL = m;
+
+    // Поддержим согласованность атомов при обновлении модели
     try {
-        std::ifstream f(path);
-        if (!f) return json::object();
-        json m = json::object();
-        f >> m;
-        return m;
+      if (m.contains("best_thr")) set_model_thr(m.at("best_thr").get<double>());
+    } catch (...) {}
+    try {
+      if (m.contains("ma_len"))   set_model_ma_len(m.at("ma_len").get<long long>());
+    } catch (...) {}
+    try {
+      if (m.contains("policy") && m.at("policy").contains("feat_dim")) {
+        set_model_feat_dim(m.at("policy").at("feat_dim").get<int>());
+      }
+    } catch (...) {}
+  }
+
+  // --- загрузка json с диска (через твою безопасную утилиту) ---
+  static json read_json_file(const std::string& path)
+  {
+    try {
+      return safe_read_json_file(path);
     } catch (...) {
-        return json::object();
+      return json::object();
     }
-}
+  }
 
-double get_model_thr() {
-    return MODEL_BEST_THR.load(std::memory_order_relaxed);
-}
-
-long long get_model_ma_len() {
-    return MODEL_MA_LEN.load(std::memory_order_relaxed);
-}
-
-json get_data_health() {
-    const std::string symbol = env_or("ETAI_SYMBOL", "BTCUSDT");
-    json out = json::object();
-    out["symbol"] = symbol;
-
-    try { out["m15"]   = data_health_report(symbol, "15");   } catch (...) { out["m15"]   = json{{"ok",false}}; }
-    try { out["m60"]   = data_health_report(symbol, "60");   } catch (...) { out["m60"]   = json{{"ok",false}}; }
-    try { out["m240"]  = data_health_report(symbol, "240");  } catch (...) { out["m240"]  = json{{"ok",false}}; }
-    try { out["m1440"] = data_health_report(symbol, "1440"); } catch (...) { out["m1440"] = json{{"ok",false}}; }
-
-    return out;
-}
-
-void init_model_atoms_from_disk() {
-    json m = get_current_model();
-    if (m.is_object() && !m.empty()) {
-        const double    thr   = jnum<double>(m, "best_thr", 0.0);
-        const long long ma    = jnum<long long>(m, "ma_len", 0);
-        const long long bts   = jnum<long long>(m, "build_ts", 0);
-
-        MODEL_BEST_THR.store(thr, std::memory_order_relaxed);
-        MODEL_MA_LEN.store(ma,   std::memory_order_relaxed);
-        MODEL_BUILD_TS.store(bts, std::memory_order_relaxed);
+  // --- инициализация атомов из файла модели ---
+  void init_model_atoms_from_disk(const std::string& symbol, const std::string& interval)
+  {
+    // Политика именования: cache/models/<SYMBOL>_<INTERVAL>_ppo_pro.json
+    const std::string fname = "cache/models/" + symbol + "_" + interval + "_ppo_pro.json";
+    if (!fs::exists(fname)) {
+      // файла нет — оставляем дефолты и пустую CURRENT_MODEL
+      return;
     }
-}
+
+    json disk = read_json_file(fname);
+    if (disk.is_object() && disk.contains("model")) {
+      // некоторые ручки хранят под .model — нормализуем
+      disk = disk["model"];
+    }
+
+    if (!disk.is_object()) return;
+
+    // Дополняем policy, если нужно
+    if (!disk.contains("policy")) disk["policy"] = json::object();
+
+    // Обновляем CURRENT_MODEL и атомы
+    set_current_model(disk);
+  }
+
+  // Заглушка-декларация, если где-то зовут (реализация в utils_data.cpp)
+  nlohmann::json get_data_health();
 
 } // namespace etai

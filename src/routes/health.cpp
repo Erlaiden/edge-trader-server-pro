@@ -1,3 +1,4 @@
+#include "routes/train.h"
 // Minimal dispatcher for health/backfill/train (+ AI health via separate TU)
 #include "health.h"
 #include "httplib.h"

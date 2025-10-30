@@ -1,79 +1,41 @@
+#include "routes/train.h"
+#include "train_logic.h"
+#include "server_accessors.h"
 #include "json.hpp"
-#include "httplib.h"
-#include "http_helpers.h"   // qp()
+#include <httplib.h>
 #include <string>
-#include <stdexcept>
-#include <sstream>
 
 using json = nlohmann::json;
+using namespace httplib;
 
-// Форвард: реализация в train_logic.cpp (оставляем существующую сигнатуру)
-json run_train_pro_and_save(const std::string& symbol,
-                            const std::string& interval,
-                            int episodes,
-                            double tp,
-                            double sl,
-                            int ma_len);
-
-static inline int as_int(const std::string& s, int def){
-    if(s.empty()) return def;
-    try { return std::stoi(s); } catch (...) { return def; }
-}
-static inline double as_double(const std::string& s, double def){
-    if(s.empty()) return def;
-    try { return std::stod(s); } catch (...) { return def; }
+static inline std::string get_qs(const Request& req, const char* k, const char* defv) {
+    return req.has_param(k) ? req.get_param_value(k) : std::string(defv);
 }
 
-void register_train_routes(httplib::Server& srv){
-    // Основной роут обучения PRO
-    srv.Get("/api/train", [&](const httplib::Request& req, httplib::Response& res){
-        json out = json::object();
+void register_train_routes(Server& svr) {
+    svr.Get("/api/train", [](const Request& req, Response& res) {
         try {
-            const std::string symbol   = qp(req, "symbol",   "BTCUSDT");
-            const std::string interval = qp(req, "interval", "15");
+            const std::string symbol   = get_qs(req, "symbol",   "BTCUSDT");
+            const std::string interval = get_qs(req, "interval", "15");
 
-            int episodes = as_int(qp(req,"episodes","40"), 40);
-            double tp    = as_double(qp(req,"tp","0.008"),   0.008);
-            double sl    = as_double(qp(req,"sl","0.0032"),  0.0032);
-            int ma_len   = as_int(qp(req,"ma","12"), 12);
+            int episodes = 40;
+            double tp = 0.008;
+            double sl = 0.0032;
+            int ma = 12;
 
-            // Валидации базовые (без фанатизма, чтобы не падать на мусоре)
-            if(episodes <= 0 || episodes > 2000) throw std::runtime_error("bad_param:episodes");
-            if(!(tp>0 && tp<0.05))               throw std::runtime_error("bad_param:tp");
-            if(!(sl>0 && sl<0.05))               throw std::runtime_error("bad_param:sl");
-            if(!(ma_len>=1 && ma_len<=200))      throw std::runtime_error("bad_param:ma");
+            try { episodes = std::stoi(get_qs(req, "episodes", "40")); } catch (...) {}
+            try { tp       = std::stod(get_qs(req, "tp",       "0.008")); } catch (...) {}
+            try { sl       = std::stod(get_qs(req, "sl",       "0.0032")); } catch (...) {}
+            try { ma       = std::stoi(get_qs(req, "ma",       "12")); } catch (...) {}
 
-            json m = run_train_pro_and_save(symbol, interval, episodes, tp, sl, ma_len);
-
-            // Нормализуем ответ: всегда есть .ok; метрики под .metrics
-            out["ok"] = m.value("ok", false);
-            out["model_path"] = m.value("model_path", m.value("path", "")); // совместимость
-            if(m.contains("metrics") && m["metrics"].is_object()){
-                out["metrics"] = m["metrics"];
-            } else {
-                // Соберём ключевые метрики, если они в корне (совместимость со старыми версиями)
-                json mx;
-                if(m.contains("best_thr"))     mx["best_thr"] = m["best_thr"];
-                if(m.contains("totalReward"))  mx["totalReward"] = m["totalReward"];
-                if(m.contains("val_accuracy")) mx["val_accuracy"] = m["val_accuracy"];
-                if(!mx.empty()) out["metrics"] = mx;
-            }
-            // Прокинем служебное
-            if(m.contains("schema")) out["schema"] = m["schema"];
-            if(m.contains("mode"))   out["mode"]   = m["mode"];
-
-            res.set_content(out.dump(2), "application/json");
-            return;
+            json result = etai::run_train_pro_and_save(symbol, interval, episodes, tp, sl, ma);
+            res.set_content(result.dump(2), "application/json");
+        } catch (const std::exception& e) {
+            json err = {{"ok", false}, {"error", "train_handler_exception"}, {"error_detail", e.what()}};
+            res.set_content(err.dump(2), "application/json");
+        } catch (...) {
+            json err = {{"ok", false}, {"error", "train_handler_unknown"}, {"error_detail", "unknown error"}};
+            res.set_content(err.dump(2), "application/json");
         }
-        catch(const std::exception& e){
-            out["ok"] = false;
-            out["error"] = "train_exception";
-            out["error_detail"] = e.what();
-        }
-        catch(...){
-            out["ok"] = false;
-            out["error"] = "train_unknown_exception";
-        }
-        res.set_content(out.dump(2), "application/json");
     });
 }
