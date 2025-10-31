@@ -8,7 +8,7 @@
 #include <iostream>
 
 #include "metrics.h"              // Sharpe, DD, Winrate
-#include "rewardv2_accessors.h"   // атомики и конфиги Reward v2
+#include "rewardv2_accessors.h"   // конфиги Reward v2 (fee, alpha, lambda, mu)
 
 using nlohmann::json;
 using namespace arma;
@@ -16,9 +16,6 @@ using namespace arma;
 namespace etai {
 
 arma::Mat<double> build_feature_matrix(const arma::Mat<double>&);
-
-// Синхронизировано с features.cpp v9
-static constexpr int FEAT_VERSION_CURRENT = 9;
 
 // ---------- utils ----------
 static inline double clampd(double v,double lo,double hi){
@@ -49,7 +46,7 @@ static vec predict_proba(const mat& X,const vec& W,double b){
     return z;
 }
 
-// PnL ряд @thr с комиссиями и зеркальной противоположной стороной
+// PnL ряд @thr с комиссиями и зеркальной стороной
 static vec pnl_series(const vec& fut_ret, const vec& proba, double thr, double tp, double sl, double fee_abs){
     const uword N=fut_ret.n_rows;
     vec r(N, fill::zeros);
@@ -70,7 +67,7 @@ static vec pnl_series(const vec& fut_ret, const vec& proba, double thr, double t
     return r;
 }
 
-// прежний v1-симулятор для поиска best_thr
+// v1-симулятор для поиска best_thr
 static double simulate_reward_v1(const vec& fut_ret,const vec& proba,double thr,double tp,double sl){
     double R=0.0; const uword N=fut_ret.n_rows;
     for(uword i=0;i<N;++i){
@@ -106,11 +103,13 @@ json trainPPO_pro(const arma::mat& raw15,
         }
 
         // 1) Фичи
-        mat F = build_feature_matrix(raw15); // ожидаем D≈28 для v9
+        mat F = build_feature_matrix(raw15);
         const uword N = F.n_rows;
         const uword D = F.n_cols;
+        // Динамическая версия: если D>28 — это v10 (Money Flow включён), иначе v9
+        const int FEAT_VERSION = (D > 28 ? 10 : 9);
 
-        // 2) Будущая доходность на 1 шаг
+        // 2) Будущая доходность (1 шаг)
         vec close = raw15.col(4);
         vec r(N, fill::zeros);
         for(uword i=0;i+1<N;++i){
@@ -151,7 +150,7 @@ json trainPPO_pro(const arma::mat& raw15,
         mat Xva = Xs.rows(split, M-1);  vec yva = ys.rows(split, M-1);
         vec fr_va = fut_s.rows(split, M-1);
 
-        // 4) Нормализация по train
+        // 4) Нормализация (по train)
         vec mu = arma::mean(Xtr, 0).t();
         vec sd = arma::stddev(Xtr, 0, 0).t();
         for(uword j=0;j<D;++j){
@@ -169,7 +168,7 @@ json trainPPO_pro(const arma::mat& raw15,
         vec pred01 = conv_to<vec>::from(pv >= 0.5);
         double acc = arma::mean( conv_to<vec>::from(pred01 == yva) );
 
-        // 7) Поиск best_thr по v1-метрике в [0.30..0.70]
+        // 7) Поиск best_thr по v1-метрике
         double best_thr=0.50, best_Rv1=-1e100;
         for(double thr=0.30; thr<=0.70+1e-12; thr+=0.02){
             double R = simulate_reward_v1(fr_va, pv, thr, thr_pos, thr_neg);
@@ -178,12 +177,11 @@ json trainPPO_pro(const arma::mat& raw15,
         best_thr = clampd(best_thr, 1e-4, 0.99);
 
         // 8) Reward v2 @best_thr
-        // Конфиги из ENV через rewardv2_accessors; манип-пенальти подключим на Этапе 3.
         double fee  = etai::get_fee_per_trade();
         double a_sh = etai::get_alpha_sharpe();
         double lam  = etai::get_lambda_risk();
         double mu_m = etai::get_mu_manip();
-        double manip_penalty_avg = 0.0;
+        double manip_penalty_avg = 0.0; // подключим позже (анти-манип слой)
 
         vec pnl = pnl_series(fr_va, pv, best_thr, thr_pos, thr_neg, fee);
         double sharpe   = etai::calc_sharpe(pnl, 1e-12, 1.0);
@@ -191,8 +189,6 @@ json trainPPO_pro(const arma::mat& raw15,
         double winrate  = etai::calc_winrate(pnl);
         double profit   = arma::accu(pnl) / std::max<arma::uword>(pnl.n_elem,1);
         double risk     = dd_max;
-
-        // Итоговая формула
         double reward_v2= profit - lam*risk - mu_m*manip_penalty_avg + a_sh*sharpe - fee;
 
         // 9) Политика + метрики
@@ -200,7 +196,7 @@ json trainPPO_pro(const arma::mat& raw15,
         policy["W"]            = std::vector<double>(W.begin(), W.end());
         policy["b"]            = { b };
         policy["feat_dim"]     = (int)W.n_rows;
-        policy["feat_version"] = FEAT_VERSION_CURRENT;
+        policy["feat_version"] = FEAT_VERSION;
         policy["note"]         = "logreg_v2_reward";
 
         json metrics;
@@ -224,13 +220,13 @@ json trainPPO_pro(const arma::mat& raw15,
         metrics["val_drawdown"]   = dd_max;
         metrics["val_reward_v2"]  = reward_v2;
 
-        // 10) Обновляем атомики для /metrics
+        // 10) Для /metrics Prometheus
         etai::set_reward_avg(reward_v2);
         etai::set_reward_sharpe(sharpe);
         etai::set_reward_winrate(winrate);
         etai::set_reward_drawdown(dd_max);
 
-        // 11) Выход
+        // 11) Готовый ответ
         json out2;
         out2["ok"]            = true;
         out2["schema"]        = "ppo_pro_v2_reward";
@@ -239,13 +235,13 @@ json trainPPO_pro(const arma::mat& raw15,
         out2["policy_source"] = "learn";
         out2["best_thr"]      = best_thr;
         out2["metrics"]       = metrics;
-        out2["version"]       = FEAT_VERSION_CURRENT;
+        out2["version"]       = FEAT_VERSION;
 
         std::cout << "[TRAIN] PPO_PRO N="<<N<<" D="<<D
                   << " M="<<M<<" val="<<(int)(M - split)
                   << " thr="<<best_thr<<" Rv1="<<best_Rv1<<" acc="<<acc
                   << " Sharpe="<<sharpe<<" DD="<<dd_max<<" WinR="<<winrate<<" Rv2="<<reward_v2
-                  << " feat_ver="<<FEAT_VERSION_CURRENT << std::endl;
+                  << " feat_ver="<<FEAT_VERSION << std::endl;
 
         return out2;
     }catch(const std::exception& e){
