@@ -11,23 +11,38 @@ static inline std::string qs(const Request& req, const char* k, const char* defv
     return req.has_param(k) ? req.get_param_value(k) : std::string(defv);
 }
 
-// Поднимаем ключевые метрики из .metrics на верхний уровень (дублируем, не ломаем контракт)
+// Дублируем ключевые метрики на верхний уровень ответа, не ломая контракт
 static void promote_metrics(json& j){
     if(!j.contains("metrics") || !j["metrics"].is_object()) return;
     const json& m = j["metrics"];
     auto copy = [&](const char* k){
         if(m.contains(k)) j[k] = m.at(k);
     };
-    // основные
+
+    // базовые
     copy("val_accuracy");
-    copy("val_reward");
+    copy("val_reward");      // v1 для обратной совместимости
+    copy("val_reward_v2");   // новый
     copy("M_labeled");
     copy("val_size");
-    // расширенные
     copy("N_rows");
     copy("raw_cols");
     copy("feat_cols");
-    // anti-manip
+    copy("best_thr");
+
+    // расширенные Reward v2
+    copy("val_profit_avg");
+    copy("val_sharpe");
+    copy("val_winrate");
+    copy("val_drawdown");
+
+    // конфиги формулы
+    copy("fee_per_trade");
+    copy("alpha_sharpe");
+    copy("lambda_risk");
+    copy("mu_manip");
+
+    // анти-манип, если появится
     copy("manip_seen");
     copy("manip_rejected");
     copy("manip_ratio");
@@ -48,15 +63,12 @@ void register_train_routes(Server& svr){
             try { sl       = std::stod(qs(req,"sl","0.0032"));  } catch(...) {}
             try { ma       = std::stoi(qs(req,"ma","12"));      } catch(...) {}
 
-            // antimanip=1 по умолчанию
             bool use_antimanip = true;
             try { use_antimanip = std::stoi(qs(req,"antimanip","1")) != 0; } catch(...) {}
 
             json out = etai::run_train_pro_and_save(symbol, interval, episodes, tp, sl, ma, use_antimanip);
 
-            // Дублируем ключевые метрики на верхний уровень
             promote_metrics(out);
-
             res.set_content(out.dump(2), "application/json");
         }catch(const std::exception& e){
             json err = {{"ok",false},{"error","train_handler_exception"},{"error_detail",e.what()}};
