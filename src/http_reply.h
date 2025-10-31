@@ -20,15 +20,16 @@ inline json make_train_reply(const json& trainer_json,
                              double tp, double sl, int ma_len,
                              const std::string& model_path) {
     json r;
-    r["ok"]          = trainer_json.value("ok", true);
-    r["tp"]          = tp;
-    r["sl"]          = sl;
-    r["ma_len"]      = ma_len;
-    r["best_thr"]    = trainer_json.value("best_thr", 0.0);
-    r["metrics"]     = trainer_json.value("metrics", json::object());
-    r["model_path"]  = model_path;
-    r["schema"]      = trainer_json.value("schema", "");
-    r["mode"]        = trainer_json.value("mode", "");
+    r["ok"]           = trainer_json.value("ok", true);
+    r["tp"]           = tp;
+    r["sl"]           = sl;
+    r["ma_len"]       = ma_len;
+    r["best_thr"]     = trainer_json.value("best_thr", 0.0);
+    r["metrics"]      = trainer_json.value("metrics", json::object());
+    r["model_path"]   = model_path;
+    r["schema"]       = trainer_json.value("schema", "");
+    r["mode"]         = trainer_json.value("mode", "");
     r["policy_source"]= trainer_json.value("policy_source", "");
+    r["version"]      = trainer_json.value("version", 0);
     return r;
 }

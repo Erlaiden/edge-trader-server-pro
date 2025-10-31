@@ -23,6 +23,10 @@ static inline arma::Mat<double> buildfeature_matrix(const arma::Mat<double>& raw
 
 namespace etai {
 
+// Версия пакета признаков, согласованная с features.cpp (сейчас FEAT_VERSION=2).
+// В будущем переведём на экспорт из заголовка features.h.
+static constexpr int FEAT_VERSION_CURRENT = 2;
+
 // --- helpers ---
 static inline double clampd(double v, double lo, double hi){
     if(!std::isfinite(v)) return lo;
@@ -42,13 +46,11 @@ static void train_logreg(const mat& X, const vec& y, vec& W, double& b, int epoc
     W.set_size(D);
     W.zeros();
     b = 0.0;
-
     for(int e=0; e<epochs; ++e){
         vec z = X*W + b;             // N
         vec p = 1.0 / (1.0 + arma::exp(-z));
         vec g = X.t() * (p - y) / X.n_rows + l2 * W;   // D
         double gb = arma::accu(p - y) / X.n_rows;
-
         W -= lr * g;
         b -= lr * gb;
     }
@@ -87,7 +89,7 @@ nlohmann::json trainPPO_pro(const arma::mat& raw15,
                             int /*episodes*/,
                             double tp,
                             double sl,
-                            int /*ma_len*/)
+                            int ma_len)
 {
     json out = json::object();
     try{
@@ -96,7 +98,7 @@ nlohmann::json trainPPO_pro(const arma::mat& raw15,
             out["error"]="bad_raw_shape";
             out["raw_cols"]= (int)raw15.n_cols;
             out["N_rows"]  = (int)raw15.n_rows;
-std::cout << "[AUDIT_PPO] out=" << out.dump() << std::endl;
+            std::cout << "[AUDIT_PPO] out=" << out.dump() << std::endl;
             return out;
         }
 
@@ -130,7 +132,7 @@ std::cout << "[AUDIT_PPO] out=" << out.dump() << std::endl;
             out["N_rows"]    = (int)N;
             out["raw_cols"]  = (int)raw15.n_cols;
             out["feat_cols"] = (int)D;
-std::cout << "[AUDIT_PPO] out=" << out.dump() << std::endl;
+            std::cout << "[AUDIT_PPO] out=" << out.dump() << std::endl;
             return out;
         }
 
@@ -183,7 +185,7 @@ std::cout << "[AUDIT_PPO] out=" << out.dump() << std::endl;
         policy["W"]            = std::vector<double>(W.begin(), W.end());
         policy["b"]            = { b };
         policy["feat_dim"]     = (int)W.n_rows;
-        policy["feat_version"] = 3;
+        policy["feat_version"] = FEAT_VERSION_CURRENT;  // синхронизировано с features.cpp
         policy["note"]         = "logreg_v1";
 
         json metrics;
@@ -196,12 +198,20 @@ std::cout << "[AUDIT_PPO] out=" << out.dump() << std::endl;
         metrics["raw_cols"]     = (int)raw15.n_cols;
         metrics["feat_cols"]    = (int)D;
 
+        // Корневые поля модели (+ инварианты)
         out["ok"]            = true;
         out["schema"]        = "ppo_pro_v1";
         out["mode"]          = "pro";
         out["policy"]        = policy;
         out["policy_source"] = "learn";
         out["best_thr"]      = best_thr;
+
+        // Инварианты для статуса/атомиков/клиента
+        out["tp"]       = tp;
+        out["sl"]       = sl;
+        out["ma_len"]   = ma_len;
+        out["version"]  = FEAT_VERSION_CURRENT;
+
         out["metrics"]       = metrics;
 
         std::cout << "[TRAIN] PPO_PRO rows="<<N
@@ -215,13 +225,13 @@ std::cout << "[AUDIT_PPO] out=" << out.dump() << std::endl;
                   << " acc="<<acc
                   << std::endl;
 
-std::cout << "[AUDIT_PPO] out=" << out.dump() << std::endl;
+        std::cout << "[AUDIT_PPO] out=" << out.dump() << std::endl;
         return out;
     }catch(const std::exception& e){
-std::cout << "[AUDIT_PPO] out=" << out.dump() << std::endl;
+        std::cout << "[AUDIT_PPO] out=" << out.dump() << std::endl;
         out["ok"]=false; out["error"]="ppo_pro_exception"; out["error_detail"]=e.what(); return out;
     }catch(...){
-std::cout << "[AUDIT_PPO] out=" << out.dump() << std::endl;
+        std::cout << "[AUDIT_PPO] out=" << out.dump() << std::endl;
         out["ok"]=false; out["error"]="ppo_pro_unknown"; return out;
     }
 }
