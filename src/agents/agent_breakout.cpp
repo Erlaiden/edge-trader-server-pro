@@ -1,37 +1,28 @@
-#include "agent_base.h"
 #include <armadillo>
 #include <cmath>
+#include <memory>
+#include "agent_base.h"
+#include "agents_factory.h"
 
 namespace etai {
 
-// Агент Breakout: реагирует на пробой уровней (высокая волатильность + направленность).
 class AgentBreakout : public AgentBase {
 public:
-    AgentBreakout() = default;
-    ~AgentBreakout() override = default;
+    std::string name() const override { return "breakout"; }
 
     int decide(const arma::rowvec& features, double thr) override {
-        // Волатильность и направленность
+        const std::size_t n = features.n_cols;
+        if (n < 4) { last_confidence = 0.0; return 0; }
+        double trend = features[n-1] - features[n-4];
         double vol = arma::stddev(features);
-        double trend = arma::mean(features);
-
-        // Уверенность растёт с волатильностью и трендом
         last_confidence = std::tanh(vol + std::abs(trend));
-
-        if (last_confidence > thr) {
-            return (trend > 0) ? +1 : -1;
-        }
+        if (last_confidence > thr) return trend >= 0 ? +1 : -1;
         return 0;
-    }
-
-    std::string name() const override {
-        return "agent_breakout";
     }
 };
 
-// Фабричная функция
-extern "C" AgentBase* create_agent_breakout() {
-    return new AgentBreakout();
+std::unique_ptr<AgentBase> make_agent_breakout() {
+    return std::make_unique<AgentBreakout>();
 }
 
-}  // namespace etai
+} // namespace etai

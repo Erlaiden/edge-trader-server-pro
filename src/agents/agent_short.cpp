@@ -1,30 +1,28 @@
-#include "agent_base.h"
-#include <cmath>
 #include <armadillo>
+#include <cmath>
+#include <memory>
+#include "agent_base.h"
+#include "agents_factory.h"
 
 namespace etai {
 
-// Агент Short: реагирует на отрицательные сигналы признаков.
-// Логика: если отрицательная энергия (инвертированная норма) > thr → short (−1)
 class AgentShort : public AgentBase {
 public:
-    AgentShort() = default;
-    ~AgentShort() override = default;
+    std::string name() const override { return "short"; }
 
     int decide(const arma::rowvec& features, double thr) override {
-        double energy = arma::mean(arma::abs(features));
+        const std::size_t n = features.n_cols;
+        std::size_t k = n > 8 ? 8 : n;
+        double s = 0.0;
+        for (std::size_t i = 0; i < k; ++i) s += features[n - 1 - i];
+        double energy = - (s / static_cast<double>(k)); // инверсия для шорта
         last_confidence = 1.0 / (1.0 + std::exp(-energy));
         return (last_confidence > thr) ? -1 : 0;
     }
-
-    std::string name() const override {
-        return "agent_short";
-    }
 };
 
-// Фабричная функция
-extern "C" AgentBase* create_agent_short() {
-    return new AgentShort();
+std::unique_ptr<AgentBase> make_agent_short() {
+    return std::make_unique<AgentShort>();
 }
 
-}  // namespace etai
+} // namespace etai
