@@ -1,5 +1,5 @@
 #include "train_logic.h"
-#include "server_accessors.h"   // etai::{set_model_thr,set_model_ma_len,set_current_model}
+#include "server_accessors.h"   // etai::{set_model_thr,set_model_ma_len,set_model_feat_dim,set_current_model}
 #include "ppo_pro.h"
 #include "utils_data.h"
 #include "http_reply.h"
@@ -70,9 +70,33 @@ json run_train_pro_and_save(const std::string& symbol,
     const std::string model_path = "cache/models/" + symbol + "_" + interval + "_ppo_pro.json";
     std::ofstream(model_path) << trainer.dump(2);
 
-    // --- 5) Обновляем атомики для health/metrics
-    set_model_thr(trainer.value("best_thr", 0.5));
+    // --- 5) Обновляем атомики для health/metrics (thr, ma, feat_dim, current_model)
+    // best_thr
+    const double best_thr = trainer.value("best_thr", 0.5);
+
+    // feat_dim: сначала пытаемся из policy.feat_dim, иначе из metrics.feat_cols
+    int feat_dim = 0;
+    try {
+        if (trainer.contains("policy") &&
+            trainer["policy"].contains("feat_dim") &&
+            !trainer["policy"]["feat_dim"].is_null()) {
+            feat_dim = trainer["policy"]["feat_dim"].get<int>();
+        }
+    } catch (...) {}
+
+    if (feat_dim <= 0) {
+        try {
+            if (trainer.contains("metrics") &&
+                trainer["metrics"].contains("feat_cols") &&
+                !trainer["metrics"]["feat_cols"].is_null()) {
+                feat_dim = trainer["metrics"]["feat_cols"].get<int>();
+            }
+        } catch (...) {}
+    }
+
+    set_model_thr(best_thr);
     set_model_ma_len(ma_len);
+    if (feat_dim > 0) set_model_feat_dim(feat_dim);
     set_current_model(trainer);
 
     // --- 6) Лог в stdout для верификации
@@ -80,7 +104,7 @@ json run_train_pro_and_save(const std::string& symbol,
         const auto& m = trainer.at("metrics");
         std::cout << "[TRAIN] rows="       << m.value("N_rows", 0)
                   << " M_labeled="         << m.value("M_labeled", 0)
-                  << " best_thr="          << trainer.value("best_thr", 0.0)
+                  << " best_thr="          << best_thr
                   << " acc="               << m.value("val_accuracy", 0.0)
                   << " Rv1="               << m.value("val_reward_v1", m.value("val_reward", 0.0))
                   << " profit="            << m.value("val_profit_avg", 0.0)
@@ -88,9 +112,10 @@ json run_train_pro_and_save(const std::string& symbol,
                   << " winrate="           << m.value("val_winrate", 0.0)
                   << " dd="                << m.value("val_drawdown", 0.0)
                   << " Rv2="               << m.value("val_reward_v2", 0.0)
+                  << " feat_dim="          << feat_dim
                   << std::endl;
     } catch (...) {
-        std::cout << "[TRAIN] metrics missing" << std::endl;
+        std::cout << "[TRAIN] metrics missing (feat_dim=" << feat_dim << ")\n";
     }
 
     // --- 7) Стабилизированный ответ клиенту

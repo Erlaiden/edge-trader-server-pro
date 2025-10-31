@@ -1,4 +1,6 @@
-// Файл может инклюдиться прямо из main.cpp, поэтому без внешних "routes.h".
+// Этот файл может включаться прямо из main.cpp (через #include "routes/model.cpp").
+// Поэтому не используем внешние headers типа "routes.h".
+
 #include "../httplib.h"
 #include "../server_accessors.h"
 #include "json.hpp"
@@ -22,15 +24,14 @@ static json load_json_file(const std::string& path, std::string& err) {
     }
 }
 
-// Основная функция, которую вызывает main.cpp
+// Основная реализация в нашем namespace
 inline void register_model_routes(httplib::Server& svr) {
     // Текущее состояние модели (атомики)
     svr.Get("/api/model", [](const httplib::Request&, httplib::Response& res) {
         json r;
         r["ok"] = true;
-        r["model_thr"]      = etai::get_model_thr();
-        r["model_ma_len"]   = etai::get_model_ma_len();
-        // Если в проекте есть геттер размерности — отдадим
+        r["model_thr"]    = etai::get_model_thr();
+        r["model_ma_len"] = etai::get_model_ma_len();
         try { r["model_feat_dim"] = etai::get_model_feat_dim(); } catch (...) {}
         res.status = 200;
         res.set_content(r.dump(2), "application/json");
@@ -54,10 +55,10 @@ inline void register_model_routes(httplib::Server& svr) {
             return;
         }
 
-        // Безопасно извлекаем поля (с дефолтами из текущих атомиков)
+        // Считываем безопасно с дефолтами из текущих атомиков
         double thr = etai::get_model_thr();
-        int ma     = etai::get_model_ma_len();
-        int feat   = 0;
+        int    ma  = etai::get_model_ma_len();
+        int    feat = 0;
 
         try { if (j.contains("best_thr") && !j["best_thr"].is_null()) thr = j["best_thr"].get<double>(); } catch (...) {}
         try { if (j.contains("ma_len")   && !j["ma_len"].is_null())   ma  = j["ma_len"].get<int>();      } catch (...) {}
@@ -81,9 +82,16 @@ inline void register_model_routes(httplib::Server& svr) {
     });
 }
 
-// Совместимость: если где-то вызывается старое имя
-inline void register_model_route(httplib::Server& svr) {
-    register_model_routes(svr);
+} // namespace etai
+
+// --------- Глобальный форвардер для совместимости с main.cpp ---------
+// main.cpp вызывает register_model_routes(svr) без namespace.
+// Оставляем тонкий адаптер в глобальном пространстве имён:
+void register_model_routes(httplib::Server& svr) {
+    etai::register_model_routes(svr);
 }
 
-} // namespace etai
+// Также поддержим старое имя, если где-то использовалось:
+void register_model_route(httplib::Server& svr) {
+    etai::register_model_routes(svr);
+}
