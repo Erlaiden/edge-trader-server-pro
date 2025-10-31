@@ -184,10 +184,14 @@ json trainPPO_pro(const arma::mat& raw15,
         }
         best_thr = clampd(best_thr, 1e-4, 0.99);
 
-        // 8) Anti-manip (за флагом) — безопасные границы
-        double manip_ratio = 0.0;
+        // 8) Anti-manip: считаем raw ratio, затем нормализуем по волатильности
+        double manip_ratio_raw = 0.0;
+        double manip_ratio_norm = 0.0;
+        double manip_vol = 0.0;
+        uword manip_flagged = 0, manip_total = 0;
+
         if(env_enabled("ETAI_ENABLE_ANTI_MANIP")){
-            // Преобразуем серии
+            // серии для SR и флагов
             std::vector<double> Vopen(N), Vhigh(N), Vlow(N), Vclose(N);
             for(uword i=0;i<N;++i){ Vopen[i]=open(i); Vhigh[i]=high(i); Vlow[i]=low(i); Vclose[i]=close(i); }
 
@@ -195,9 +199,9 @@ json trainPPO_pro(const arma::mat& raw15,
             auto res = rolling_resistance(Vhigh,20);
             auto fbf = false_break_flags(Vopen, Vhigh, Vlow, Vclose, sup, res, /*tol*/5e-4);
 
-            // Безопасные пределы по индексам разметки
+            // только валидационный диапазон
             uword a = std::min<uword>(split, (uword)idx.size());
-            uword b = (idx.size()==0) ? 0 : (uword)idx.size(); // верхняя граница "исключая b"
+            uword b = (idx.size()==0) ? 0 : (uword)idx.size();
             uword cnt=0, den=0;
             for(uword k=a; k<b; ++k){
                 uword i = idx[k];
@@ -206,10 +210,30 @@ json trainPPO_pro(const arma::mat& raw15,
                     if(fbf[i]!=0) ++cnt;
                 }
             }
-            manip_ratio = (den>0)? (double)cnt/(double)den : 0.0;
+            manip_flagged = cnt;
+            manip_total   = den;
+            manip_ratio_raw = (den>0)? (double)cnt/(double)den : 0.0;
+
+            // волатильность по доходностям close: sigma(ret)
+            if(N > 2){
+                std::vector<double> ret; ret.reserve(N-1);
+                for(uword i=1;i<N;++i){
+                    double c0 = close(i-1), c1 = close(i);
+                    double rr = (c0>0.0)? (c1/c0 - 1.0) : 0.0;
+                    ret.push_back(rr);
+                }
+                double m=0.0; for(double v:ret) m+=v; m/= (double)ret.size();
+                double var=0.0; for(double v:ret){ double d=v-m; var+=d*d; }
+                var/= (double)ret.size();
+                manip_vol = std::sqrt(var);
+            } else {
+                manip_vol = 0.0;
+            }
+
+            manip_ratio_norm = manip_ratio_raw / (1.0 + manip_vol);
         }
 
-        // 9) Reward v2 @best_thr
+        // 9) Reward v2 @best_thr: используем нормализованную долю, если анти-манип включён
         double fee  = etai::get_fee_per_trade();
         double a_sh = etai::get_alpha_sharpe();
         double lam  = etai::get_lambda_risk();
@@ -221,7 +245,9 @@ json trainPPO_pro(const arma::mat& raw15,
         double winrate  = etai::calc_winrate(pnl);
         double profit   = arma::accu(pnl) / std::max<arma::uword>(pnl.n_elem,1);
         double risk     = dd_max;
-        double reward_v2= profit - lam*risk - mu_m*manip_ratio + a_sh*sharpe - fee;
+
+        double manip_term = env_enabled("ETAI_ENABLE_ANTI_MANIP") ? manip_ratio_norm : manip_ratio_raw;
+        double reward_v2= profit - lam*risk - mu_m*manip_term + a_sh*sharpe - fee;
 
         // 10) Политика + метрики
         json policy;
@@ -232,31 +258,39 @@ json trainPPO_pro(const arma::mat& raw15,
         policy["note"]         = "logreg_v2_reward";
 
         json metrics;
-        metrics["val_accuracy"]   = acc;
-        metrics["val_reward_v1"]  = best_Rv1;
-        metrics["best_thr"]       = best_thr;
-        metrics["M_labeled"]      = (int)M;
-        metrics["val_size"]       = (int)(M - split);
-        metrics["N_rows"]         = (int)N;
-        metrics["raw_cols"]       = (int)raw15.n_cols;
-        metrics["feat_cols"]      = (int)D;
+        metrics["val_accuracy"]      = acc;
+        metrics["val_reward_v1"]     = best_Rv1;
+        metrics["best_thr"]          = best_thr;
+        metrics["M_labeled"]         = (int)M;
+        metrics["val_size"]          = (int)(M - split);
+        metrics["N_rows"]            = (int)N;
+        metrics["raw_cols"]          = (int)raw15.n_cols;
+        metrics["feat_cols"]         = (int)D;
 
-        metrics["fee_per_trade"]  = fee;
-        metrics["alpha_sharpe"]   = a_sh;
-        metrics["lambda_risk"]    = lam;
-        metrics["mu_manip"]       = mu_m;
+        metrics["fee_per_trade"]     = fee;
+        metrics["alpha_sharpe"]      = a_sh;
+        metrics["lambda_risk"]       = lam;
+        metrics["mu_manip"]          = mu_m;
 
-        metrics["val_profit_avg"] = profit;
-        metrics["val_sharpe"]     = sharpe;
-        metrics["val_winrate"]    = winrate;
-        metrics["val_drawdown"]   = dd_max;
-        metrics["val_reward_v2"]  = reward_v2;
-        metrics["val_manip_ratio"]= manip_ratio;
+        metrics["val_profit_avg"]    = profit;
+        metrics["val_sharpe"]        = sharpe;
+        metrics["val_winrate"]       = winrate;
+        metrics["val_drawdown"]      = dd_max;
+        metrics["val_reward_v2"]     = reward_v2;
+
+        // анти-манип метрики: сырые и нормализованные
+        metrics["val_manip_ratio"]       = manip_ratio_raw;
+        metrics["val_manip_ratio_norm"]  = manip_ratio_norm;
+        metrics["val_manip_flagged"]     = (int)manip_flagged;
+        metrics["val_manip_vol"]         = manip_vol;
 
         etai::set_reward_avg(reward_v2);
         etai::set_reward_sharpe(sharpe);
         etai::set_reward_winrate(winrate);
         etai::set_reward_drawdown(dd_max);
+        // отдаём нормализованный ratio в атомики, как источник для /metrics
+        etai::set_val_manip_ratio(manip_ratio_norm);
+        etai::set_val_manip_flagged((double)manip_flagged);
 
         json out2;
         out2["ok"]            = true;
@@ -272,7 +306,8 @@ json trainPPO_pro(const arma::mat& raw15,
                   << " M="<<M<<" val="<<(int)(M - split)
                   << " thr="<<best_thr<<" acc="<<acc
                   << " Sharpe="<<sharpe<<" DD="<<dd_max<<" WinR="<<winrate
-                  << " ManipR="<<manip_ratio
+                  << " ManipR_raw="<<manip_ratio_raw
+                  << " ManipR_norm="<<manip_ratio_norm
                   << " feat_ver="<<FEAT_VERSION << std::endl;
 
         return out2;

@@ -44,9 +44,10 @@ static void promote_metrics(json& j) {
     copy("mu_manip");
 
     // анти-манип
-    copy("manip_seen");
-    copy("manip_rejected");
-    copy("val_manip_ratio");  // <-- исправлено с manip_ratio
+    copy("val_manip_ratio");        // raw
+    copy("val_manip_ratio_norm");   // normalized
+    copy("val_manip_flagged");      // count
+    copy("val_manip_vol");          // sigma(ret)
 }
 
 void register_train_routes(Server& svr) {
@@ -54,9 +55,9 @@ void register_train_routes(Server& svr) {
         try {
             const std::string symbol   = qs(req, "symbol", "BTCUSDT");
             const std::string interval = qs(req, "interval", "15");
-            int episodes = 40;
+            int    episodes = 40;
             double tp = 0.008, sl = 0.0032;
-            int ma = 12;
+            int    ma = 12;
 
             try { episodes = std::stoi(qs(req,"episodes","40")); } catch(...) {}
             try { tp       = std::stod(qs(req,"tp","0.008"));   } catch(...) {}
