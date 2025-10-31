@@ -44,10 +44,14 @@ static void promote_metrics(json& j) {
     copy("mu_manip");
 
     // анти-манип
-    copy("val_manip_ratio");        // raw
-    copy("val_manip_ratio_norm");   // normalized
-    copy("val_manip_flagged");      // count
-    copy("val_manip_vol");          // sigma(ret)
+    copy("val_manip_ratio");
+    copy("val_manip_ratio_norm");
+    copy("val_manip_flagged");
+    copy("val_manip_vol");
+
+    // динамические коэффициенты
+    copy("val_lambda_eff");
+    copy("val_mu_eff");
 }
 
 void register_train_routes(Server& svr) {

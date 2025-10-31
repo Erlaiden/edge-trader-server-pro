@@ -21,6 +21,15 @@ static std::atomic<double> G_MU_MANIP{0.2};
 static std::atomic<double> G_VAL_MANIP_RATIO{0.0};     // нормализованный ratio
 static std::atomic<double> G_VAL_MANIP_FLAGGED{0.0};   // count как double
 
+// --- Dynamic coefficients (effective used last) ---
+static std::atomic<double> G_LAMBDA_RISK_EFF{1.0};
+static std::atomic<double> G_MU_MANIP_EFF{0.2};
+
+// --- Tunables for dynamics ---
+static std::atomic<double> G_SIGMA_REF{0.01};    // опорная волатильность
+static std::atomic<double> G_LAMBDA_KVOL{2.0};   // чувствительность λ к σ
+static std::atomic<double> G_MU_KFREQ{3.0};      // чувствительность μ к частоте флагов
+
 static inline double envd(const char* k, double defv){
     const char* s = std::getenv(k);
     if(!s || !*s) return defv;
@@ -55,15 +64,20 @@ void init_rewardv2_from_env(){
     set_alpha_sharpe(  envd("ETAI_ALPHA",   0.5) );
     set_lambda_risk(   envd("ETAI_LAMBDA",  1.0) );
     set_mu_manip(      envd("ETAI_MU",      0.2) );
-    // anti-manip telemetry сбрасываем в 0 на старте
+    // dynamics tunables
+    G_SIGMA_REF.store(    envd("ETAI_SIGMA_REF",  0.01) );
+    G_LAMBDA_KVOL.store(  envd("ETAI_LAMBDA_KVOL",2.0) );
+    G_MU_KFREQ.store(     envd("ETAI_MU_KFREQ",   3.0) );
+    // reset telemetry
     G_VAL_MANIP_RATIO.store(0.0);
     G_VAL_MANIP_FLAGGED.store(0.0);
+    G_LAMBDA_RISK_EFF.store(G_LAMBDA_RISK.load());
+    G_MU_MANIP_EFF.store(G_MU_MANIP.load());
 }
 
 // Anti-manip telemetry
 double get_val_manip_ratio()      { return G_VAL_MANIP_RATIO.load(); }
 void   set_val_manip_ratio(double v){
-    // допускаем любые >=0 числа; NaN → 0
     if(!std::isfinite(v) || v < 0.0) v = 0.0;
     G_VAL_MANIP_RATIO.store(v);
 }
@@ -72,5 +86,22 @@ void   set_val_manip_flagged(double v){
     if(!std::isfinite(v) || v < 0.0) v = 0.0;
     G_VAL_MANIP_FLAGGED.store(v);
 }
+
+// Dynamic coeffs
+double get_lambda_risk_eff() { return G_LAMBDA_RISK_EFF.load(); }
+void   set_lambda_risk_eff(double v){
+    if(!std::isfinite(v) || v < 0.0) v = 0.0;
+    G_LAMBDA_RISK_EFF.store(v);
+}
+double get_mu_manip_eff() { return G_MU_MANIP_EFF.load(); }
+void   set_mu_manip_eff(double v){
+    if(!std::isfinite(v) || v < 0.0) v = 0.0;
+    G_MU_MANIP_EFF.store(v);
+}
+
+// Tunables getters
+double get_sigma_ref()   { return G_SIGMA_REF.load(); }
+double get_lambda_kvol() { return G_LAMBDA_KVOL.load(); }
+double get_mu_kfreq()    { return G_MU_KFREQ.load(); }
 
 } // namespace etai

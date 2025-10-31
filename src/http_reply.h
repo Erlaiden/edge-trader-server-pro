@@ -2,6 +2,9 @@
 #include "json.hpp"
 #include <string>
 
+// Обогащаем ответ текущими эффективными коэффициентами
+#include "rewardv2_accessors.h"
+
 using nlohmann::json;
 
 // Унифицированный формат HTTP-ответа
@@ -25,11 +28,23 @@ inline json make_train_reply(const json& trainer_json,
     r["sl"]           = sl;
     r["ma_len"]       = ma_len;
     r["best_thr"]     = trainer_json.value("best_thr", 0.0);
-    r["metrics"]      = trainer_json.value("metrics", json::object());
-    r["model_path"]   = model_path;
     r["schema"]       = trainer_json.value("schema", "");
     r["mode"]         = trainer_json.value("mode", "");
     r["policy_source"]= trainer_json.value("policy_source", "");
     r["version"]      = trainer_json.value("version", 0);
+    r["model_path"]   = model_path;
+
+    // Копия метрик тренера
+    json m = trainer_json.value("metrics", json::object());
+
+    // Если тренер не положил эффективные коэффициенты — дольём из атомиков (как в /metrics)
+    if (!m.contains("val_lambda_eff") || m["val_lambda_eff"].is_null()) {
+        m["val_lambda_eff"] = etai::get_lambda_risk_eff();
+    }
+    if (!m.contains("val_mu_eff") || m["val_mu_eff"].is_null()) {
+        m["val_mu_eff"] = etai::get_mu_manip_eff();
+    }
+
+    r["metrics"] = m;
     return r;
 }

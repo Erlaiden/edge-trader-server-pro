@@ -63,6 +63,15 @@ void register_metrics_routes(httplib::Server& srv) {
         oss << "# TYPE edge_val_manip_flagged gauge\n";
         oss << "edge_val_manip_flagged " << etai::get_val_manip_flagged() << "\n";
 
+        // Effective dynamic coefficients
+        oss << "# HELP edge_lambda_risk_eff Effective lambda risk used in last train\n";
+        oss << "# TYPE edge_lambda_risk_eff gauge\n";
+        oss << "edge_lambda_risk_eff " << etai::get_lambda_risk_eff() << "\n";
+
+        oss << "# HELP edge_mu_manip_eff Effective mu manip used in last train\n";
+        oss << "# TYPE edge_mu_manip_eff gauge\n";
+        oss << "edge_mu_manip_eff " << etai::get_mu_manip_eff() << "\n";
+
         res.set_content(oss.str(), "text/plain; version=0.0.4");
     });
 }

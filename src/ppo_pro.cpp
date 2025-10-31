@@ -233,11 +233,23 @@ json trainPPO_pro(const arma::mat& raw15,
             manip_ratio_norm = manip_ratio_raw / (1.0 + manip_vol);
         }
 
-        // 9) Reward v2 @best_thr: используем нормализованную долю, если анти-манип включён
-        double fee  = etai::get_fee_per_trade();
-        double a_sh = etai::get_alpha_sharpe();
-        double lam  = etai::get_lambda_risk();
-        double mu_m = etai::get_mu_manip();
+        // 9) Reward v2 @best_thr: динамические λ и μ
+        double fee   = etai::get_fee_per_trade();
+        double a_sh  = etai::get_alpha_sharpe();
+        double lam_0 = etai::get_lambda_risk();
+        double mu_0  = etai::get_mu_manip();
+
+        // динамика
+        double sigma_ref = etai::get_sigma_ref();   if(!(sigma_ref>0.0)) sigma_ref = 0.01;
+        double k_vol     = etai::get_lambda_kvol();
+        double k_freq    = etai::get_mu_kfreq();
+
+        double lam_eff = lam_0 * (1.0 + k_vol  * (manip_vol / (sigma_ref + 1e-12)));
+        double mu_eff  = mu_0  * (1.0 + k_freq * (manip_ratio_norm));
+
+        // ограничим разумно
+        if(!std::isfinite(lam_eff) || lam_eff<0.0) lam_eff = lam_0;
+        if(!std::isfinite(mu_eff)  || mu_eff <0.0) mu_eff  = mu_0;
 
         vec pnl = pnl_series(fr_va, pv, best_thr, thr_pos, thr_neg, fee);
         double sharpe   = etai::calc_sharpe(pnl, 1e-12, 1.0);
@@ -247,7 +259,7 @@ json trainPPO_pro(const arma::mat& raw15,
         double risk     = dd_max;
 
         double manip_term = env_enabled("ETAI_ENABLE_ANTI_MANIP") ? manip_ratio_norm : manip_ratio_raw;
-        double reward_v2= profit - lam*risk - mu_m*manip_term + a_sh*sharpe - fee;
+        double reward_v2  = profit - lam_eff*risk - mu_eff*manip_term + a_sh*sharpe - fee;
 
         // 10) Политика + метрики
         json policy;
@@ -255,7 +267,7 @@ json trainPPO_pro(const arma::mat& raw15,
         policy["b"]            = { b };
         policy["feat_dim"]     = (int)W.n_rows;
         policy["feat_version"] = FEAT_VERSION;
-        policy["note"]         = "logreg_v2_reward";
+        policy["note"]         = "logreg_v2_reward_dyn";
 
         json metrics;
         metrics["val_accuracy"]      = acc;
@@ -269,8 +281,10 @@ json trainPPO_pro(const arma::mat& raw15,
 
         metrics["fee_per_trade"]     = fee;
         metrics["alpha_sharpe"]      = a_sh;
-        metrics["lambda_risk"]       = lam;
-        metrics["mu_manip"]          = mu_m;
+        metrics["lambda_risk"]       = lam_0;
+        metrics["mu_manip"]          = mu_0;
+        metrics["val_lambda_eff"]    = lam_eff;
+        metrics["val_mu_eff"]        = mu_eff;
 
         metrics["val_profit_avg"]    = profit;
         metrics["val_sharpe"]        = sharpe;
@@ -278,7 +292,7 @@ json trainPPO_pro(const arma::mat& raw15,
         metrics["val_drawdown"]      = dd_max;
         metrics["val_reward_v2"]     = reward_v2;
 
-        // анти-манип метрики: сырые и нормализованные
+        // анти-манип метрики
         metrics["val_manip_ratio"]       = manip_ratio_raw;
         metrics["val_manip_ratio_norm"]  = manip_ratio_norm;
         metrics["val_manip_flagged"]     = (int)manip_flagged;
@@ -288,9 +302,10 @@ json trainPPO_pro(const arma::mat& raw15,
         etai::set_reward_sharpe(sharpe);
         etai::set_reward_winrate(winrate);
         etai::set_reward_drawdown(dd_max);
-        // отдаём нормализованный ratio в атомики, как источник для /metrics
         etai::set_val_manip_ratio(manip_ratio_norm);
         etai::set_val_manip_flagged((double)manip_flagged);
+        etai::set_lambda_risk_eff(lam_eff);
+        etai::set_mu_manip_eff(mu_eff);
 
         json out2;
         out2["ok"]            = true;
@@ -308,6 +323,7 @@ json trainPPO_pro(const arma::mat& raw15,
                   << " Sharpe="<<sharpe<<" DD="<<dd_max<<" WinR="<<winrate
                   << " ManipR_raw="<<manip_ratio_raw
                   << " ManipR_norm="<<manip_ratio_norm
+                  << " lam_eff="<<lam_eff<<" mu_eff="<<mu_eff
                   << " feat_ver="<<FEAT_VERSION << std::endl;
 
         return out2;
