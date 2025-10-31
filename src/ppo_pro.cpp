@@ -1,5 +1,5 @@
 #include "ppo_pro.h"
-#include "features.h"      // реализация build_feature_matrix в etai::
+#include "features.h"
 #include "json.hpp"
 #include <armadillo>
 #include <vector>
@@ -10,24 +10,13 @@
 using nlohmann::json;
 using namespace arma;
 
-// ---- Мостик имён ------------------------------------------------------------
-// В проекте исторически зовём buildfeature_matrix (глобальная, без '_').
-// Реальная функция — etai::build_feature_matrix (с '_').
-// Делаем обёртку, чтобы не трогать features.* и остальные места.
-namespace etai { arma::Mat<double> build_feature_matrix(const arma::Mat<double>&); }
-
-static inline arma::Mat<double> buildfeature_matrix(const arma::Mat<double>& raw){
-    return etai::build_feature_matrix(raw);
-}
-// -----------------------------------------------------------------------------
-
 namespace etai {
 
-// Версия пакета признаков, согласованная с features.cpp (сейчас FEAT_VERSION=2).
-// В будущем переведём на экспорт из заголовка features.h.
-static constexpr int FEAT_VERSION_CURRENT = 2;
+// --- ЯВНАЯ ДЕКЛАРАЦИЯ build_feature_matrix (из features.h) ---
+arma::Mat<double> build_feature_matrix(const arma::Mat<double>&);
 
-// --- helpers ---
+static constexpr int FEAT_VERSION_CURRENT = 4;
+
 static inline double clampd(double v, double lo, double hi){
     if(!std::isfinite(v)) return lo;
     if(v < lo) return lo;
@@ -40,16 +29,15 @@ static inline double sigmoid(double z){
     return 1.0 / (1.0 + std::exp(-z));
 }
 
-// простая логрег на градиентном спуске
 static void train_logreg(const mat& X, const vec& y, vec& W, double& b, int epochs, double lr, double l2){
     const uword D = X.n_cols;
     W.set_size(D);
     W.zeros();
     b = 0.0;
     for(int e=0; e<epochs; ++e){
-        vec z = X*W + b;             // N
+        vec z = X*W + b;
         vec p = 1.0 / (1.0 + arma::exp(-z));
-        vec g = X.t() * (p - y) / X.n_rows + l2 * W;   // D
+        vec g = X.t() * (p - y) / X.n_rows + l2 * W;
         double gb = arma::accu(p - y) / X.n_rows;
         W -= lr * g;
         b -= lr * gb;
@@ -62,7 +50,6 @@ static vec predict_proba(const mat& X, const vec& W, double b){
     return z;
 }
 
-// суммарная «награда» на валидации при пороге proba thr и tp/sl
 static double simulate_reward(const vec& fut_ret, const vec& proba, double thr, double tp, double sl){
     double R = 0.0;
     const uword N = fut_ret.n_rows;
@@ -82,14 +69,14 @@ static double simulate_reward(const vec& fut_ret, const vec& proba, double thr, 
     return R;
 }
 
-nlohmann::json trainPPO_pro(const arma::mat& raw15,
-                            const arma::mat* /*raw60*/,
-                            const arma::mat* /*raw240*/,
-                            const arma::mat* /*raw1440*/,
-                            int /*episodes*/,
-                            double tp,
-                            double sl,
-                            int ma_len)
+json trainPPO_pro(const arma::mat& raw15,
+                  const arma::mat* /*raw60*/,
+                  const arma::mat* /*raw240*/,
+                  const arma::mat* /*raw1440*/,
+                  int /*episodes*/,
+                  double tp,
+                  double sl,
+                  int ma_len)
 {
     json out = json::object();
     try{
@@ -98,12 +85,11 @@ nlohmann::json trainPPO_pro(const arma::mat& raw15,
             out["error"]="bad_raw_shape";
             out["raw_cols"]= (int)raw15.n_cols;
             out["N_rows"]  = (int)raw15.n_rows;
-            std::cout << "[AUDIT_PPO] out=" << out.dump() << std::endl;
             return out;
         }
 
-        // билдим фичи через мостик (глобальная сигнатура)
-        mat F = buildfeature_matrix(raw15); // N×D (ожидаем D=8)
+        // Фичи из features.cpp v4
+        mat F = etai::build_feature_matrix(raw15);
         const uword N = F.n_rows;
         const uword D = F.n_cols;
 
@@ -116,7 +102,7 @@ nlohmann::json trainPPO_pro(const arma::mat& raw15,
         }
         vec fut = arma::shift(r, -1); fut(N-1)=0.0;
 
-        // разметка
+        // разметка по tp/sl
         double thr_pos = clampd(tp, 1e-4, 1e-1);
         double thr_neg = clampd(sl, 1e-4, 1e-1);
         std::vector<uword> idx; idx.reserve(N);
@@ -132,12 +118,11 @@ nlohmann::json trainPPO_pro(const arma::mat& raw15,
             out["N_rows"]    = (int)N;
             out["raw_cols"]  = (int)raw15.n_cols;
             out["feat_cols"] = (int)D;
-            std::cout << "[AUDIT_PPO] out=" << out.dump() << std::endl;
             return out;
         }
 
         mat Xs(M, D, fill::zeros);
-        vec ys(M,    fill::zeros);
+        vec ys(M, fill::zeros);
         vec fut_s(M, fill::zeros);
         for(uword k=0;k<M;++k){
             uword i = idx[k];
@@ -155,7 +140,7 @@ nlohmann::json trainPPO_pro(const arma::mat& raw15,
         vec yva = ys.rows(split, M-1);
         vec fr_va = fut_s.rows(split, M-1);
 
-        // нормализация по train
+        // нормализация
         vec mu = arma::mean(Xtr, 0).t();
         vec sd = arma::stddev(Xtr, 0, 0).t();
         for(uword j=0;j<D;++j){
@@ -166,26 +151,28 @@ nlohmann::json trainPPO_pro(const arma::mat& raw15,
 
         // логрег
         vec W; double b = 0.0;
-        train_logreg(Xtr, ytr, W, b, /*epochs*/300, /*lr*/0.05, /*l2*/1e-4);
+        const int epochs = 300; const double lr=0.05; const double l2=1e-4;
+        train_logreg(Xtr, ytr, W, b, epochs, lr, l2);
         vec pv = predict_proba(Xva, W, b);
 
         // acc@0.5
         vec pred01 = conv_to<vec>::from(pv >= 0.5);
-        double acc = arma::mean( conv_to<vec>::from(pred01 == yva) );
+        double acc = arma::mean(conv_to<vec>::from(pred01 == yva));
 
-        // поиск best_thr по proba в [0.30..0.70]
-        double best_thr = 0.50, best_R = -1e100;
+        // поиск best_thr по [0.30..0.70]
+        double best_thr = 0.5, best_R = -1e100;
         for(double thr=0.30; thr<=0.70+1e-9; thr+=0.02){
             double R = simulate_reward(fr_va, pv, thr, thr_pos, thr_neg);
             if(R > best_R){ best_R = R; best_thr = thr; }
         }
         best_thr = clampd(best_thr, 1e-4, 0.99);
 
+        // policy и метрики
         json policy;
         policy["W"]            = std::vector<double>(W.begin(), W.end());
         policy["b"]            = { b };
         policy["feat_dim"]     = (int)W.n_rows;
-        policy["feat_version"] = FEAT_VERSION_CURRENT;  // синхронизировано с features.cpp
+        policy["feat_version"] = FEAT_VERSION_CURRENT;
         policy["note"]         = "logreg_v1";
 
         json metrics;
@@ -198,7 +185,7 @@ nlohmann::json trainPPO_pro(const arma::mat& raw15,
         metrics["raw_cols"]     = (int)raw15.n_cols;
         metrics["feat_cols"]    = (int)D;
 
-        // Корневые поля модели (+ инварианты)
+        // корневые поля модели
         out["ok"]            = true;
         out["schema"]        = "ppo_pro_v1";
         out["mode"]          = "pro";
@@ -206,32 +193,19 @@ nlohmann::json trainPPO_pro(const arma::mat& raw15,
         out["policy_source"] = "learn";
         out["best_thr"]      = best_thr;
 
-        // Инварианты для статуса/атомиков/клиента
+        // инварианты
         out["tp"]       = tp;
         out["sl"]       = sl;
         out["ma_len"]   = ma_len;
         out["version"]  = FEAT_VERSION_CURRENT;
 
-        out["metrics"]       = metrics;
+        out["metrics"]  = metrics;
 
-        std::cout << "[TRAIN] PPO_PRO rows="<<N
-                  << " raw_cols="<<raw15.n_cols
-                  << " feat_cols="<<D
-                  << " M_labeled="<<M
-                  << " split="<<(int)split
-                  << " val_size="<<(int)(M-split)
-                  << " best_thr="<<best_thr
-                  << " best_R="<<best_R
-                  << " acc="<<acc
-                  << std::endl;
-
-        std::cout << "[AUDIT_PPO] out=" << out.dump() << std::endl;
+        std::cout << "[TRAIN] PPO_PRO v4 ok acc="<<acc<<" R="<<best_R<<" thr="<<best_thr<<" D="<<D<<std::endl;
         return out;
     }catch(const std::exception& e){
-        std::cout << "[AUDIT_PPO] out=" << out.dump() << std::endl;
-        out["ok"]=false; out["error"]="ppo_pro_exception"; out["error_detail"]=e.what(); return out;
+        out["ok"]=false; out["error"]="ppo_pro_exception"; out["detail"]=e.what(); return out;
     }catch(...){
-        std::cout << "[AUDIT_PPO] out=" << out.dump() << std::endl;
         out["ok"]=false; out["error"]="ppo_pro_unknown"; return out;
     }
 }
