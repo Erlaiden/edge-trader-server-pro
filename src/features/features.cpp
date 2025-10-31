@@ -5,16 +5,28 @@
 #include <cmath>
 #include <algorithm>
 #include <vector>
+#include <cstdlib>   // getenv
 
 // ВРЕМЕННО до правки CMakeLists.txt — подтягиваем реализацию контекста сюда:
 #include "context_detector.cpp"
+
+// Money Flow layer
+#include "money_flow.h"
 
 using json = nlohmann::json;
 using namespace arma;
 
 namespace etai {
 
-constexpr int FEAT_VERSION = 9;
+// Версия фич по умолчанию (без Money Flow)
+constexpr int FEAT_VERSION_BASE = 9;
+
+static inline bool env_enabled(const char* k){
+    const char* s = std::getenv(k);
+    if(!s || !*s) return false;
+    // "1", "true", "yes" включают
+    return (s[0]=='1') || (s[0]=='T'||s[0]=='t') || (s[0]=='Y'||s[0]=='y');
+}
 
 // ---------- вспомогательные функции ----------
 static double ema_one(const std::vector<double>& v, int period, size_t i) {
@@ -48,8 +60,8 @@ static double rsi_one(const std::vector<double>& c, int period, size_t i) {
 static double atr_one(const std::vector<double>& h,
                       const std::vector<double>& l,
                       const std::vector<double>& c,
-                      int period,
-                      size_t i) {
+                      int period, size_t i)
+{
     if (i + 1 < (size_t)period + 1) return NAN;
     double s = 0;
     for (size_t j = i + 1 - period; j <= i; ++j) {
@@ -65,6 +77,8 @@ static double atr_one(const std::vector<double>& h,
 arma::Mat<double> build_feature_matrix(const arma::Mat<double>& raw) {
     if (raw.n_rows < 30 || raw.n_cols < 6) return arma::Mat<double>();
 
+    const bool ENABLE_MFLOW = env_enabled("ETAI_FEAT_ENABLE_MFLOW");
+
     size_t n = raw.n_rows;
     std::vector<long long> ts(n);
     std::vector<double> open(n), high(n), low(n), close(n), vol(n);
@@ -78,7 +92,7 @@ arma::Mat<double> build_feature_matrix(const arma::Mat<double>& raw) {
     }
 
     std::vector<double> ema_fast(n), ema_slow(n), rsi_v(n),
-        macd_v(n), macd_hist(n), atr_v(n), accel_v(n), slope_v(n);
+                        macd_v(n), macd_hist(n), atr_v(n), accel_v(n), slope_v(n);
 
     for (size_t i = 0; i < n; ++i) {
         ema_fast[i] = ema_one(close, 12, i);
@@ -108,8 +122,20 @@ arma::Mat<double> build_feature_matrix(const arma::Mat<double>& raw) {
     // контекст
     ContextSeries ctx = compute_context(ts, open, high, low, close, vol);
 
+    // Money Flow (необязательный блок)
+    std::vector<double> mfi, flow_ratio, cum_flow, sfi;
+    if (ENABLE_MFLOW) {
+        mfi        = calc_mfi(high, low, close, vol, 14);
+        flow_ratio = calc_flow_ratio(mfi);
+        cum_flow   = calc_cum_flow(flow_ratio);
+        sfi        = calc_sfi(flow_ratio, mfi);
+    }
+
     // Матрица признаков
-    const size_t D = 28;
+    const size_t D_base = 28;
+    const size_t D_mflow = ENABLE_MFLOW ? 4 : 0;
+    const size_t D = D_base + D_mflow;
+
     arma::Mat<double> F(n, D, arma::fill::zeros);
 
     for (size_t i = 0; i < n; ++i) {
@@ -150,6 +176,20 @@ arma::Mat<double> build_feature_matrix(const arma::Mat<double>& raw) {
         F(i, 25) = ctx.energy[i] * (macd_v[i] > 0 ? 1 : -1);
         F(i, 26) = ctx.sentiment[i] * (ctx.energy[i]);
         F(i, 27) = (ctx.phase[i] == 3 && ctx.sentiment[i] < 0) ? 1.0 : 0.0;
+
+        // --- Money Flow block (опционально) ---
+        if (ENABLE_MFLOW) {
+            size_t k = D_base;
+            // Нормировки: MFI -> [0..1], cum_flow/sfi уже ~[-1..1]
+            double mfi01 = (i < mfi.size() && std::isfinite(mfi[i])) ? (mfi[i] / 100.0) : 0.5;
+            double fr    = (i < flow_ratio.size() && std::isfinite(flow_ratio[i])) ? flow_ratio[i] : 0.5;
+            double cf    = (i < cum_flow.size()   && std::isfinite(cum_flow[i]))   ? cum_flow[i]   : 0.0;
+            double sfi_v = (i < sfi.size()        && std::isfinite(sfi[i]))        ? sfi[i]        : 0.0;
+            F(i, k+0) = mfi01;
+            F(i, k+1) = fr;
+            F(i, k+2) = cf;
+            F(i, k+3) = sfi_v;
+        }
     }
 
     F.replace(arma::datum::nan, 0.0);
@@ -172,7 +212,8 @@ json make_features(const std::vector<double>& o,
     }
     arma::Mat<double> F = build_feature_matrix(raw);
     json out;
-    out["version"] = FEAT_VERSION;
+    // Версию поднимаем до 10 только если включен Money Flow
+    out["version"] = env_enabled("ETAI_FEAT_ENABLE_MFLOW") ? 10 : FEAT_VERSION_BASE;
     out["rows"] = F.n_rows;
     out["cols"] = F.n_cols;
     return out;
