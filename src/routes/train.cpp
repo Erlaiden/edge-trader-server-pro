@@ -7,22 +7,23 @@
 using json = nlohmann::json;
 using namespace httplib;
 
-static inline std::string qs(const Request& req, const char* k, const char* defv){
+// Достаём параметр из querystring
+static inline std::string qs(const Request& req, const char* k, const char* defv) {
     return req.has_param(k) ? req.get_param_value(k) : std::string(defv);
 }
 
-// Дублируем ключевые метрики на верхний уровень ответа, не ломая контракт
-static void promote_metrics(json& j){
-    if(!j.contains("metrics") || !j["metrics"].is_object()) return;
+// Дублируем ключевые метрики на верхний уровень ответа
+static void promote_metrics(json& j) {
+    if (!j.contains("metrics") || !j["metrics"].is_object()) return;
     const json& m = j["metrics"];
-    auto copy = [&](const char* k){
-        if(m.contains(k)) j[k] = m.at(k);
+    auto copy = [&](const char* k) {
+        if (m.contains(k)) j[k] = m.at(k);
     };
 
     // базовые
     copy("val_accuracy");
-    copy("val_reward");      // v1 для обратной совместимости
-    copy("val_reward_v2");   // новый
+    copy("val_reward");
+    copy("val_reward_v2");
     copy("M_labeled");
     copy("val_size");
     copy("N_rows");
@@ -42,21 +43,20 @@ static void promote_metrics(json& j){
     copy("lambda_risk");
     copy("mu_manip");
 
-    // анти-манип, если появится
+    // анти-манип
     copy("manip_seen");
     copy("manip_rejected");
-    copy("manip_ratio");
+    copy("val_manip_ratio");  // <-- исправлено с manip_ratio
 }
 
-void register_train_routes(Server& svr){
-    svr.Get("/api/train", [](const Request& req, Response& res){
-        try{
-            const std::string symbol   = qs(req, "symbol",   "BTCUSDT");
+void register_train_routes(Server& svr) {
+    svr.Get("/api/train", [](const Request& req, Response& res) {
+        try {
+            const std::string symbol   = qs(req, "symbol", "BTCUSDT");
             const std::string interval = qs(req, "interval", "15");
-
-            int    episodes = 40;
+            int episodes = 40;
             double tp = 0.008, sl = 0.0032;
-            int    ma = 12;
+            int ma = 12;
 
             try { episodes = std::stoi(qs(req,"episodes","40")); } catch(...) {}
             try { tp       = std::stod(qs(req,"tp","0.008"));   } catch(...) {}
@@ -67,14 +67,13 @@ void register_train_routes(Server& svr){
             try { use_antimanip = std::stoi(qs(req,"antimanip","1")) != 0; } catch(...) {}
 
             json out = etai::run_train_pro_and_save(symbol, interval, episodes, tp, sl, ma, use_antimanip);
-
             promote_metrics(out);
             res.set_content(out.dump(2), "application/json");
-        }catch(const std::exception& e){
-            json err = {{"ok",false},{"error","train_handler_exception"},{"error_detail",e.what()}};
+        } catch (const std::exception& e) {
+            json err = {{"ok", false}, {"error", "train_handler_exception"}, {"error_detail", e.what()}};
             res.set_content(err.dump(2), "application/json");
-        }catch(...){
-            json err = {{"ok",false},{"error","train_handler_unknown"},{"error_detail","unknown"}};
+        } catch (...) {
+            json err = {{"ok", false}, {"error", "train_handler_unknown"}, {"error_detail", "unknown"}};
             res.set_content(err.dump(2), "application/json");
         }
     });
