@@ -21,6 +21,7 @@ namespace etai {
 
 arma::Mat<double> build_feature_matrix(const arma::Mat<double>&);
 
+// ----------------- утилиты -----------------
 static inline bool env_enabled(const char* k){
     const char* s = std::getenv(k);
     if(!s || !*s) return false;
@@ -37,6 +38,7 @@ static inline double sigmoid(double z){
     return 1.0/(1.0+std::exp(-z));
 }
 
+// простая логрег
 static void train_logreg(const mat& X,const vec& y,vec& W,double& b,int epochs,double lr,double l2){
     W.set_size(X.n_cols); W.zeros(); b=0.0;
     for(int e=0;e<epochs;++e){
@@ -53,6 +55,7 @@ static vec predict_proba(const mat& X,const vec& W,double b){
     return z;
 }
 
+// PnL серия под tp/sl + комиссия
 static vec pnl_series(const vec& fut_ret, const vec& proba, double thr, double tp, double sl, double fee_abs){
     const uword N=fut_ret.n_rows;
     vec r(N, fill::zeros);
@@ -73,6 +76,7 @@ static vec pnl_series(const vec& fut_ret, const vec& proba, double thr, double t
     return r;
 }
 
+// простая симуляция Rv1 — только для поиска best_thr
 static double simulate_reward_v1(const vec& fut_ret,const vec& proba,double thr,double tp,double sl){
     double R=0.0; const uword N=fut_ret.n_rows;
     for(uword i=0;i<N;++i){
@@ -90,10 +94,24 @@ static double simulate_reward_v1(const vec& fut_ret,const vec& proba,double thr,
     return R;
 }
 
+// знак «тренда» из фич: берем колонку 0 (ema_fast - ema_slow) и усредняем
+static int trend_sign_from_features(const mat& F, uword start_row, uword end_row){
+    if (F.n_rows==0 || F.n_cols==0) return 0;
+    if (start_row>=F.n_rows) start_row = F.n_rows-1;
+    if (end_row>=F.n_rows)   end_row   = F.n_rows-1;
+    if (end_row < start_row) std::swap(start_row, end_row);
+    vec col = F.col(0).rows(start_row, end_row);
+    double m = arma::mean(col);
+    if (m> 1e-12) return +1;
+    if (m<-1e-12) return -1;
+    return 0;
+}
+
+// ---------- Тренер ----------
 json trainPPO_pro(const arma::mat& raw15,
-                  const arma::mat* /*raw60*/,
-                  const arma::mat* /*raw240*/,
-                  const arma::mat* /*raw1440*/,
+                  const arma::mat* raw60,
+                  const arma::mat* raw240,
+                  const arma::mat* raw1440,
                   int /*episodes*/,
                   double tp, double sl, int /*ma_len*/,
                   bool /*use_antimanip*/)
@@ -106,15 +124,17 @@ json trainPPO_pro(const arma::mat& raw15,
             return out;
         }
 
-        // 1) Фичи
+        // 1) Фичи 15m
         mat F = build_feature_matrix(raw15);
         const uword N = F.n_rows;
         const uword D = F.n_cols;
         const int FEAT_VERSION = (D > 28 ? 10 : 9);
 
-        // 2) Базовые серии
+        // 2) Будущая доходность
         vec close = raw15.col(4);
-        vec vol   = raw15.col(5);
+        vec high  = raw15.col(2);
+        vec low   = raw15.col(3);
+        vec open  = raw15.col(1);
 
         vec r(N, fill::zeros);
         for(uword i=0;i+1<N;++i){
@@ -155,7 +175,7 @@ json trainPPO_pro(const arma::mat& raw15,
         mat Xva = Xs.rows(split, M-1);  vec yva = ys.rows(split, M-1);
         vec fr_va = fut_s.rows(split, M-1);
 
-        // 4) Нормализация
+        // 4) Z-score нормализация (по колонкам трейна)
         vec mu = arma::mean(Xtr, 0).t();
         vec sd = arma::stddev(Xtr, 0, 0).t();
         for(uword j=0;j<D;++j){
@@ -181,22 +201,22 @@ json trainPPO_pro(const arma::mat& raw15,
         }
         best_thr = clampd(best_thr, 1e-4, 0.99);
 
-        // 8) Anti-manip
+        // 8) Anti-manip (за флагом)
         double manip_ratio = 0.0;
         if(env_enabled("ETAI_ENABLE_ANTI_MANIP")){
+            // серии
             std::vector<double> Vopen(N), Vhigh(N), Vlow(N), Vclose(N);
-            for(uword i=0;i<N;++i){
-                Vopen[i]=raw15(i,1); Vhigh[i]=raw15(i,2);
-                Vlow[i]=raw15(i,3);  Vclose[i]=raw15(i,4);
-            }
+            for(uword i=0;i<N;++i){ Vopen[i]=open(i); Vhigh[i]=high(i); Vlow[i]=low(i); Vclose[i]=close(i); }
+
             auto sup = rolling_support(Vlow,  20);
             auto res = rolling_resistance(Vhigh,20);
             auto fbf = false_break_flags(Vopen, Vhigh, Vlow, Vclose, sup, res, /*tol*/5e-4);
 
+            // считаем только на валидации по индексам разметки
             uword a = std::min<uword>(split, (uword)idx.size());
-            uword b = (uword)idx.size();
+            uword bnd = (idx.size()==0) ? 0 : (uword)idx.size();
             uword cnt=0, den=0;
-            for(uword k=a; k<b; ++k){
+            for(uword k=a; k<bnd; ++k){
                 uword i = idx[k];
                 if(i < fbf.size()){
                     ++den;
@@ -206,11 +226,11 @@ json trainPPO_pro(const arma::mat& raw15,
             manip_ratio = (den>0)? (double)cnt/(double)den : 0.0;
         }
 
-        // 9) Reward v2 @best_thr (с динамическими коэффициентами)
+        // 9) Reward v2 @best_thr (база)
         double fee  = etai::get_fee_per_trade();
         double a_sh = etai::get_alpha_sharpe();
-        double lam0 = etai::get_lambda_risk();
-        double mu0  = etai::get_mu_manip();
+        double lam  = etai::get_lambda_risk();
+        double mu_m = etai::get_mu_manip();
 
         vec pnl = pnl_series(fr_va, pv, best_thr, thr_pos, thr_neg, fee);
         double sharpe   = etai::calc_sharpe(pnl, 1e-12, 1.0);
@@ -218,53 +238,38 @@ json trainPPO_pro(const arma::mat& raw15,
         double winrate  = etai::calc_winrate(pnl);
         double profit   = arma::accu(pnl) / std::max<arma::uword>(pnl.n_elem,1);
         double risk     = dd_max;
+        double reward_v2= profit - lam*risk - mu_m*manip_ratio + a_sh*sharpe - fee;
 
-        // Простая динамика, согласованная с предыдущими твоими логами:
-        // λ_eff ≈ λ0 * (1 + 27 * DD), μ_eff ≈ μ0 * (1 + 3 * manip_ratio)
-        double lam_eff = lam0 * (1.0 + 27.0 * clampd(dd_max, 0.0, 0.2));
-        double mu_eff  = mu0  * (1.0 + 3.0  * clampd(manip_ratio, 0.0, 1.0));
+        // 10) Мягкий MTF-контекст (под флагом), даёт множитель wctx_htf ∈ [0.90..1.05]
+        double wctx_htf = 1.0;
+        int htf_agree60 = 0, htf_agree240 = 0;
+        if (env_enabled("ETAI_MTF_ENABLE")){
+            // считаем «знак тренда» 15m на валидационной части
+            uword i0 = idx[(split>0? split:0)];
+            uword i1 = idx[M-1];
+            int s15 = trend_sign_from_features(F, i0, i1);
 
-        double reward_v2 = profit - lam_eff*risk - mu_eff*manip_ratio + a_sh*sharpe - fee;
+            auto sign_from_raw = [&](const arma::mat* raw)->int{
+                if(!raw || raw->n_rows<10 || raw->n_cols<6) return 0;
+                arma::mat Fh = build_feature_matrix(*raw);
+                if (Fh.n_cols==0) return 0;
+                return trend_sign_from_features(Fh, (uword)0, Fh.n_rows>20? (uword)(Fh.n_rows-1): (uword)(Fh.n_rows-1));
+            };
 
-        // 10) Contextual weighting (w_context ∈ [0.8..1.2])
-        auto stddev = [](const vec& x)->double{
-            if(x.n_elem==0) return 0.0;
-            double m = arma::mean(x);
-            double s=0.0; for(uword i=0;i<x.n_elem;++i){ double d=x(i)-m; s+=d*d; }
-            return std::sqrt(s / (double)x.n_elem);
-        };
-        // Пример простого контекста из сигмы/объёма/дроудауна
-        double sigma = stddev(fr_va);
-        // Оценка среднего vol_ratio на валидации
-        auto sma = [](const vec& x, int win, uword i)->double{
-            if(win<=0 || i+1<(uword)win) return NAN;
-            double s=0.0; for(uword j=i+1-win;j<=i;++j) s+=x(j);
-            return s/(double)win;
-        };
-        double vol_ratio_mean = 1.0;
-        {
-            // берём простой диапазон последних 200 точек валидации, если хватает
-            uword cnt = std::min<uword>(200, fr_va.n_elem);
-            if(cnt>0){
-                double acc=0.0; uword den=0;
-                uword start = fr_va.n_elem - cnt;
-                for(uword t=start; t<fr_va.n_elem; ++t){
-                    uword i = t; // индексы внутри reindexed окна — ок приблизительно
-                    if(i<vol.n_elem){
-                        double sma20 = sma(vol, 20, i);
-                        if(std::isfinite(sma20) && sma20>0.0){ acc += (double)vol(i)/sma20; ++den; }
-                    }
-                }
-                vol_ratio_mean = (den>0)? acc/(double)den : 1.0;
-            }
+            int s60   = sign_from_raw(raw60);
+            int s240  = sign_from_raw(raw240);
+
+            // согласие: +1 если совпали знаки, -1 если разные, 0 если нули
+            auto agree = [](int a,int b)->int{ if(a==0||b==0) return 0; return (a==b)? +1 : -1; };
+            htf_agree60  = agree(s15, s60);
+            htf_agree240 = agree(s15, s240);
+
+            // небольшие веса: 60m ±2%, 240m ±3%
+            wctx_htf = 1.0 + 0.02*htf_agree60 + 0.03*htf_agree240;
+            wctx_htf = clampd(wctx_htf, 0.90, 1.05);
         }
-        double z_sigma = std::tanh( (sigma - 0.010) / 0.010 );
-        double z_vr    = std::tanh( (vol_ratio_mean - 1.0) * 2.0 );
-        double z_dd    = std::tanh( dd_max / 0.02 );
-        double w_context = 1.0 + 0.10*z_sigma + 0.05*z_vr - 0.10*z_dd;
-        w_context = clampd(w_context, 0.8, 1.2);
 
-        double reward_wctx = w_context * reward_v2;
+        double reward_wctx = reward_v2 * wctx_htf;
 
         // 11) Политика + метрики
         json policy;
@@ -272,50 +277,46 @@ json trainPPO_pro(const arma::mat& raw15,
         policy["b"]            = { b };
         policy["feat_dim"]     = (int)W.n_rows;
         policy["feat_version"] = FEAT_VERSION;
-        policy["note"]         = "logreg_v2_reward_wctx";
+        policy["note"]         = "logreg_v2_reward";
 
         json metrics;
-        metrics["val_accuracy"]     = acc;
-        metrics["val_reward_v1"]    = best_Rv1;
-        metrics["best_thr"]         = best_thr;
-        metrics["M_labeled"]        = (int)M;
-        metrics["val_size"]         = (int)(M - split);
-        metrics["N_rows"]           = (int)N;
-        metrics["raw_cols"]         = (int)raw15.n_cols;
-        metrics["feat_cols"]        = (int)D;
+        metrics["val_accuracy"]   = acc;
+        metrics["val_reward_v1"]  = best_Rv1;
+        metrics["best_thr"]       = best_thr;
+        metrics["M_labeled"]      = (int)M;
+        metrics["val_size"]       = (int)(M - split);
+        metrics["N_rows"]         = (int)N;
+        metrics["raw_cols"]       = (int)raw15.n_cols;
+        metrics["feat_cols"]      = (int)D;
 
-        metrics["fee_per_trade"]    = fee;
-        metrics["alpha_sharpe"]     = a_sh;
-        metrics["lambda_risk"]      = lam0;
-        metrics["mu_manip"]         = mu0;
+        metrics["fee_per_trade"]  = fee;
+        metrics["alpha_sharpe"]   = a_sh;
+        metrics["lambda_risk"]    = lam;
+        metrics["mu_manip"]       = mu_m;
 
-        metrics["val_profit_avg"]   = profit;
-        metrics["val_sharpe"]       = sharpe;
-        metrics["val_winrate"]      = winrate;
-        metrics["val_drawdown"]     = dd_max;
-        metrics["val_reward_v2"]    = reward_v2;
-        metrics["val_manip_ratio"]  = manip_ratio;
+        metrics["val_profit_avg"] = profit;
+        metrics["val_sharpe"]     = sharpe;
+        metrics["val_winrate"]    = winrate;
+        metrics["val_drawdown"]   = dd_max;
+        metrics["val_reward_v2"]  = reward_v2;
+        metrics["val_manip_ratio"]= manip_ratio;
 
-        // NEW: динамические коэффициенты и контекст
-        metrics["val_lambda_eff"]   = lam_eff;
-        metrics["val_mu_eff"]       = mu_eff;
-        metrics["w_context"]        = w_context;
-        metrics["val_reward_wctx"]  = reward_wctx;
+        // MTF контекстная телеметрия
+        metrics["wctx_htf"]       = wctx_htf;
+        metrics["val_reward_wctx"]= reward_wctx;
+        metrics["htf_agree60"]    = htf_agree60;
+        metrics["htf_agree240"]   = htf_agree240;
 
-        // Телеметрия (Prometheus атомики)
+        // Прометеус-гейджи
         etai::set_reward_avg(reward_v2);
         etai::set_reward_sharpe(sharpe);
         etai::set_reward_winrate(winrate);
         etai::set_reward_drawdown(dd_max);
-        etai::set_reward_wctx(reward_wctx);
-
-        // Важное: сохранить эффективные коэффициенты для http_reply.h и /metrics
-        etai::set_lambda_risk_eff(lam_eff);
-        etai::set_mu_manip_eff(mu_eff);
+        etai::set_reward_wctx(reward_wctx); // должен существовать (мы его уже вводили)
 
         json out2;
         out2["ok"]            = true;
-        out2["schema"]        = "ppo_pro_v2_reward_wctx";
+        out2["schema"]        = "ppo_pro_v2_reward";
         out2["mode"]          = "pro";
         out2["policy"]        = policy;
         out2["policy_source"] = "learn";
@@ -328,8 +329,7 @@ json trainPPO_pro(const arma::mat& raw15,
                   << " thr="<<best_thr<<" acc="<<acc
                   << " Sharpe="<<sharpe<<" DD="<<dd_max<<" WinR="<<winrate
                   << " ManipR="<<manip_ratio
-                  << " wctx="<<w_context
-                  << " lam_eff="<<lam_eff<<" mu_eff="<<mu_eff
+                  << " wctx_htf="<<wctx_htf
                   << " feat_ver="<<FEAT_VERSION << std::endl;
 
         return out2;
