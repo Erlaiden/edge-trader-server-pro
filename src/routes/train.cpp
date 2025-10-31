@@ -27,6 +27,10 @@ static void promote_metrics(json& j){
     copy("N_rows");
     copy("raw_cols");
     copy("feat_cols");
+    // anti-manip
+    copy("manip_seen");
+    copy("manip_rejected");
+    copy("manip_ratio");
 }
 
 void register_train_routes(Server& svr){
@@ -44,9 +48,13 @@ void register_train_routes(Server& svr){
             try { sl       = std::stod(qs(req,"sl","0.0032"));  } catch(...) {}
             try { ma       = std::stoi(qs(req,"ma","12"));      } catch(...) {}
 
-            json out = etai::run_train_pro_and_save(symbol, interval, episodes, tp, sl, ma);
+            // antimanip=1 по умолчанию
+            bool use_antimanip = true;
+            try { use_antimanip = std::stoi(qs(req,"antimanip","1")) != 0; } catch(...) {}
 
-            // Всегда дублируем ключевые метрики на верхний уровень
+            json out = etai::run_train_pro_and_save(symbol, interval, episodes, tp, sl, ma, use_antimanip);
+
+            // Дублируем ключевые метрики на верхний уровень
             promote_metrics(out);
 
             res.set_content(out.dump(2), "application/json");

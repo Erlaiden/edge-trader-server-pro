@@ -32,37 +32,34 @@ static inline double sigmoid(double z){
 static void train_logreg(const mat& X,const vec& y,vec& W,double& b,int epochs,double lr,double l2){
     const uword D=X.n_cols; W.set_size(D); W.zeros(); b=0.0;
     for(int e=0;e<epochs;++e){
-        vec z=X*W+b; 
+        vec z=X*W+b;
         vec p=1.0/(1.0+arma::exp(-z));
-        vec g=X.t()*(p-y)/X.n_rows + l2*W; 
+        vec g=X.t()*(p-y)/X.n_rows + l2*W;
         double gb=arma::accu(p-y)/X.n_rows;
-        W-=lr*g; 
-        b-=lr*gb;
+        W-=lr*g; b-=lr*gb;
     }
 }
 
 static vec predict_proba(const mat& X,const vec& W,double b){
-    vec z=X*W+b; 
-    for(uword i=0;i<z.n_rows;++i) z(i)=sigmoid(z(i)); 
+    vec z=X*W+b;
+    for(uword i=0;i<z.n_rows;++i) z(i)=sigmoid(z(i));
     return z;
 }
 
 static double simulate_reward(const vec& fut_ret,const vec& proba,double thr,double tp,double sl){
-    double R=0.0; 
-    const uword N=fut_ret.n_rows;
+    double R=0.0; const uword N=fut_ret.n_rows;
     for(uword i=0;i<N;++i){
-        double fr=fut_ret(i); 
-        double pr=proba(i);
-        if(pr>=thr){ 
-            if(fr>=tp)       R+=tp; 
-            else if(fr<=-sl) R-=sl; 
-            else             R+=fr; 
-        }else{ 
-            if(fr<=-sl)      R+=tp; 
-            else if(fr>=tp)  R-=sl; 
-            else             R-=fr; 
+        double fr=fut_ret(i); double pr=proba(i);
+        if(pr>=thr){
+            if(fr>=tp)       R+=tp;
+            else if(fr<=-sl) R-=sl;
+            else             R+=fr;
+        }else{
+            if(fr<=-sl)      R+=tp;
+            else if(fr>=tp)  R-=sl;
+            else             R-=fr;
         }
-    } 
+    }
     return R;
 }
 
@@ -73,108 +70,127 @@ json trainPPO_pro(const arma::mat& raw15,
                   int /*episodes*/,
                   double tp,
                   double sl,
-                  int ma_len)
+                  int ma_len,
+                  bool use_antimanip)
 {
     json out=json::object();
     try{
-        if(raw15.n_cols<6||raw15.n_rows<300){ 
-            out["ok"]=false; 
-            out["error"]="bad_raw_shape"; 
+        if(raw15.n_cols<6||raw15.n_rows<300){
+            out["ok"]=false;
+            out["error"]="bad_raw_shape";
             out["raw_cols"]=(int)raw15.n_cols;
             out["N_rows"]=(int)raw15.n_rows;
-            return out; 
+            return out;
         }
 
-        // Фичи v6 (feat_dim ожидается 20)
-        mat F=build_feature_matrix(raw15); 
+        // Фичи v6 (feat_dim ожидается 20, manip_flag ожидается в колонке 19)
+        mat F=build_feature_matrix(raw15);
         const uword N=F.n_rows, D=F.n_cols;
 
         // Будущий ретёрн на 1 шаг вперёд
         vec close=raw15.col(4), r(N,fill::zeros);
-        for(uword i=0;i+1<N;++i){ 
-            double c0=close(i), c1=close(i+1); 
-            r(i)=(c0>0)?(c1/c0-1.0):0.0; 
+        for(uword i=0;i+1<N;++i){
+            double c0=close(i), c1=close(i+1);
+            r(i)=(c0>0)?(c1/c0-1.0):0.0;
         }
-        vec fut=arma::shift(r,-1); 
-        fut(N-1)=0.0;
+        vec fut=arma::shift(r,-1); fut(N-1)=0.0;
 
         // Разметка по tp/sl
         double thr_pos=clampd(tp,1e-4,1e-1), thr_neg=clampd(sl,1e-4,1e-1);
-        std::vector<uword> idx; 
-        idx.reserve(N);
-        for(uword i=0;i<N;++i){ 
-            double fr=fut(i); 
-            if(fr>=thr_pos||fr<=-thr_neg) idx.push_back(i); 
+
+        // Анти-манип маска (если включена)
+        uword manip_col = (D>=20) ? 19 : D; // безопасно: если D<20 — не используем
+        uword manip_seen = 0, manip_rejected = 0;
+
+        std::vector<uword> idx; idx.reserve(N);
+        for(uword i=0;i<N;++i){
+            double fr = fut(i);
+            bool labeled = (fr>=thr_pos || fr<=-thr_neg);
+            if(!labeled) continue;
+
+            bool is_manip = false;
+            if(use_antimanip && manip_col < D){
+                double mf = F(i, manip_col);
+                is_manip = (mf >= 0.5);
+                if(mf!=0.0) manip_seen++;
+            }
+            if(use_antimanip && is_manip){ manip_rejected++; continue; }
+
+            idx.push_back(i);
         }
-        const uword M=idx.size(); 
-        if(M<200){ 
-            out["ok"]=false; 
-            out["error"]="not_enough_labeled"; 
-            out["M_labeled"]=(int)M; 
+
+        const uword M=idx.size();
+        if(M<200){
+            out["ok"]=false;
+            out["error"]="not_enough_labeled";
+            out["M_labeled"]=(int)M;
             out["N_rows"]=(int)N;
             out["feat_cols"]=(int)D;
-            return out; 
+            out["manip_seen"]=(int)manip_seen;
+            out["manip_rejected"]=(int)manip_rejected;
+            return out;
         }
 
         // Выборка и сплит
-        mat Xs(M,D,fill::zeros); 
-        vec ys(M,fill::zeros), fut_s(M,fill::zeros);
-        for(uword k=0;k<M;++k){ 
-            uword i=idx[k]; 
-            Xs.row(k)=F.row(i); 
-            ys(k)=(fut(i)>=thr_pos)?1.0:0.0; 
-            fut_s(k)=fut(i); 
+        mat Xs(M,D,fill::zeros); vec ys(M,fill::zeros), fut_s(M,fill::zeros);
+        for(uword k=0;k<M;++k){
+            uword i=idx[k];
+            Xs.row(k)=F.row(i);
+            ys(k)=(fut(i)>=thr_pos)?1.0:0.0;
+            fut_s(k)=fut(i);
         }
-        uword split=(uword)std::floor(M*0.8); 
+
+        uword split=(uword)std::floor(M*0.8);
         if(split==0||split>=M) split=M>1?M-1:1;
 
-        mat Xtr=Xs.rows(0,split-1); 
-        vec ytr=ys.rows(0,split-1);
-        mat Xva=Xs.rows(split,M-1); 
-        vec yva=ys.rows(split,M-1), fr_va=fut_s.rows(split,M-1);
+        mat Xtr=Xs.rows(0,split-1); vec ytr=ys.rows(0,split-1);
+        mat Xva=Xs.rows(split,M-1); vec yva=ys.rows(split,M-1), fr_va=fut_s.rows(split,M-1);
 
         // Нормализация по train
         vec mu=arma::mean(Xtr,0).t(), sd=arma::stddev(Xtr,0,0).t();
-        for(uword j=0;j<D;++j){ 
+        for(uword j=0;j<D;++j){
             double s=(std::isfinite(sd(j))&&sd(j)>1e-12)?sd(j):1.0;
-            Xtr.col(j)=(Xtr.col(j)-mu(j))/s; 
-            Xva.col(j)=(Xva.col(j)-mu(j))/s; 
+            Xtr.col(j)=(Xtr.col(j)-mu(j))/s;
+            Xva.col(j)=(Xva.col(j)-mu(j))/s;
         }
 
         // Логрег
-        vec W; double b=0; 
-        train_logreg(Xtr,ytr,W,b,300,0.05,1e-4); 
+        vec W; double b=0;
+        train_logreg(Xtr,ytr,W,b,300,0.05,1e-4);
         vec pv=predict_proba(Xva,W,b);
 
         // Acc@0.5
-        vec pred01=conv_to<vec>::from(pv>=0.5); 
+        vec pred01=conv_to<vec>::from(pv>=0.5);
         double acc=arma::mean(conv_to<vec>::from(pred01==yva));
 
         // Поиск best_thr по вал. награде
-        double best_thr=0.5, best_R=-1e100; 
+        double best_thr=0.5, best_R=-1e100;
         for(double thr=0.3; thr<=0.7+1e-9; thr+=0.02){
-            double R=simulate_reward(fr_va,pv,thr,thr_pos,thr_neg); 
-            if(R>best_R){best_R=R;best_thr=thr;} 
+            double R=simulate_reward(fr_va,pv,thr,thr_pos,thr_neg);
+            if(R>best_R){best_R=R;best_thr=thr;}
         }
         best_thr=clampd(best_thr,1e-4,0.99);
 
         // Политика и метрики
-        json policy; 
-        policy["W"]=std::vector<double>(W.begin(),W.end()); 
+        json policy;
+        policy["W"]=std::vector<double>(W.begin(),W.end());
         policy["b"]={b};
-        policy["feat_dim"]=(int)W.n_rows; 
+        policy["feat_dim"]=(int)W.n_rows;
         policy["feat_version"]=FEAT_VERSION_CURRENT;
         policy["note"]="logreg_v1";
 
-        json metrics; 
-        metrics["val_accuracy"]=acc; 
-        metrics["val_reward"]=best_R; 
+        json metrics;
+        metrics["val_accuracy"]=acc;
+        metrics["val_reward"]=best_R;
         metrics["best_thr"]=best_thr;
-        metrics["M_labeled"]=(int)M; 
-        metrics["val_size"]=(int)(M-split);
-        metrics["N_rows"]=(int)N; 
-        metrics["raw_cols"]=6; 
+        metrics["M_labeled"]=(int)M;
+        metrics["val_size"]=(int)(M - split);
+        metrics["N_rows"]=(int)N;
+        metrics["raw_cols"]=6;
         metrics["feat_cols"]=(int)D;
+        metrics["manip_seen"]=(int)manip_seen;
+        metrics["manip_rejected"]=(int)manip_rejected;
+        metrics["manip_ratio"]= (manip_seen>0) ? (double)manip_rejected / (double)manip_seen : 0.0;
 
         // Корневые поля модели
         out["ok"]=true;
@@ -189,23 +205,26 @@ json trainPPO_pro(const arma::mat& raw15,
         out["sl"]=sl;
         out["ma_len"]=ma_len;
         out["version"]=FEAT_VERSION_CURRENT;
+        out["use_antimanip"]=use_antimanip;
 
         out["metrics"]=metrics;
 
-        std::cout << "[TRAIN] PPO_PRO v6 ok acc="<<acc
+        std::cout << "[TRAIN] PPO_PRO v6.1 ok acc="<<acc
                   << " R="<<best_R
                   << " thr="<<best_thr
                   << " D="<<D
+                  << " manip_seen="<<manip_seen
+                  << " manip_rejected="<<manip_rejected
                   << std::endl;
         return out;
     }catch(const std::exception& e){
-        out["ok"]=false; 
-        out["error"]="ppo_pro_exception"; 
-        out["detail"]=e.what(); 
+        out["ok"]=false;
+        out["error"]="ppo_pro_exception";
+        out["detail"]=e.what();
         return out;
     }catch(...){
-        out["ok"]=false; 
-        out["error"]="ppo_pro_unknown"; 
+        out["ok"]=false;
+        out["error"]="ppo_pro_unknown";
         return out;
     }
 }
