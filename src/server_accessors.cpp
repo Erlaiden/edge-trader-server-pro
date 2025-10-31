@@ -1,92 +1,57 @@
 #include "server_accessors.h"
-#include "json.hpp"
-#include <atomic>
-#include <limits>
-#include <fstream>
+#include <cstdlib>
+#include <cstring>
 #include <cmath>
 
 namespace etai {
 
-using json = nlohmann::json;
+// Модельные атомики уже существуют где-то ещё; здесь объявим только новые для Reward v2.
+static std::atomic<double> G_REWARD_AVG{0.0};
+static std::atomic<double> G_REWARD_SHARPE{0.0};
+static std::atomic<double> G_REWARD_WINRATE{0.0};
+static std::atomic<double> G_REWARD_DRAWDOWN{0.0};
 
-// === Глобальное состояние (единый инстанс) ===
-// СРАЗУ корректные дефолты, без NaN:
-static std::atomic<double>    G_MODEL_THR{0.38};
-static std::atomic<long long> G_MODEL_MA{12};
-static std::atomic<int>       G_FEAT_DIM{28};
-static json                   G_CURRENT_MODEL = json::object();
+// Конфиги
+static std::atomic<double> G_FEE_PER_TRADE{0.0005}; // 5 bps по умолчанию
+static std::atomic<double> G_ALPHA_SHARPE{0.5};
+static std::atomic<double> G_LAMBDA_RISK{1.0};
+static std::atomic<double> G_MU_MANIP{0.2};
 
-// Последний инференс (телеметрия)
-static std::atomic<double>    G_LAST_SCORE{0.0};
-static std::atomic<double>    G_LAST_SIGMA{0.0};
-static std::atomic<int>       G_LAST_SIGNAL{0};   // -1/0/1
+// Внешние существующие аксессоры объявляются где-то ещё. Оставляем только тела новых геттеров/сеттеров.
+double get_reward_avg()      { return G_REWARD_AVG.load(); }
+double get_reward_sharpe()   { return G_REWARD_SHARPE.load(); }
+double get_reward_winrate()  { return G_REWARD_WINRATE.load(); }
+double get_reward_drawdown() { return G_REWARD_DRAWDOWN.load(); }
 
-// --- Threshold ---
-double get_model_thr() { return G_MODEL_THR.load(std::memory_order_relaxed); }
-void   set_model_thr(double v) { G_MODEL_THR.store(v, std::memory_order_relaxed); }
+void set_reward_avg(double v)      { G_REWARD_AVG.store(std::isfinite(v)?v:0.0); }
+void set_reward_sharpe(double v)   { G_REWARD_SHARPE.store(std::isfinite(v)?v:0.0); }
+void set_reward_winrate(double v)  { G_REWARD_WINRATE.store((v>=0.0&&v<=1.0)?v:0.0); }
+void set_reward_drawdown(double v) { G_REWARD_DRAWDOWN.store(std::isfinite(v)?v:0.0); }
 
-// --- MA length ---
-long long get_model_ma_len() { return G_MODEL_MA.load(std::memory_order_relaxed); }
-void      set_model_ma_len(long long v) { G_MODEL_MA.store(v, std::memory_order_relaxed); }
+double get_fee_per_trade()   { return G_FEE_PER_TRADE.load(); }
+double get_alpha_sharpe()    { return G_ALPHA_SHARPE.load(); }
+double get_lambda_risk()     { return G_LAMBDA_RISK.load(); }
+double get_mu_manip()        { return G_MU_MANIP.load(); }
 
-// --- Feature dimension ---
-int  get_feat_dim() { return G_FEAT_DIM.load(std::memory_order_relaxed); }
-void set_feat_dim(int d) { G_FEAT_DIM.store(d, std::memory_order_relaxed); }
+void set_fee_per_trade(double v){ G_FEE_PER_TRADE.store(v>=0.0?v:0.0); }
+void set_alpha_sharpe(double v) { G_ALPHA_SHARPE.store(std::isfinite(v)?v:0.0); }
+void set_lambda_risk(double v)  { G_LAMBDA_RISK.store(std::isfinite(v)?v:0.0); }
+void set_mu_manip(double v)     { G_MU_MANIP.store(std::isfinite(v)?v:0.0); }
 
-// --- Current model JSON ---
-json get_current_model() { return G_CURRENT_MODEL; }
-void set_current_model(const json& j) { G_CURRENT_MODEL = j; }
-
-// --- Safe JSON read ---
-static inline json safe_read_json_file(const char* p){
-  try {
-    std::ifstream f(p);
-    if(!f.good()) return json::object();
-    json j; f >> j;
-    return j.is_object()? j : json::object();
-  } catch(...) { return json::object(); }
+static inline double envd(const char* k, double defv){
+    const char* s = std::getenv(k);
+    if(!s || !*s) return defv;
+    char* end=nullptr;
+    double v = std::strtod(s,&end);
+    if(end==s || !std::isfinite(v)) return defv;
+    return v;
 }
 
-// --- Startup init: читаем диск, выставляем атомики, гарантируем не-NaN ---
-void init_model_atoms_from_disk(const char* path,
-                                double def_thr,
-                                long long def_ma,
-                                int def_feat_dim)
-{
-  // дефолты заранее
-  set_model_thr(def_thr);
-  set_model_ma_len(def_ma);
-  set_feat_dim(def_feat_dim);
-  set_current_model(json::object());
-
-  json disk = safe_read_json_file(path);
-  if(disk.is_object()){
-    set_current_model(disk);
-
-    double    thr = disk.value("best_thr", def_thr);
-    long long ma  = disk.value("ma_len",  def_ma);
-
-    if(!std::isfinite(thr)) thr = def_thr;
-    if(ma <= 0)             ma  = def_ma;
-
-    set_model_thr(thr);
-    set_model_ma_len(ma);
-  }
-
-  // Сбрасываем телеметрию последнего инференса в нейтраль
-  set_last_infer_score(0.0);
-  set_last_infer_sigma(0.0);
-  set_last_infer_signal(0);
+void init_rewardv2_from_env(){
+    set_fee_per_trade( envd("ETAI_FEE_BPS", 5.0) / 10000.0 );
+    set_alpha_sharpe(  envd("ETAI_ALPHA",   0.5) );
+    set_lambda_risk(   envd("ETAI_LAMBDA",  1.0) );
+    set_mu_manip(      envd("ETAI_MU",      0.2) );
 }
 
-// --- Last inference telemetry ---
-double get_last_infer_score() { return G_LAST_SCORE.load(std::memory_order_relaxed); }
-void   set_last_infer_score(double v) { G_LAST_SCORE.store(v, std::memory_order_relaxed); }
-
-double get_last_infer_sigma() { return G_LAST_SIGMA.load(std::memory_order_relaxed); }
-void   set_last_infer_sigma(double v) { G_LAST_SIGMA.store(v, std::memory_order_relaxed); }
-
-int    get_last_infer_signal() { return G_LAST_SIGNAL.load(std::memory_order_relaxed); }
-void   set_last_infer_signal(int s) { G_LAST_SIGNAL.store(s, std::memory_order_relaxed); }
-
-} // namespace etai
+}

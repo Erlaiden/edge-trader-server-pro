@@ -1,43 +1,41 @@
 #pragma once
-#include <cstdint>
-#include "json.hpp"
+#include <atomic>
 
 namespace etai {
 
-// --- Threshold ---
-double        get_model_thr();
-void          set_model_thr(double v);
+// --- Model knobs ---
+double get_model_thr();
+long long get_model_ma_len();
+int get_model_feat_dim();
 
-// --- MA length ---
-long long     get_model_ma_len();
-void          set_model_ma_len(long long v);
+// --- Last inference telemetry ---
+double get_last_infer_score();
+double get_last_infer_sigma();
+int    get_last_infer_signal();
 
-// --- Feature dimension (canonical) ---
-int           get_feat_dim();
-void          set_feat_dim(int d);
+// --- Reward v2 telemetry (обновляется при обучении/валидации) ---
+double get_reward_avg();
+double get_reward_sharpe();
+double get_reward_winrate();
+double get_reward_drawdown();
 
-// Back-compat aliases expected by routes/metrics.cpp
-inline int    get_model_feat_dim() { return get_feat_dim(); }
-inline void   set_model_feat_dim(int d) { set_feat_dim(d); }
+void set_reward_avg(double v);
+void set_reward_sharpe(double v);
+void set_reward_winrate(double v);
+void set_reward_drawdown(double v);
 
-// --- Current model JSON ---
-nlohmann::json get_current_model();
-void           set_current_model(const nlohmann::json& j);
+// --- Config for Reward v2: weights and fees (из ENV, но можно обновлять рантайм-методами) ---
+double get_fee_per_trade();    // абсолютная доля на сделку, для простоты “bps/10000”
+double get_alpha_sharpe();     // α
+double get_lambda_risk();      // λ
+double get_mu_manip();         // μ
 
-// --- Startup initialization from disk (with safe defaults) ---
-void init_model_atoms_from_disk(const char* path,
-                                double def_thr,
-                                long long def_ma,
-                                int def_feat_dim);
+void set_fee_per_trade(double v);
+void set_alpha_sharpe(double v);
+void set_lambda_risk(double v);
+void set_mu_manip(double v);
 
-// --- Last inference telemetry (for /metrics & debug) ---
-double   get_last_infer_score();   // [-1..1] обычно (tanh), но не ограничиваем жёстко
-void     set_last_infer_score(double v);
+// init из ENV — вызывать при старте
+void init_rewardv2_from_env();
 
-double   get_last_infer_sigma();   // волатильность сигма
-void     set_last_infer_sigma(double v);
-
-int      get_last_infer_signal();  // -1/0/1
-void     set_last_infer_signal(int s);
-
-} // namespace etai
+}

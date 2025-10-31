@@ -1,3 +1,4 @@
+#include "server_accessors.h"
 #include <iostream>
 #include <cstdlib>
 #include <httplib.h>
@@ -16,7 +17,7 @@
 #include "routes/agents.cpp"
 #include "routes/backfill.inc.cpp" // static inline register_backfill_routes(...)
 
-int main(int argc, char** argv) {
+int main(int argc, char** argv){ etai::init_rewardv2_from_env(); {
     int port = 3000;
     if (argc > 1) port = std::atoi(argv[1]);
 
