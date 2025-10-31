@@ -11,6 +11,8 @@ find_package(OpenSSL REQUIRED)
 find_package(Armadillo REQUIRED)
 
 add_executable(edge_trader_server
+    src/metrics.cpp
+    src/rewardv2_accessors.cpp
     src/main.cpp
 
     # --- Core ---
