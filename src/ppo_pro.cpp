@@ -12,10 +12,9 @@ using namespace arma;
 
 namespace etai {
 
-// --- ЯВНАЯ ДЕКЛАРАЦИЯ build_feature_matrix (из features.h) ---
 arma::Mat<double> build_feature_matrix(const arma::Mat<double>&);
 
-static constexpr int FEAT_VERSION_CURRENT = 4;
+static constexpr int FEAT_VERSION_CURRENT = 5;
 
 static inline double clampd(double v, double lo, double hi){
     if(!std::isfinite(v)) return lo;
@@ -88,12 +87,10 @@ json trainPPO_pro(const arma::mat& raw15,
             return out;
         }
 
-        // Фичи из features.cpp v4
-        mat F = etai::build_feature_matrix(raw15);
+        mat F = build_feature_matrix(raw15);
         const uword N = F.n_rows;
         const uword D = F.n_cols;
 
-        // future return (1 шаг)
         vec close = raw15.col(4);
         vec r = vec(N, fill::zeros);
         for(uword i=0;i+1<N;++i){
@@ -102,7 +99,6 @@ json trainPPO_pro(const arma::mat& raw15,
         }
         vec fut = arma::shift(r, -1); fut(N-1)=0.0;
 
-        // разметка по tp/sl
         double thr_pos = clampd(tp, 1e-4, 1e-1);
         double thr_neg = clampd(sl, 1e-4, 1e-1);
         std::vector<uword> idx; idx.reserve(N);
@@ -140,7 +136,6 @@ json trainPPO_pro(const arma::mat& raw15,
         vec yva = ys.rows(split, M-1);
         vec fr_va = fut_s.rows(split, M-1);
 
-        // нормализация
         vec mu = arma::mean(Xtr, 0).t();
         vec sd = arma::stddev(Xtr, 0, 0).t();
         for(uword j=0;j<D;++j){
@@ -149,17 +144,13 @@ json trainPPO_pro(const arma::mat& raw15,
             Xva.col(j) = (Xva.col(j) - mu(j)) / s;
         }
 
-        // логрег
         vec W; double b = 0.0;
-        const int epochs = 300; const double lr=0.05; const double l2=1e-4;
-        train_logreg(Xtr, ytr, W, b, epochs, lr, l2);
+        train_logreg(Xtr, ytr, W, b, 300, 0.05, 1e-4);
         vec pv = predict_proba(Xva, W, b);
 
-        // acc@0.5
         vec pred01 = conv_to<vec>::from(pv >= 0.5);
         double acc = arma::mean(conv_to<vec>::from(pred01 == yva));
 
-        // поиск best_thr по [0.30..0.70]
         double best_thr = 0.5, best_R = -1e100;
         for(double thr=0.30; thr<=0.70+1e-9; thr+=0.02){
             double R = simulate_reward(fr_va, pv, thr, thr_pos, thr_neg);
@@ -167,7 +158,6 @@ json trainPPO_pro(const arma::mat& raw15,
         }
         best_thr = clampd(best_thr, 1e-4, 0.99);
 
-        // policy и метрики
         json policy;
         policy["W"]            = std::vector<double>(W.begin(), W.end());
         policy["b"]            = { b };
@@ -185,23 +175,19 @@ json trainPPO_pro(const arma::mat& raw15,
         metrics["raw_cols"]     = (int)raw15.n_cols;
         metrics["feat_cols"]    = (int)D;
 
-        // корневые поля модели
         out["ok"]            = true;
         out["schema"]        = "ppo_pro_v1";
         out["mode"]          = "pro";
         out["policy"]        = policy;
         out["policy_source"] = "learn";
         out["best_thr"]      = best_thr;
+        out["tp"]            = tp;
+        out["sl"]            = sl;
+        out["ma_len"]        = ma_len;
+        out["version"]       = FEAT_VERSION_CURRENT;
+        out["metrics"]       = metrics;
 
-        // инварианты
-        out["tp"]       = tp;
-        out["sl"]       = sl;
-        out["ma_len"]   = ma_len;
-        out["version"]  = FEAT_VERSION_CURRENT;
-
-        out["metrics"]  = metrics;
-
-        std::cout << "[TRAIN] PPO_PRO v4 ok acc="<<acc<<" R="<<best_R<<" thr="<<best_thr<<" D="<<D<<std::endl;
+        std::cout << "[TRAIN] PPO_PRO v5 ok acc="<<acc<<" R="<<best_R<<" thr="<<best_thr<<" D="<<D<<std::endl;
         return out;
     }catch(const std::exception& e){
         out["ok"]=false; out["error"]="ppo_pro_exception"; out["detail"]=e.what(); return out;
