@@ -14,6 +14,8 @@ add_executable(edge_trader_server
     src/main.cpp
 
     # --- Core ---
+    src/metrics.cpp
+    src/rewardv2.cpp
     src/ppo_pro.cpp
     src/ppo.cpp
     src/optim/adam.cpp
