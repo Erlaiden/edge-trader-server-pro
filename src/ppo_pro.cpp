@@ -54,7 +54,6 @@ static vec predict_proba(const mat& X,const vec& W,double b){
     return z;
 }
 
-// PnL ряд @thr
 static vec pnl_series(const vec& fut_ret, const vec& proba, double thr, double tp, double sl, double fee_abs){
     const uword N=fut_ret.n_rows;
     vec r(N, fill::zeros);
@@ -75,7 +74,6 @@ static vec pnl_series(const vec& fut_ret, const vec& proba, double thr, double t
     return r;
 }
 
-// v1-метрика для поиска thr
 static double simulate_reward_v1(const vec& fut_ret,const vec& proba,double thr,double tp,double sl){
     double R=0.0; const uword N=fut_ret.n_rows;
     for(uword i=0;i<N;++i){
@@ -186,22 +184,27 @@ json trainPPO_pro(const arma::mat& raw15,
         }
         best_thr = clampd(best_thr, 1e-4, 0.99);
 
-        // 8) Anti-manip (за флагом)
+        // 8) Anti-manip (за флагом) — безопасные границы
         double manip_ratio = 0.0;
         if(env_enabled("ETAI_ENABLE_ANTI_MANIP")){
-            // подготовка рядов в std::vector
+            // Преобразуем серии
             std::vector<double> Vopen(N), Vhigh(N), Vlow(N), Vclose(N);
             for(uword i=0;i<N;++i){ Vopen[i]=open(i); Vhigh[i]=high(i); Vlow[i]=low(i); Vclose[i]=close(i); }
+
             auto sup = rolling_support(Vlow,  20);
             auto res = rolling_resistance(Vhigh,20);
             auto fbf = false_break_flags(Vopen, Vhigh, Vlow, Vclose, sup, res, /*tol*/5e-4);
-            // валид. срез
-            uword a = split, b = M-1; // индексы по Xs, но у нас флаги по N; используем те же временные индексы idx
-            // оценим долю ложных пробоев на валидационной части:
+
+            // Безопасные пределы по индексам разметки
+            uword a = std::min<uword>(split, (uword)idx.size());
+            uword b = (idx.size()==0) ? 0 : (uword)idx.size(); // верхняя граница "исключая b"
             uword cnt=0, den=0;
-            for(uword k=a;k<=b;++k){
+            for(uword k=a; k<b; ++k){
                 uword i = idx[k];
-                if(i < fbf.size()){ den++; cnt += (fbf[i]!=0); }
+                if(i < fbf.size()){
+                    ++den;
+                    if(fbf[i]!=0) ++cnt;
+                }
             }
             manip_ratio = (den>0)? (double)cnt/(double)den : 0.0;
         }
@@ -250,13 +253,11 @@ json trainPPO_pro(const arma::mat& raw15,
         metrics["val_reward_v2"]  = reward_v2;
         metrics["val_manip_ratio"]= manip_ratio;
 
-        // 11) Гейджи Prometheus (оставим как есть)
         etai::set_reward_avg(reward_v2);
         etai::set_reward_sharpe(sharpe);
         etai::set_reward_winrate(winrate);
         etai::set_reward_drawdown(dd_max);
 
-        // 12) Ответ
         json out2;
         out2["ok"]            = true;
         out2["schema"]        = "ppo_pro_v2_reward";
