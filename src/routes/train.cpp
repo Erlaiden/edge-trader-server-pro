@@ -24,7 +24,6 @@ static void promote_metrics(json& j) {
     copy("val_accuracy");
     copy("val_reward");
     copy("val_reward_v2");
-    copy("val_reward_wctx");   // NEW
     copy("M_labeled");
     copy("val_size");
     copy("N_rows");
@@ -38,24 +37,24 @@ static void promote_metrics(json& j) {
     copy("val_winrate");
     copy("val_drawdown");
 
-    // конфиги формулы
+    // конфиги формулы (в том числе эффективные)
     copy("fee_per_trade");
     copy("alpha_sharpe");
     copy("lambda_risk");
     copy("mu_manip");
-
-    // анти-манип
-    copy("val_manip_ratio");
-    copy("val_manip_ratio_norm");
-    copy("val_manip_flagged");
-    copy("val_manip_vol");
-
-    // динамические коэффициенты
     copy("val_lambda_eff");
     copy("val_mu_eff");
 
-    // контекст
-    copy("w_context");
+    // анти-манип
+    copy("manip_seen");
+    copy("manip_rejected");
+    copy("val_manip_ratio");
+
+    // контекст/MTF
+    copy("val_reward_wctx");
+    copy("wctx_htf");
+    copy("htf_agree60");
+    copy("htf_agree240");
 }
 
 void register_train_routes(Server& svr) {
@@ -63,9 +62,9 @@ void register_train_routes(Server& svr) {
         try {
             const std::string symbol   = qs(req, "symbol", "BTCUSDT");
             const std::string interval = qs(req, "interval", "15");
-            int    episodes = 40;
+            int episodes = 40;
             double tp = 0.008, sl = 0.0032;
-            int    ma = 12;
+            int ma = 12;
 
             try { episodes = std::stoi(qs(req,"episodes","40")); } catch(...) {}
             try { tp       = std::stod(qs(req,"tp","0.008"));   } catch(...) {}
