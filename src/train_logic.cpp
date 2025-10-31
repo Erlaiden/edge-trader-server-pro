@@ -14,6 +14,24 @@ namespace etai {
 
 static std::mutex train_mutex;
 
+static inline bool try_load_raw(const std::string& symbol,
+                                const std::string& interval,
+                                arma::mat& out)
+{
+    if (!load_raw_ohlcv(symbol, interval, out)) {
+        std::cerr << "[TRAIN] warn: HTF " << interval << " not loaded\n";
+        out.reset();
+        return false;
+    }
+    if (out.n_cols < 6 || out.n_rows < 30) {
+        std::cerr << "[TRAIN] warn: HTF " << interval
+                  << " bad shape rows=" << out.n_rows << " cols=" << out.n_cols << "\n";
+        out.reset();
+        return false;
+    }
+    return true;
+}
+
 json run_train_pro_and_save(const std::string& symbol,
                             const std::string& interval,
                             int episodes,
@@ -24,23 +42,40 @@ json run_train_pro_and_save(const std::string& symbol,
 {
     std::lock_guard<std::mutex> lock(train_mutex);
 
-    arma::mat raw;
-    if (!load_raw_ohlcv(symbol, interval, raw))
+    // --- 1) Базовый TF (15) или указанный interval
+    arma::mat raw15;
+    if (!load_raw_ohlcv(symbol, interval, raw15))
         throw std::runtime_error("Failed to load OHLCV");
 
-    // 1) Тренировка
-    json trainer = trainPPO_pro(raw, nullptr, nullptr, nullptr, episodes, tp, sl, ma_len, use_antimanip);
+    // --- 2) Опциональные HTF (60/240/1440) — безопасная подгрузка
+    arma::mat raw60, raw240, raw1440;
+    const arma::mat *p60   = nullptr;
+    const arma::mat *p240  = nullptr;
+    const arma::mat *p1440 = nullptr;
 
-    // 2) Сохранение модели на диск
+    if (try_load_raw(symbol, "60", raw60))     p60   = &raw60;
+    if (try_load_raw(symbol, "240", raw240))   p240  = &raw240;
+    if (try_load_raw(symbol, "1440", raw1440)) p1440 = &raw1440;
+
+    std::cout << "[TRAIN] shapes: 15=" << raw15.n_rows
+              << " 60="   << (p60   ? raw60.n_rows   : 0)
+              << " 240="  << (p240  ? raw240.n_rows  : 0)
+              << " 1440=" << (p1440 ? raw1440.n_rows : 0)
+              << "  (cols15=" << raw15.n_cols << ")\n";
+
+    // --- 3) Тренировка (HTF передаём указателями; внутри могут не использоваться — это ок)
+    json trainer = trainPPO_pro(raw15, p60, p240, p1440, episodes, tp, sl, ma_len, use_antimanip);
+
+    // --- 4) Сохранение модели на диск
     const std::string model_path = "cache/models/" + symbol + "_" + interval + "_ppo_pro.json";
     std::ofstream(model_path) << trainer.dump(2);
 
-    // 3) Обновляем атомики для health/metrics
+    // --- 5) Обновляем атомики для health/metrics
     set_model_thr(trainer.value("best_thr", 0.5));
     set_model_ma_len(ma_len);
     set_current_model(trainer);
 
-    // 4) Лог в stdout для верификации
+    // --- 6) Лог в stdout для верификации
     try {
         const auto& m = trainer.at("metrics");
         std::cout << "[TRAIN] rows="       << m.value("N_rows", 0)
@@ -58,7 +93,7 @@ json run_train_pro_and_save(const std::string& symbol,
         std::cout << "[TRAIN] metrics missing" << std::endl;
     }
 
-    // 5) Стабилизированный ответ клиенту
+    // --- 7) Стабилизированный ответ клиенту
     return make_train_reply(trainer, tp, sl, ma_len, model_path);
 }
 
