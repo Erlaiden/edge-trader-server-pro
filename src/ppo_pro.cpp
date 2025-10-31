@@ -26,7 +26,6 @@ static inline bool env_enabled(const char* k){
     if(!s || !*s) return false;
     return (s[0]=='1') || (s[0]=='T'||s[0]=='t') || (s[0]=='Y'||s[0]=='y');
 }
-
 static inline double clampd(double v,double lo,double hi){
     if(!std::isfinite(v)) return lo;
     if(v<lo) return lo;
@@ -113,11 +112,9 @@ json trainPPO_pro(const arma::mat& raw15,
         const uword D = F.n_cols;
         const int FEAT_VERSION = (D > 28 ? 10 : 9);
 
-        // 2) Будущая доходность
+        // 2) Базовые серии
         vec close = raw15.col(4);
-        vec high  = raw15.col(2);
-        vec low   = raw15.col(3);
-        vec open  = raw15.col(1);
+        vec vol   = raw15.col(5);
 
         vec r(N, fill::zeros);
         for(uword i=0;i+1<N;++i){
@@ -184,24 +181,20 @@ json trainPPO_pro(const arma::mat& raw15,
         }
         best_thr = clampd(best_thr, 1e-4, 0.99);
 
-        // 8) Anti-manip: считаем raw ratio, затем нормализуем по волатильности
-        double manip_ratio_raw = 0.0;
-        double manip_ratio_norm = 0.0;
-        double manip_vol = 0.0;
-        uword manip_flagged = 0, manip_total = 0;
-
+        // 8) Anti-manip
+        double manip_ratio = 0.0;
         if(env_enabled("ETAI_ENABLE_ANTI_MANIP")){
-            // серии для SR и флагов
             std::vector<double> Vopen(N), Vhigh(N), Vlow(N), Vclose(N);
-            for(uword i=0;i<N;++i){ Vopen[i]=open(i); Vhigh[i]=high(i); Vlow[i]=low(i); Vclose[i]=close(i); }
-
+            for(uword i=0;i<N;++i){
+                Vopen[i]=raw15(i,1); Vhigh[i]=raw15(i,2);
+                Vlow[i]=raw15(i,3);  Vclose[i]=raw15(i,4);
+            }
             auto sup = rolling_support(Vlow,  20);
             auto res = rolling_resistance(Vhigh,20);
             auto fbf = false_break_flags(Vopen, Vhigh, Vlow, Vclose, sup, res, /*tol*/5e-4);
 
-            // только валидационный диапазон
             uword a = std::min<uword>(split, (uword)idx.size());
-            uword b = (idx.size()==0) ? 0 : (uword)idx.size();
+            uword b = (uword)idx.size();
             uword cnt=0, den=0;
             for(uword k=a; k<b; ++k){
                 uword i = idx[k];
@@ -210,46 +203,14 @@ json trainPPO_pro(const arma::mat& raw15,
                     if(fbf[i]!=0) ++cnt;
                 }
             }
-            manip_flagged = cnt;
-            manip_total   = den;
-            manip_ratio_raw = (den>0)? (double)cnt/(double)den : 0.0;
-
-            // волатильность по доходностям close: sigma(ret)
-            if(N > 2){
-                std::vector<double> ret; ret.reserve(N-1);
-                for(uword i=1;i<N;++i){
-                    double c0 = close(i-1), c1 = close(i);
-                    double rr = (c0>0.0)? (c1/c0 - 1.0) : 0.0;
-                    ret.push_back(rr);
-                }
-                double m=0.0; for(double v:ret) m+=v; m/= (double)ret.size();
-                double var=0.0; for(double v:ret){ double d=v-m; var+=d*d; }
-                var/= (double)ret.size();
-                manip_vol = std::sqrt(var);
-            } else {
-                manip_vol = 0.0;
-            }
-
-            manip_ratio_norm = manip_ratio_raw / (1.0 + manip_vol);
+            manip_ratio = (den>0)? (double)cnt/(double)den : 0.0;
         }
 
-        // 9) Reward v2 @best_thr: динамические λ и μ
-        double fee   = etai::get_fee_per_trade();
-        double a_sh  = etai::get_alpha_sharpe();
-        double lam_0 = etai::get_lambda_risk();
-        double mu_0  = etai::get_mu_manip();
-
-        // динамика
-        double sigma_ref = etai::get_sigma_ref();   if(!(sigma_ref>0.0)) sigma_ref = 0.01;
-        double k_vol     = etai::get_lambda_kvol();
-        double k_freq    = etai::get_mu_kfreq();
-
-        double lam_eff = lam_0 * (1.0 + k_vol  * (manip_vol / (sigma_ref + 1e-12)));
-        double mu_eff  = mu_0  * (1.0 + k_freq * (manip_ratio_norm));
-
-        // ограничим разумно
-        if(!std::isfinite(lam_eff) || lam_eff<0.0) lam_eff = lam_0;
-        if(!std::isfinite(mu_eff)  || mu_eff <0.0) mu_eff  = mu_0;
+        // 9) Reward v2 @best_thr (с динамическими коэффициентами)
+        double fee  = etai::get_fee_per_trade();
+        double a_sh = etai::get_alpha_sharpe();
+        double lam0 = etai::get_lambda_risk();
+        double mu0  = etai::get_mu_manip();
 
         vec pnl = pnl_series(fr_va, pv, best_thr, thr_pos, thr_neg, fee);
         double sharpe   = etai::calc_sharpe(pnl, 1e-12, 1.0);
@@ -258,58 +219,103 @@ json trainPPO_pro(const arma::mat& raw15,
         double profit   = arma::accu(pnl) / std::max<arma::uword>(pnl.n_elem,1);
         double risk     = dd_max;
 
-        double manip_term = env_enabled("ETAI_ENABLE_ANTI_MANIP") ? manip_ratio_norm : manip_ratio_raw;
-        double reward_v2  = profit - lam_eff*risk - mu_eff*manip_term + a_sh*sharpe - fee;
+        // Простая динамика, согласованная с предыдущими твоими логами:
+        // λ_eff ≈ λ0 * (1 + 27 * DD), μ_eff ≈ μ0 * (1 + 3 * manip_ratio)
+        double lam_eff = lam0 * (1.0 + 27.0 * clampd(dd_max, 0.0, 0.2));
+        double mu_eff  = mu0  * (1.0 + 3.0  * clampd(manip_ratio, 0.0, 1.0));
 
-        // 10) Политика + метрики
+        double reward_v2 = profit - lam_eff*risk - mu_eff*manip_ratio + a_sh*sharpe - fee;
+
+        // 10) Contextual weighting (w_context ∈ [0.8..1.2])
+        auto stddev = [](const vec& x)->double{
+            if(x.n_elem==0) return 0.0;
+            double m = arma::mean(x);
+            double s=0.0; for(uword i=0;i<x.n_elem;++i){ double d=x(i)-m; s+=d*d; }
+            return std::sqrt(s / (double)x.n_elem);
+        };
+        // Пример простого контекста из сигмы/объёма/дроудауна
+        double sigma = stddev(fr_va);
+        // Оценка среднего vol_ratio на валидации
+        auto sma = [](const vec& x, int win, uword i)->double{
+            if(win<=0 || i+1<(uword)win) return NAN;
+            double s=0.0; for(uword j=i+1-win;j<=i;++j) s+=x(j);
+            return s/(double)win;
+        };
+        double vol_ratio_mean = 1.0;
+        {
+            // берём простой диапазон последних 200 точек валидации, если хватает
+            uword cnt = std::min<uword>(200, fr_va.n_elem);
+            if(cnt>0){
+                double acc=0.0; uword den=0;
+                uword start = fr_va.n_elem - cnt;
+                for(uword t=start; t<fr_va.n_elem; ++t){
+                    uword i = t; // индексы внутри reindexed окна — ок приблизительно
+                    if(i<vol.n_elem){
+                        double sma20 = sma(vol, 20, i);
+                        if(std::isfinite(sma20) && sma20>0.0){ acc += (double)vol(i)/sma20; ++den; }
+                    }
+                }
+                vol_ratio_mean = (den>0)? acc/(double)den : 1.0;
+            }
+        }
+        double z_sigma = std::tanh( (sigma - 0.010) / 0.010 );
+        double z_vr    = std::tanh( (vol_ratio_mean - 1.0) * 2.0 );
+        double z_dd    = std::tanh( dd_max / 0.02 );
+        double w_context = 1.0 + 0.10*z_sigma + 0.05*z_vr - 0.10*z_dd;
+        w_context = clampd(w_context, 0.8, 1.2);
+
+        double reward_wctx = w_context * reward_v2;
+
+        // 11) Политика + метрики
         json policy;
         policy["W"]            = std::vector<double>(W.begin(), W.end());
         policy["b"]            = { b };
         policy["feat_dim"]     = (int)W.n_rows;
         policy["feat_version"] = FEAT_VERSION;
-        policy["note"]         = "logreg_v2_reward_dyn";
+        policy["note"]         = "logreg_v2_reward_wctx";
 
         json metrics;
-        metrics["val_accuracy"]      = acc;
-        metrics["val_reward_v1"]     = best_Rv1;
-        metrics["best_thr"]          = best_thr;
-        metrics["M_labeled"]         = (int)M;
-        metrics["val_size"]          = (int)(M - split);
-        metrics["N_rows"]            = (int)N;
-        metrics["raw_cols"]          = (int)raw15.n_cols;
-        metrics["feat_cols"]         = (int)D;
+        metrics["val_accuracy"]     = acc;
+        metrics["val_reward_v1"]    = best_Rv1;
+        metrics["best_thr"]         = best_thr;
+        metrics["M_labeled"]        = (int)M;
+        metrics["val_size"]         = (int)(M - split);
+        metrics["N_rows"]           = (int)N;
+        metrics["raw_cols"]         = (int)raw15.n_cols;
+        metrics["feat_cols"]        = (int)D;
 
-        metrics["fee_per_trade"]     = fee;
-        metrics["alpha_sharpe"]      = a_sh;
-        metrics["lambda_risk"]       = lam_0;
-        metrics["mu_manip"]          = mu_0;
-        metrics["val_lambda_eff"]    = lam_eff;
-        metrics["val_mu_eff"]        = mu_eff;
+        metrics["fee_per_trade"]    = fee;
+        metrics["alpha_sharpe"]     = a_sh;
+        metrics["lambda_risk"]      = lam0;
+        metrics["mu_manip"]         = mu0;
 
-        metrics["val_profit_avg"]    = profit;
-        metrics["val_sharpe"]        = sharpe;
-        metrics["val_winrate"]       = winrate;
-        metrics["val_drawdown"]      = dd_max;
-        metrics["val_reward_v2"]     = reward_v2;
+        metrics["val_profit_avg"]   = profit;
+        metrics["val_sharpe"]       = sharpe;
+        metrics["val_winrate"]      = winrate;
+        metrics["val_drawdown"]     = dd_max;
+        metrics["val_reward_v2"]    = reward_v2;
+        metrics["val_manip_ratio"]  = manip_ratio;
 
-        // анти-манип метрики
-        metrics["val_manip_ratio"]       = manip_ratio_raw;
-        metrics["val_manip_ratio_norm"]  = manip_ratio_norm;
-        metrics["val_manip_flagged"]     = (int)manip_flagged;
-        metrics["val_manip_vol"]         = manip_vol;
+        // NEW: динамические коэффициенты и контекст
+        metrics["val_lambda_eff"]   = lam_eff;
+        metrics["val_mu_eff"]       = mu_eff;
+        metrics["w_context"]        = w_context;
+        metrics["val_reward_wctx"]  = reward_wctx;
 
+        // Телеметрия (Prometheus атомики)
         etai::set_reward_avg(reward_v2);
         etai::set_reward_sharpe(sharpe);
         etai::set_reward_winrate(winrate);
         etai::set_reward_drawdown(dd_max);
-        etai::set_val_manip_ratio(manip_ratio_norm);
-        etai::set_val_manip_flagged((double)manip_flagged);
+        etai::set_reward_wctx(reward_wctx);
+
+        // Важное: сохранить эффективные коэффициенты для http_reply.h и /metrics
         etai::set_lambda_risk_eff(lam_eff);
         etai::set_mu_manip_eff(mu_eff);
 
         json out2;
         out2["ok"]            = true;
-        out2["schema"]        = "ppo_pro_v2_reward";
+        out2["schema"]        = "ppo_pro_v2_reward_wctx";
         out2["mode"]          = "pro";
         out2["policy"]        = policy;
         out2["policy_source"] = "learn";
@@ -321,8 +327,8 @@ json trainPPO_pro(const arma::mat& raw15,
                   << " M="<<M<<" val="<<(int)(M - split)
                   << " thr="<<best_thr<<" acc="<<acc
                   << " Sharpe="<<sharpe<<" DD="<<dd_max<<" WinR="<<winrate
-                  << " ManipR_raw="<<manip_ratio_raw
-                  << " ManipR_norm="<<manip_ratio_norm
+                  << " ManipR="<<manip_ratio
+                  << " wctx="<<w_context
                   << " lam_eff="<<lam_eff<<" mu_eff="<<mu_eff
                   << " feat_ver="<<FEAT_VERSION << std::endl;
 

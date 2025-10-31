@@ -24,6 +24,7 @@ static void promote_metrics(json& j) {
     copy("val_accuracy");
     copy("val_reward");
     copy("val_reward_v2");
+    copy("val_reward_wctx");   // NEW
     copy("M_labeled");
     copy("val_size");
     copy("N_rows");
@@ -52,6 +53,9 @@ static void promote_metrics(json& j) {
     // динамические коэффициенты
     copy("val_lambda_eff");
     copy("val_mu_eff");
+
+    // контекст
+    copy("w_context");
 }
 
 void register_train_routes(Server& svr) {
