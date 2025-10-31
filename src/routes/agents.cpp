@@ -1,160 +1,142 @@
 #include <httplib.h>
 #include <armadillo>
-#include <deque>
+#include <sys/stat.h>
 #include <fstream>
-#include <sstream>
-#include <algorithm>
-#include <cctype>
+#include <ctime>
 
+#include "../agents/agent_base.h"
 #include "../json.hpp"
-#include "../server_accessors.h"   // etai::{get_current_model}
-#include "../infer_policy.h"       // etai::infer_with_policy (ожидает raw OHLCV матрицу)
-                                    // features/build_feature_matrix уже подтянется внутри
-
-// Цель: убрать заглушки агентов и опираться на реальный инференс модели.
-// Эндпоинт: /api/agents/test?type=long|short|flat|correction|breakout&thr=0.5&symbol=BTCUSDT&interval=15
-
-using json = nlohmann::json;
+#include "../utils_data.h"      // etai::load_raw_ohlcv(...)
+#include "../infer_policy.h"    // infer_with_policy(...)
+#include "../server_accessors.h"// atoms & model
 
 namespace etai {
+using json = nlohmann::json;
 
-// --- утилиты ---
+// Фабрики простых ботов (оставляем тестовый эндпоинт)
+extern "C" AgentBase* create_agent_long();
+extern "C" AgentBase* create_agent_short();
+extern "C" AgentBase* create_agent_flat();
+extern "C" AgentBase* create_agent_correction();
+extern "C" AgentBase* create_agent_breakout();
 
-static inline std::string upper(std::string s) {
-    std::transform(s.begin(), s.end(), s.begin(),
-                   [](unsigned char c){ return std::toupper(c); });
-    return s;
+// mkdir -p style (best-effort)
+static inline void ensure_dir_p(const char* /*p*/){
+  ::mkdir("cache", 0755);
+  ::mkdir("cache/logs", 0755);
 }
 
-// читаем последние N строк из cache/<SYMBOL>_<INTERVAL>.csv
-// ожидаем CSV c минимум 6 колонками: ts,open,high,low,close,volume
-// если колонок 7 (есть turnover) — берём первые 6.
-static bool load_raw_ohlcv_lastN(const std::string& symbol,
-                                 const std::string& interval,
-                                 size_t lastN,
-                                 arma::Mat<double>& out_raw)
-{
-    const std::string path = "cache/" + upper(symbol) + "_" + interval + ".csv";
-    std::ifstream f(path);
-    if (!f.good()) return false;
-
-    std::deque<std::array<double,6>> ring;
-    ring.resize(0);
-
-    std::string line;
-    while (std::getline(f, line)) {
-        if (line.empty()) continue;
-        std::array<double,6> row6{};
-        // быстрый парсер: берём первые 6 чисел, остальное игнорируем
-        std::istringstream iss(line);
-        std::string tok;
-        int col = 0;
-        bool ok = true;
-        while (std::getline(iss, tok, ',')) {
-            if (col < 6) {
-                try {
-                    // ts может быть очень длинным — парсим как double (в матрице всё равно double)
-                    row6[col] = std::stod(tok);
-                } catch (...) { ok = false; break; }
-            }
-            ++col;
-        }
-        if (!ok || col < 6) continue;
-
-        ring.push_back(row6);
-        if (lastN && ring.size() > lastN) ring.pop_front();
-    }
-    if (ring.empty()) return false;
-
-    const size_t n = ring.size();
-    out_raw.set_size(n, 6);
-    for (size_t i=0; i<n; ++i) {
-        for (int j=0; j<6; ++j) out_raw(i,j) = ring[i][j];
-    }
-    return true;
+static inline int sign_from_string(const std::string& sig){
+  if(sig=="LONG")  return  1;
+  if(sig=="SHORT") return -1;
+  return 0;
 }
 
-// --- роуты агентов (без заглушек) ---
-
+// /api/agents/test?type=long|short|flat|correction|breakout&thr=0.5
 void setup_agents_routes(httplib::Server& svr) {
-    // /api/agents/test?type=...&thr=0.4&symbol=BTCUSDT&interval=15
-    svr.Get("/api/agents/test", [](const httplib::Request& req, httplib::Response& res) {
-        const std::string type     = req.has_param("type")     ? req.get_param_value("type")     : "breakout";
-        const std::string symbol   = req.has_param("symbol")   ? req.get_param_value("symbol")   : "BTCUSDT";
-        const std::string interval = req.has_param("interval") ? req.get_param_value("interval") : "15";
-        double thr = 0.5;
-        if (req.has_param("thr")) {
-            try { thr = std::stod(req.get_param_value("thr")); } catch (...) {}
-        }
-        if (thr < 0.0) thr = 0.0;
-        if (thr > 0.99) thr = 0.99;
 
-        // 1) Загружаем последние бары (хватает 300–600 для фич v9)
-        arma::Mat<double> raw15;
-        const bool ok_raw = load_raw_ohlcv_lastN(symbol, interval, /*lastN*/ 600, raw15);
-        if (!ok_raw || raw15.n_rows < 300 || raw15.n_cols < 6) {
-            json out = {
-                {"ok", false},
-                {"error", "raw_not_available_or_short"},
-                {"symbol", symbol},
-                {"interval", interval}
-            };
-            res.set_content(out.dump(2), "application/json");
-            return;
-        }
+  // Тестовый эндпоинт — случайные фичи (для экспресс-проверки фабрик)
+  svr.Get("/api/agents/test", [](const httplib::Request& req, httplib::Response& res) {
+    const std::string type = req.get_param_value("type");
+    const double thr = req.has_param("thr") ? std::stod(req.get_param_value("thr")) : 0.5;
 
-        // 2) Текущая модель (из атомиков/диска)
-        const json model = etai::get_current_model();
-        if (!model.is_object() || !model.contains("policy")) {
-            json out = {
-                {"ok", false},
-                {"error", "model_not_ready"},
-                {"note",  "train the model via /api/train first"}
-            };
-            res.set_content(out.dump(2), "application/json");
-            return;
-        }
+    AgentPtr agent;
+    if (type == "long")            agent.reset(create_agent_long());
+    else if (type == "short")      agent.reset(create_agent_short());
+    else if (type == "flat")       agent.reset(create_agent_flat());
+    else if (type == "correction") agent.reset(create_agent_correction());
+    else if (type == "breakout")   agent.reset(create_agent_breakout());
+    else {
+      json err = {{"ok", false}, {"error", "unknown agent type"}};
+      res.set_content(err.dump(2), "application/json");
+      return;
+    }
 
-        // 3) Реальный инференс
-        json inf = etai::infer_with_policy(raw15, model);
-        if (!inf.value("ok", false)) {
-            json out = {
-                {"ok", false},
-                {"error", "infer_failed"},
-                {"details", inf}
-            };
-            res.set_content(out.dump(2), "application/json");
-            return;
-        }
+    arma::rowvec features = arma::randn<arma::rowvec>(28); // заглушечные фичи
+    const int action = agent->decide(features, thr);
 
-        // score в [-1,1], confidence = |score|
-        const double score = inf.value("score", 0.0);
-        double confidence = std::abs(score);
-        if (!std::isfinite(confidence)) confidence = 0.0;
-        if (confidence > 1.0) confidence = 1.0;
+    json j = {
+      {"ok", true},
+      {"agent", agent->name()},
+      {"thr", thr},
+      {"confidence", agent->confidence()},
+      {"decision", action}
+    };
+    res.set_content(j.dump(2), "application/json");
+  });
 
-        int decision = 0;
-        if (score >=  thr) decision =  1;     // LONG
-        else if (score <= -thr) decision = -1; // SHORT
-        else decision = 0;                     // FLAT
+  // Реальный запуск агента на текущей модели и данных с диска:
+  // /api/agents/run?type=breakout&symbol=BTCUSDT&interval=15&thr=0.4
+  svr.Get("/api/agents/run", [](const httplib::Request& req, httplib::Response& res) {
+    const std::string type     = req.has_param("type")     ? req.get_param_value("type")     : "breakout";
+    const std::string symbol   = req.has_param("symbol")   ? req.get_param_value("symbol")   : "BTCUSDT";
+    const std::string interval = req.has_param("interval") ? req.get_param_value("interval") : "15";
+    const double thr           = req.has_param("thr")      ? std::stod(req.get_param_value("thr")) : etai::get_model_thr();
 
-        json out = {
-            {"ok", true},
-            {"agent", type},
-            {"symbol", upper(symbol)},
-            {"interval", interval},
-            {"thr", thr},
-            {"decision", decision},
-            {"confidence", confidence},
-            {"score", score},
-            {"infer", {
-                {"signal", inf.value("signal","NEUTRAL")},
-                {"sigma",  inf.value("sigma", 0.0)},
-                {"vol_threshold", inf.value("vol_threshold", 0.0)}
-            }}
-        };
-        res.set_content(out.dump(2), "application/json");
-    });
+    // 1) Данные
+    arma::mat raw15;
+    if(!etai::load_raw_ohlcv(symbol, interval, raw15) || raw15.n_rows < 60 || raw15.n_cols < 6){
+      json out{{"ok", false}, {"error","not_enough_data"}, {"rows",(int)raw15.n_rows}, {"cols",(int)raw15.n_cols}};
+      res.set_content(out.dump(2), "application/json");
+      return;
+    }
+
+    // 2) Модель (из атомика)
+    nlohmann::json model = etai::get_current_model();
+    if(!model.is_object() || !model.contains("policy")){
+      json out{{"ok", false}, {"error","no_model_policy"}};
+      res.set_content(out.dump(2), "application/json");
+      return;
+    }
+
+    // 3) Инференс по политике
+    nlohmann::json inf = infer_with_policy(raw15, model);
+    if(!inf.value("ok", false)){
+      json out{{"ok", false}, {"error","infer_failed"}, {"details", inf}};
+      res.set_content(out.dump(2), "application/json");
+      return;
+    }
+
+    // 4) Телеметрия последнего инференса -> атомики
+    const std::string sig = inf.value("signal", std::string("NEUTRAL"));
+    const double score    = inf.value("score", 0.0);
+    const double sigma    = inf.value("sigma", 0.0);
+    const int sgn         = sign_from_string(sig);
+
+    etai::set_last_infer_score(score);
+    etai::set_last_infer_sigma(sigma);
+    etai::set_last_infer_signal(sgn);
+
+    // 5) Лог в TSV (best-effort)
+    ensure_dir_p("cache/logs");
+    {
+      std::ofstream f("cache/logs/agents_runs.tsv", std::ios::app);
+      if(f.good()){
+        const std::time_t t = std::time(nullptr);
+        f << t << '\t'
+          << symbol << '\t' << interval << '\t' << type << '\t'
+          << thr << '\t' << sig << '\t' << score << '\t' << sigma << '\n';
+      }
+    }
+
+    // 6) Ответ
+    json out{
+      {"ok", true},
+      {"agent", type},
+      {"symbol", symbol},
+      {"interval", interval},
+      {"thr", thr},
+      {"infer", {
+        {"signal", sig},
+        {"score", score},
+        {"sigma", sigma},
+        {"vol_threshold", inf.value("vol_threshold", 0.0)}
+      }},
+      {"decision", sgn},
+      {"confidence", std::fabs(score)}
+    };
+    res.set_content(out.dump(2), "application/json");
+  });
 }
 
 } // namespace etai

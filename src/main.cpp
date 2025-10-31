@@ -4,15 +4,15 @@
 #include <armadillo>
 #include "json.hpp"
 
-#include "server_accessors.h"   // etai::init_model_atoms_from_disk, setters/getters
+#include "server_accessors.h"   // etai::init_model_atoms_from_disk, getters
 
-// Включаем все роуты единым TU для консистентного состояния
+// Подключаем роуты единым TU
 #include "routes/health.cpp"
 #include "routes/health_ai.cpp"
 #include "routes/train.cpp"
 #include "routes/model.cpp"
 #include "routes/infer.cpp"
-#include "routes/metrics.cpp"
+#include "routes/metrics.cpp"     // внутри namespace etai
 #include "routes/agents.cpp"
 #include "routes/backfill.inc.cpp" // static inline register_backfill_routes(...)
 
@@ -21,10 +21,12 @@ int main(int argc, char** argv) {
     if (argc > 1) port = std::atoi(argv[1]);
 
     // 1) Инициализация состояния модели (из диска + дефолты)
-    etai::init_model_atoms_from_disk("cache/models/BTCUSDT_15_ppo_pro.json",
-                                     /*def_thr*/ 0.38,
-                                     /*def_ma*/  12,
-                                     /*feat*/    28);
+    etai::init_model_atoms_from_disk(
+        "cache/models/BTCUSDT_15_ppo_pro.json",
+        /*def_thr*/ 0.38,
+        /*def_ma*/  12,
+        /*feat*/    28
+    );
 
     // 2) HTTP-сервер
     httplib::Server svr;
@@ -35,7 +37,7 @@ int main(int argc, char** argv) {
     register_train_routes(svr);
     register_model_routes(svr);
     register_infer_routes(svr);
-    register_metrics_routes(svr);
+    etai::register_metrics_routes(svr); // <-- квалификация namespace
     register_backfill_routes(svr);
     etai::setup_agents_routes(svr);
 

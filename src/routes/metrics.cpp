@@ -1,50 +1,42 @@
-// Prometheus metrics endpoint
-#include "routes/metrics.h"
-#include "server_accessors.h" // get_model_thr / get_model_ma_len / get_model_feat_dim / get_current_model
+#include "httplib.h"
+#include "../server_accessors.h"
 #include <sstream>
 
-void register_metrics_routes(httplib::Server& srv)
-{
-  srv.Get("/metrics", [](const httplib::Request&, httplib::Response& res) {
-    std::ostringstream m;
+namespace etai {
 
-    // scalar gauges
-    m << "# HELP edge_model_thr Model decision threshold\n"
-      << "# TYPE edge_model_thr gauge\n"
-      << "edge_model_thr " << etai::get_model_thr() << "\n";
+void register_metrics_routes(httplib::Server& srv){
+  srv.Get("/metrics", [](const httplib::Request&, httplib::Response& res){
+    std::ostringstream oss;
+    oss.setf(std::ios::fixed); oss.precision(12);
 
-    m << "# HELP edge_model_ma_len Model moving-average length\n"
-      << "# TYPE edge_model_ma_len gauge\n"
-      << "edge_model_ma_len " << etai::get_model_ma_len() << "\n";
+    // Модельные атомики
+    oss << "# HELP edge_model_thr Model decision threshold\n";
+    oss << "# TYPE edge_model_thr gauge\n";
+    oss << "edge_model_thr " << etai::get_model_thr() << "\n";
 
-    m << "# HELP edge_model_feat_dim Feature vector dimension of current policy\n"
-      << "# TYPE edge_model_feat_dim gauge\n"
-      << "edge_model_feat_dim " << etai::get_model_feat_dim() << "\n";
+    oss << "# HELP edge_model_ma_len Model moving-average length\n";
+    oss << "# TYPE edge_model_ma_len gauge\n";
+    oss << "edge_model_ma_len " << (long long)etai::get_model_ma_len() << "\n";
 
-    // labels as 1-hot
-    const auto& M = etai::get_current_model();
-    if (M.is_object()) {
-      std::string schema = M.value("schema", "");
-      std::string mode   = M.value("mode",   "");
-      std::string src    = M.value("policy_source", "learn");
+    oss << "# HELP edge_model_feat_dim Feature vector dimension of current policy\n";
+    oss << "# TYPE edge_model_feat_dim gauge\n";
+    oss << "edge_model_feat_dim " << (int)etai::get_model_feat_dim() << "\n";
 
-      if (!schema.empty()) {
-        m << "# HELP edge_model_schema Schema label of current model\n"
-          << "# TYPE edge_model_schema gauge\n"
-          << "edge_model_schema{schema=\"" << schema << "\"} 1\n";
-      }
-      if (!mode.empty()) {
-        m << "# HELP edge_model_mode Mode label of current model\n"
-          << "# TYPE edge_model_mode gauge\n"
-          << "edge_model_mode{mode=\"" << mode << "\"} 1\n";
-      }
-      if (!src.empty()) {
-        m << "# HELP edge_model_policy_source Policy source label\n"
-          << "# TYPE edge_model_policy_source gauge\n"
-          << "edge_model_policy_source{src=\"" << src << "\"} 1\n";
-      }
-    }
+    // Телеметрия последнего инференса
+    oss << "# HELP edge_last_infer_score Last inference score (policy output)\n";
+    oss << "# TYPE edge_last_infer_score gauge\n";
+    oss << "edge_last_infer_score " << etai::get_last_infer_score() << "\n";
 
-    res.set_content(m.str(), "text/plain; version=0.0.4");
+    oss << "# HELP edge_last_infer_sigma Last inference volatility sigma\n";
+    oss << "# TYPE edge_last_infer_sigma gauge\n";
+    oss << "edge_last_infer_sigma " << etai::get_last_infer_sigma() << "\n";
+
+    oss << "# HELP edge_last_infer_signal Last inference signal (-1 short, 0 flat, 1 long)\n";
+    oss << "# TYPE edge_last_infer_signal gauge\n";
+    oss << "edge_last_infer_signal " << etai::get_last_infer_signal() << "\n";
+
+    res.set_content(oss.str(), "text/plain; version=0.0.4");
   });
 }
+
+} // namespace etai
