@@ -4,7 +4,9 @@
 #include "rt_metrics.h"
 #include "ppo.h"
 #include "utils.h"
-#include "infer_policy.h"     // << добавлено
+#include "infer_policy.h"
+#include "utils_data.h"   // load_raw_ohlcv, load_cached_matrix
+#include "features/features.h"
 #include <armadillo>
 #include <set>
 #include <fstream>
@@ -32,7 +34,29 @@ static inline void enrich_with_levels(json &out, const arma::mat& M15, double tp
 }
 
 void register_infer_routes(httplib::Server& srv) {
-    // /api/infer — single TF + опционально MTF через ?htf=60,240,1440
+    // --- DIAG: реальный D фич на сырых данных (N×6)
+    srv.Get("/api/infer/feat_cols", [&](const httplib::Request& req, httplib::Response& res){
+        std::string symbol   = qp(req, "symbol", "BTCUSDT");
+        std::string interval = qp(req, "interval", "15");
+
+        arma::mat raw;
+        json out{{"ok", false}};
+        if (!etai::load_raw_ohlcv(symbol, interval, raw)) {
+            out["error"] = "load_raw_failed";
+            res.set_content(out.dump(), "application/json");
+            return;
+        }
+        arma::mat F = etai::build_feature_matrix(raw);
+        out["ok"] = true;
+        out["raw_rows"] = (int)raw.n_rows;
+        out["raw_cols"] = (int)raw.n_cols;
+        out["F_rows"]   = (int)F.n_rows;
+        out["F_cols"]   = (int)F.n_cols;
+        out["ETAI_FEAT_ENABLE_MFLOW"] = (std::getenv("ETAI_FEAT_ENABLE_MFLOW")? true:false);
+        res.set_content(out.dump(), "application/json");
+    });
+
+    // --- /api/infer
     srv.Get("/api/infer", [&](const httplib::Request& req, httplib::Response& res){
         REQ_INFER.fetch_add(1, std::memory_order_relaxed);
 
@@ -54,6 +78,7 @@ void register_infer_routes(httplib::Server& srv) {
         double tp       = model.value("tp", 0.0);
         double sl       = model.value("sl", 0.0);
 
+        // Кэшированная матрица 6×N (ряды = поля: ts,open,high,low,close,vol; колонки = бары)
         arma::mat M15 = etai::load_cached_matrix(symbol, interval);
         if (M15.n_elem == 0) {
             json out{{"ok",false},{"error","no_cached_data"},{"hint","call /api/backfill first"}};
@@ -106,18 +131,14 @@ void register_infer_routes(httplib::Server& srv) {
             return;
         }
 
-        // ===== single-TF =====
-        json inf;
-        bool used_policy = false;
-        if (model.contains("policy")) {
-            // Пытаемся инферить по policy (новый путь)
-            inf = etai::infer_with_policy(M15, model);
-            used_policy = inf.value("ok", false);
-        }
-        if (!used_policy) {
-            // Fallback: старый путь по порогу best_thr
-            inf = etai::infer_with_threshold(M15, best_thr, ma_len);
-        }
+        // ===== single-TF: Подаём policy правильным форматом N×6 =====
+        // M15 сейчас 6×N → транспонируем
+        arma::mat raw_for_policy = M15.t(); // теперь N×6
+        json inf_pol = etai::infer_with_policy(raw_for_policy, model);
+        bool used_policy = inf_pol.value("ok", false);
+
+        // Фоллбек по порогу, если policy не прошёл
+        json inf = used_policy ? inf_pol : etai::infer_with_threshold(M15, best_thr, ma_len);
 
         std::string sig = inf.value("signal","NEUTRAL");
         if (sig == "LONG") INFER_SIG_LONG.fetch_add(1, std::memory_order_relaxed);
@@ -143,11 +164,28 @@ void register_infer_routes(httplib::Server& srv) {
             {"agents", make_agents_summary()},
             {"used_policy", used_policy}
         };
+
+        if (!used_policy) {
+            // Отдадим причину + пробу фич на сырых данных
+            out["policy_dbg"] = inf_pol;
+            arma::mat rawN6;
+            if (etai::load_raw_ohlcv(symbol, interval, rawN6)) {
+                arma::mat F = etai::build_feature_matrix(rawN6);
+                out["feat_probe"] = json{
+                    {"raw_rows", (int)rawN6.n_rows},
+                    {"raw_cols", (int)rawN6.n_cols},
+                    {"F_rows",   (int)F.n_rows},
+                    {"F_cols",   (int)F.n_cols},
+                    {"ETAI_FEAT_ENABLE_MFLOW", (bool)(std::getenv("ETAI_FEAT_ENABLE_MFLOW")?true:false)}
+                };
+            }
+        }
+
         enrich_with_levels(out, M15, tp, sl);
         res.set_content(out.dump(), "application/json");
     });
 
-    // /api/infer/batch — оставляем без policy (пока), добавлены tp/sl и agents
+    // --- batch (без policy)
     srv.Get("/api/infer/batch", [&](const httplib::Request& req, httplib::Response& res){
         REQ_INFER.fetch_add(1, std::memory_order_relaxed);
 

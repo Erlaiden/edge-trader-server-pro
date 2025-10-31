@@ -10,17 +10,15 @@ using json = nlohmann::json;
 
 namespace etai {
 
-// --- утилиты ---
-
+// ---------- utils ----------
 static inline double clamp(double v, double a, double b){
     if (!std::isfinite(v)) return a;
     return std::max(a, std::min(v, b));
 }
 
-// Нормализация по КОЛОНКАМ (каждый признак по всей истории)
+// Z-score per column
 static arma::mat zscore_cols(const arma::mat& X) {
     arma::mat Z = X;
-    const arma::uword N = Z.n_rows;
     const arma::uword D = Z.n_cols;
     for (arma::uword j = 0; j < D; ++j) {
         arma::vec col = Z.col(j);
@@ -33,7 +31,6 @@ static arma::mat zscore_cols(const arma::mat& X) {
 }
 
 static double last_sigma_returns_from_raw_close(const arma::mat& raw, size_t lookback=64) {
-    // raw: N×6, close = col 4
     if (raw.n_rows < 2) return 0.0;
     const arma::uword N = raw.n_rows;
     const arma::uword s = (N > lookback + 1) ? (N - (lookback + 1)) : 1;
@@ -49,66 +46,130 @@ static double last_sigma_returns_from_raw_close(const arma::mat& raw, size_t loo
     return sd;
 }
 
-// --- основной инференс ---
-// raw15: N×6 OHLCV (ts,open,high,low,close,volume)
-// model: объект с полем policy { W[D], b[1], feat_dim=D }
-nlohmann::json infer_with_policy(const arma::mat& raw15, const nlohmann::json& model) {
-    // 0) Быстрые проверки сырья
-    if (raw15.n_cols < 6 || raw15.n_rows < 60) {
-        return json{{"ok", false}, {"error", "not_enough_data"}, {"raw_rows", (int)raw15.n_rows}, {"raw_cols", (int)raw15.n_cols}};
-    }
-    if (!model.is_object() || !model.contains("policy")) {
-        return json{{"ok", false}, {"error", "no_policy_in_model"}};
-    }
+// Build score a = tanh(Wx+b) on any TF raw OHLCV
+static bool policy_score_on_raw(const arma::mat& raw,
+                                const json& policy,
+                                double& out_score,
+                                int& out_feat_dim) {
+    if (raw.n_cols < 6 || raw.n_rows < 60) return false;
+    int D = policy.value("feat_dim", 0);
+    std::vector<double> wv = policy.value("W", std::vector<double>{});
+    std::vector<double> bv = policy.value("b", std::vector<double>{});
+    if (D <= 0 || (int)wv.size() != D || (int)bv.size() != 1) return false;
 
-    const json& P = model["policy"];
-    if (!P.contains("W") || !P.contains("b") || !P.contains("feat_dim")) {
-        return json{{"ok", false}, {"error", "policy_fields_missing"}};
-    }
-
-    const int D = P.value("feat_dim", 0);
-    std::vector<double> wv = P.value("W", std::vector<double>{});
-    std::vector<double> bv = P.value("b", std::vector<double>{});
-    if (D <= 0 || (int)wv.size() != D || (int)bv.size() != 1) {
-        return json{{"ok", false}, {"error", "policy_shape_mismatch"}, {"feat_dim", D}, {"W_len", (int)wv.size()}, {"b_len", (int)bv.size()}};
-    }
-
-    // 1) Строим фичи (N×D) — синхронно с тренером
-    arma::mat F = build_feature_matrix(raw15);
-    if (F.n_rows < 2 || (int)F.n_cols != D) {
-        return json{{"ok", false}, {"error", "feature_dim_mismatch_or_short"}, {"F_rows", (int)F.n_rows}, {"F_cols", (int)F.n_cols}, {"expected_D", D}};
-    }
-
-    // 2) Нормализация по колонкам (каждый признак)
+    arma::mat F = build_feature_matrix(raw);
+    if ((int)F.n_cols != D || F.n_rows < 2) return false;
     F = zscore_cols(F);
 
-    // 3) Последний бар → вектор признаков (Dx1)
     const arma::uword last = F.n_rows - 1;
     arma::vec x = F.row(last).t(); // D×1
 
-    // 4) Параметры policy
     arma::rowvec W(D);
     for (int i = 0; i < D; ++i) W(i) = wv[(size_t)i];
     double b = bv[0];
 
-    // 5) Скора и сигнал
     double z = arma::as_scalar(W * x + b);
-    double a = std::tanh(z);              // [-1, 1]
-    const double act_gate = 0.10;         // как в тренере
-    std::string sig = "NEUTRAL";
-    if (std::abs(a) >= act_gate) sig = (a >= 0.0) ? "LONG" : "SHORT";
+    out_score = std::tanh(z); // [-1,1]
+    out_feat_dim = D;
+    return true;
+}
 
-    // 6) Оценка волатильности по close из raw
+// ---------- single-TF policy inference ----------
+nlohmann::json infer_with_policy(const arma::mat& raw15, const nlohmann::json& model) {
+    if (raw15.n_cols < 6 || raw15.n_rows < 60)
+        return json{{"ok", false}, {"error", "not_enough_data"}, {"raw_rows", (int)raw15.n_rows}, {"raw_cols", (int)raw15.n_cols}};
+    if (!model.is_object() || !model.contains("policy"))
+        return json{{"ok", false}, {"error", "no_policy_in_model"}};
+
+    const json& P = model["policy"];
+    int D = 0;
+    double a15 = 0.0;
+    if (!policy_score_on_raw(raw15, P, a15, D))
+        return json{{"ok", false}, {"error", "policy_scoring_failed"}};
+
+    const double act_gate = 0.10;
+    std::string sig = "NEUTRAL";
+    if (std::abs(a15) >= act_gate) sig = (a15 >= 0.0) ? "LONG" : "SHORT";
+
     double sigma = last_sigma_returns_from_raw_close(raw15, 64);
-    double vol_threshold = 0.001; // как и раньше — константа для UI
+    double vol_threshold = 0.001;
 
     return json{
         {"ok", true},
         {"signal", sig},
-        {"score", a},
+        {"score", a15},
         {"sigma", sigma},
         {"vol_threshold", vol_threshold}
     };
+}
+
+// ---------- MTF-aware policy inference ----------
+nlohmann::json infer_with_policy_mtf(const arma::mat& raw15,
+                                     const nlohmann::json& model,
+                                     const arma::mat* raw60,   int /*ma60*/,
+                                     const arma::mat* raw240,  int /*ma240*/,
+                                     const arma::mat* raw1440, int /*ma1440*/) {
+    if (!model.is_object() || !model.contains("policy"))
+        return json{{"ok", false}, {"error", "no_policy_in_model"}};
+    const json& P = model["policy"];
+
+    // 1) score on 15m (required)
+    int D = 0;
+    double s15 = 0.0;
+    if (!policy_score_on_raw(raw15, P, s15, D))
+        return json{{"ok", false}, {"error", "policy_scoring_failed_15"}};
+
+    // 2) optional HTF scores
+    double s60 = 0.0, s240 = 0.0, s1440 = 0.0;
+    bool has60 = raw60   && raw60->n_elem   && policy_score_on_raw(*raw60,   P, s60, D);
+    bool has240= raw240  && raw240->n_elem  && policy_score_on_raw(*raw240,  P, s240, D);
+    bool has1440=raw1440 && raw1440->n_elem && policy_score_on_raw(*raw1440, P, s1440, D);
+
+    auto sgn = [](double x)->int { return (x>0) - (x<0); };
+
+    int s15sgn = sgn(s15);
+    int avail = 0, agree = 0;
+
+    json htf = json::object();
+    if (has60)   { ++avail; bool ok = (sgn(s60)   == s15sgn); htf["agree60"]  = ok; if (ok) ++agree; }
+    if (has240)  { ++avail; bool ok = (sgn(s240)  == s15sgn); htf["agree240"] = ok; if (ok) ++agree; }
+    if (has1440) { ++avail; bool ok = (sgn(s1440) == s15sgn); htf["agree1440"]= ok; if (ok) ++agree; }
+
+    // 3) compute soft HTF weight (same spirit as trainer): base weight from 15m + fraction from agreements
+    double wctx_htf = 1.0; // if no HTFs provided → neutral (1.0)
+    if (avail > 0) {
+        // map [0..avail] → [0.75..1.0] by default (conservative boost),
+        // tweakable later to mirror trainer exactly.
+        double frac = (double)agree / (double)avail; // [0..1]
+        wctx_htf = 0.75 + 0.25 * frac;               // [0.75..1]
+    }
+
+    // 4) weighted decision by HTF context
+    const double act_gate = 0.10;
+    double a_w = s15 * wctx_htf;
+
+    std::string sig = "NEUTRAL";
+    if (std::abs(a_w) >= act_gate) sig = (a_w >= 0.0) ? "LONG" : "SHORT";
+
+    double sigma15 = last_sigma_returns_from_raw_close(raw15, 64);
+    double vol_threshold = 0.001;
+
+    json out{
+        {"ok", true},
+        {"signal", sig},
+        {"score15", s15},
+        {"score_w", a_w},
+        {"sigma15", sigma15},
+        {"vol_threshold", vol_threshold},
+        {"wctx_htf", wctx_htf},
+        {"htf", htf}
+    };
+
+    if (!has60)   out["htf"]["agree60"]   = nullptr;
+    if (!has240)  out["htf"]["agree240"]  = nullptr;
+    if (!has1440) out["htf"]["agree1440"] = nullptr;
+
+    return out;
 }
 
 } // namespace etai
