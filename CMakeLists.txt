@@ -25,6 +25,8 @@ add_executable(edge_trader_server
     src/train_logic.cpp
     src/server_accessors.cpp
     src/features/features.cpp
+    src/features/manip_detector.cpp
+    src/features/support_resistance.cpp
     src/features/money_flow.cpp
 
     # --- Agents ---
