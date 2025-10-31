@@ -4,8 +4,8 @@
 
 namespace etai {
 
-// Тренер PPO-PRO (логрег-политика) с поддержкой анти-манип фильтра.
-// use_antimanip=true — исключать примеры, где manip_flag==1 (из feature matrix v6).
+// PPO-PRO (логрег-политика), v7 (режим+импульс).
+// Параметр use_antimanip оставлен для совместимости с вызовом, в v7 можно не использовать.
 nlohmann::json trainPPO_pro(const arma::mat& raw15,
                             const arma::mat* raw60,
                             const arma::mat* raw240,
