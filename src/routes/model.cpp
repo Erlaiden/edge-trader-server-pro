@@ -1,154 +1,89 @@
-#include "routes/model.h"
+// Файл может инклюдиться прямо из main.cpp, поэтому без внешних "routes.h".
+#include "../httplib.h"
+#include "../server_accessors.h"
 #include "json.hpp"
-#include "http_helpers.h"     // qp()
-#include <filesystem>
 #include <fstream>
-#include <algorithm>
-#include <cctype>
-
-#include "server_accessors.h" // etai::get_model_thr(), get_model_ma_len()
-#include "utils_model.h"      // safe_read_json_file(), make_model()
+#include <sstream>
+#include <string>
 
 using json = nlohmann::json;
-namespace fs = std::filesystem;
 
-// --- helpers ---
-static inline std::string upper(std::string s){
-  std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c){ return std::toupper(c); });
-  return s;
-}
+namespace etai {
 
-static inline std::string norm_interval(std::string s){
-  s.erase(std::remove_if(s.begin(), s.end(), [](unsigned char c){ return std::isspace(c) || c=='\"'; }), s.end());
-  return s;
-}
-
-static inline std::string model_path_of(const std::string& symbol, const std::string& interval){
-  return "cache/models/" + upper(symbol) + "_" + norm_interval(interval) + "_ppo_pro.json";
-}
-
-// --- routes ---
-void register_model_routes(httplib::Server& srv) {
-  // Короткий статус
-  srv.Get("/api/model/status", [&](const httplib::Request& req, httplib::Response& res){
-    const std::string symbol   = qp(req, "symbol",   "BTCUSDT");
-    const std::string interval = qp(req, "interval", "15");
-    const std::string path     = model_path_of(symbol, interval);
-
-    json out;
-    out["ok"]     = true;
-    out["exists"] = fs::exists(path);
-    out["path"]   = path;
-
-    if (out["exists"].get<bool>()) {
-      try {
-        std::ifstream f(path);
-        json m = json::object();
-        if (f) f >> m;
-
-        out["version"]  = m.value("version", 0);
-        out["schema"]   = m.value("schema",  "");
-        out["build_ts"] = m.value("build_ts",(long long)0);
-        out["ma_len"]   = m.value("ma_len", 0);
-        out["best_thr"] = m.value("best_thr", 0.0);
-        out["tp"]       = m.value("tp", 0.0);
-        out["sl"]       = m.value("sl", 0.0);
-      } catch (...) {
-        out["exists"] = false;
-      }
-    }
-
-    res.set_content(out.dump(2), "application/json");
-  });
-
-  // Полное чтение файла как есть
-  srv.Get("/api/model/read", [&](const httplib::Request& req, httplib::Response& res){
-    const std::string symbol   = qp(req, "symbol",   "BTCUSDT");
-    const std::string interval = qp(req, "interval", "15");
-    const std::string path     = model_path_of(symbol, interval);
-
-    if (!fs::exists(path)) {
-      json out{{"ok", false}, {"error", "model_not_found"}, {"path", path}};
-      res.set_content(out.dump(2), "application/json");
-      return;
-    }
-
+static json load_json_file(const std::string& path, std::string& err) {
+    std::ifstream f(path);
+    if (!f) { err = "cannot open file: " + path; return {}; }
+    std::ostringstream ss; ss << f.rdbuf();
     try {
-      std::ifstream f(path);
-      json m = json::object();
-      if (f) f >> m;
-
-      json out{
-        {"ok", true},
-        {"path", path},
-        {"size_bytes", fs::file_size(path)},
-        {"model", m}
-      };
-      res.set_content(out.dump(2), "application/json");
-    } catch (const std::exception& e) {
-      json out{{"ok", false}, {"error", e.what()}, {"path", path}};
-      res.set_content(out.dump(2), "application/json");
-    } catch (...) {
-      json out{{"ok", false}, {"error", "unknown_exception"}, {"path", path}};
-      res.set_content(out.dump(2), "application/json");
+        return json::parse(ss.str());
+    } catch (const std::exception& ex) {
+        err = std::string("json parse failed: ") + ex.what();
+        return {};
     }
-  });
-
-  // Нормализованный объект модели + инварианты
-  srv.Get("/api/model", [&](const httplib::Request& req, httplib::Response& res){
-    const std::string symbol   = qp(req, "symbol",   "BTCUSDT");
-    const std::string interval = qp(req, "interval", "15");
-    const std::string path     = model_path_of(symbol, interval);
-
-    const double    thr = etai::get_model_thr();
-    const long long ma  = etai::get_model_ma_len();
-    const json      disk = fs::exists(path) ? safe_read_json_file(path) : json::object();
-
-    json model = make_model(thr, ma, disk);
-
-    // Инварианты
-    const std::string expected_schema   = "ppo_pro_v1";
-    const std::string expected_mode     = "pro";
-    const int         expected_feat_dim = 8;
-
-    bool ok = true;
-    json notes = json::array();
-
-    const std::string schema = model.value("schema", std::string());
-    const std::string mode   = model.value("mode",   std::string());
-    int feat_dim = 0;
-    if(model.contains("policy") && model["policy"].is_object()){
-      feat_dim = model["policy"].value("feat_dim", 0);
-    }
-
-    if(schema != expected_schema){ ok = false; notes.push_back("schema_mismatch"); }
-    if(mode   != expected_mode)  { ok = false; notes.push_back("mode_mismatch"); }
-    if(feat_dim != expected_feat_dim){ ok = false; notes.push_back("feat_dim_mismatch"); }
-
-    json inv{
-      {"ok", ok},
-      {"expected", {
-        {"schema", expected_schema},
-        {"mode", expected_mode},
-        {"feat_dim", expected_feat_dim}
-      }},
-      {"actual", {
-        {"schema", schema},
-        {"mode", mode},
-        {"feat_dim", feat_dim}
-      }}
-    };
-    if(!notes.empty()) inv["notes"] = notes;
-
-    json out = json::object();
-    out["ok"]           = true;
-    out["model"]        = model;
-    out["model_thr"]    = thr;
-    out["model_ma_len"] = ma;
-    out["path"]         = path;
-    out["exists"]       = fs::exists(path);
-    out["invariants"]   = inv;
-
-    res.set_content(out.dump(2), "application/json");
-  });
 }
+
+// Основная функция, которую вызывает main.cpp
+inline void register_model_routes(httplib::Server& svr) {
+    // Текущее состояние модели (атомики)
+    svr.Get("/api/model", [](const httplib::Request&, httplib::Response& res) {
+        json r;
+        r["ok"] = true;
+        r["model_thr"]      = etai::get_model_thr();
+        r["model_ma_len"]   = etai::get_model_ma_len();
+        // Если в проекте есть геттер размерности — отдадим
+        try { r["model_feat_dim"] = etai::get_model_feat_dim(); } catch (...) {}
+        res.status = 200;
+        res.set_content(r.dump(2), "application/json");
+    });
+
+    // Горячая подстановка модели с диска в память сервера
+    // Пример:
+    //   /api/model/reload
+    //   /api/model/reload?path=/opt/edge-trader-server/cache/models/BTCUSDT_15_ppo_pro.json
+    svr.Get("/api/model/reload", [](const httplib::Request& req, httplib::Response& res) {
+        const std::string path = req.has_param("path")
+            ? req.get_param_value("path")
+            : std::string("/opt/edge-trader-server/cache/models/BTCUSDT_15_ppo_pro.json");
+
+        std::string err;
+        json j = load_json_file(path, err);
+        if (!err.empty()) {
+            json r; r["ok"] = false; r["error"] = err; r["path"] = path;
+            res.status = 400;
+            res.set_content(r.dump(2), "application/json");
+            return;
+        }
+
+        // Безопасно извлекаем поля (с дефолтами из текущих атомиков)
+        double thr = etai::get_model_thr();
+        int ma     = etai::get_model_ma_len();
+        int feat   = 0;
+
+        try { if (j.contains("best_thr") && !j["best_thr"].is_null()) thr = j["best_thr"].get<double>(); } catch (...) {}
+        try { if (j.contains("ma_len")   && !j["ma_len"].is_null())   ma  = j["ma_len"].get<int>();      } catch (...) {}
+        try {
+            if (j.contains("policy") && j["policy"].contains("feat_dim") && !j["policy"]["feat_dim"].is_null())
+                feat = j["policy"]["feat_dim"].get<int>();
+        } catch (...) {}
+
+        // Применяем к атомикам
+        etai::set_model_thr(thr);
+        etai::set_model_ma_len(ma);
+        try { if (feat > 0) etai::set_model_feat_dim(feat); } catch (...) {}
+        try { etai::set_current_model(j.dump()); } catch (...) {}
+
+        json r;
+        r["ok"] = true;
+        r["applied"] = { {"thr", thr}, {"ma_len", ma}, {"feat_dim", feat} };
+        r["path"] = path;
+        res.status = 200;
+        res.set_content(r.dump(2), "application/json");
+    });
+}
+
+// Совместимость: если где-то вызывается старое имя
+inline void register_model_route(httplib::Server& svr) {
+    register_model_routes(svr);
+}
+
+} // namespace etai
