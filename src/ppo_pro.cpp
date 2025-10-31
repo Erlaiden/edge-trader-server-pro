@@ -14,7 +14,8 @@ namespace etai {
 
 arma::Mat<double> build_feature_matrix(const arma::Mat<double>&);
 
-static constexpr int FEAT_VERSION_CURRENT = 7;
+// === v8 ===
+static constexpr int FEAT_VERSION_CURRENT = 8;
 
 // ---------- utils ----------
 static inline double clampd(double v,double lo,double hi){
@@ -46,44 +47,85 @@ static vec predict_proba(const mat& X,const vec& W,double b){
     return z;
 }
 
-// ---------- reward с учётом режима/импульса ----------
-static double simulate_reward(const mat& Xva,const vec& fut_ret,const vec& proba,double thr,double tp,double sl){
+// ---------- regime proxy (v8 columns map) ----------
+// v8 feature indices:
+//  0: ema_spread, 1: rsi, 2: macd, 3: macd_hist, 4: atr, 5: bb_width,
+//  6: volr, 7: dPct, 8: corr_v, 9: accel, 10: slope, 11: sr_dist,
+// 12: energy, 13: liq, 14: trap_idx, 15: vp_ratio, 16: manip_flag,
+// 17: mfi_norm, 18: flow_ratio, 19: cum_flow, 20: sfi,
+// 21..27: derived (ratios/tanh combos)
+struct Regime {
+    int type;        // 0=flat, 1=trend, 2=correction
+    double k_reward; // множитель награды
+    double tp_mul;
+    double sl_mul;
+};
+
+static inline Regime classify_row_v8(const rowvec& x){
+    const double energy = x(12);
+    const double slope  = x(10);
+    const double accel  = x(9);
+    const double corr   = x(8);
+
+    // Простая и устойчивая логика:
+    // flat: низкая энергия и маленький наклон
+    if (std::fabs(slope) < 1e-3 && energy < 0.9) {
+        return {0, 0.5, 1.0, 1.0};
+    }
+    // correction: большая перекорреляция к EMA или наклон и коррекция в противофазе
+    if (std::fabs(corr) > 1.2 || (slope*accel) < 0.0) {
+        return {2, 0.7, 0.6, 0.6};
+    }
+    // trend (особенно старт импульса)
+    if (energy >= 1.05 && slope*accel > 0.0) {
+        return {1, 1.3, 1.0, 1.0};
+    }
+    // по умолчанию — умеренный тренд
+    return {1, 1.0, 1.0, 1.0};
+}
+
+// ---------- reward v8 (режим, импульс, анти-манип) ----------
+static double simulate_reward_v8(const mat& Xva,
+                                 const vec& fut_ret,
+                                 const vec& proba,
+                                 double thr,
+                                 double tp,
+                                 double sl)
+{
     double R=0.0;
     const uword N=fut_ret.n_rows;
-    // Колонки под v7 (см. features v7):
-    // regime_type/2 в col=10, accel в col=7
-    int regime_col = Xva.n_cols >= 24 ? 10 : std::max<int>(0, Xva.n_cols-1);
-    int accel_col  = Xva.n_cols >= 24 ? 7  : 0;
 
     for(uword i=0;i<N;++i){
         double fr = fut_ret(i);
         double pr = proba(i);
+        rowvec x = Xva.row(i);
 
-        // восстановим метки
-        double regime_type = Xva(i,regime_col)*2.0; // 0 flat, 1 trend, 2 correction
-        double accel = Xva(i,accel_col);
+        Regime rg = classify_row_v8(x);
 
-        double tp_use=tp, sl_use=sl;
-        double k_reward=1.0;
+        // анти-манип штраф/гашение
+        double manip = 0.0;
+        if (Xva.n_cols > 16) manip = x(16); // 0/1
 
-        if(regime_type==0){                 // flat
-            k_reward = 0.5;
-        }else if(regime_type==2){           // correction
-            k_reward = 0.7;
-            tp_use *= 0.6;
-            sl_use *= 0.6;
-        }else if(regime_type==1 && accel>0){// trend + ранний импульс
-            k_reward = 1.3;
+        double tp_use = tp * rg.tp_mul;
+        double sl_use = sl * rg.sl_mul;
+        double k      = rg.k_reward;
+
+        // штраф за манипуляцию (снижает множитель)
+        if (manip > 0.5) {
+            k *= 0.6;
+            tp_use *= 0.9;
+            // sl_use оставим как есть — агрессивный выход из ловушки
         }
 
-        if(pr>=thr){
-            if(fr>=tp_use)       R += tp_use*k_reward;
-            else if(fr<=-sl_use) R -= sl_use*k_reward;
-            else                 R += fr*k_reward;
+        if (pr>=thr){
+            if(fr>=tp_use)       R += tp_use * k;
+            else if(fr<=-sl_use) R -= sl_use * k;
+            else                 R += fr * k;
         }else{
-            if(fr<=-sl_use)      R += tp_use*0.5;
-            else if(fr>=tp_use)  R -= sl_use*0.5;
-            else                 R -= fr*0.3;
+            // вне сделки — «упущенная выгода/экономия убытка»
+            if(fr<=-sl_use)      R += tp_use * 0.5;
+            else if(fr>=tp_use)  R -= sl_use * 0.5;
+            else                 R -= fr * 0.3;
         }
     }
     return R;
@@ -98,7 +140,7 @@ json trainPPO_pro(const arma::mat& raw15,
                   double tp,
                   double sl,
                   int ma_len,
-                  bool /*use_antimanip*/) // параметр оставлен для совместимости, в v7 не используется
+                  bool /*use_antimanip*/)
 {
     json out=json::object();
     try{
@@ -162,10 +204,10 @@ json trainPPO_pro(const arma::mat& raw15,
         vec pred01=conv_to<vec>::from(pv>=0.5);
         double acc=arma::mean(conv_to<vec>::from(pred01==yva));
 
-        // best_thr по вал. награде
+        // best_thr по вал. награде v8
         double best_thr=0.5, best_R=-1e100;
-        for(double thr=0.3; thr<=0.7+1e-9; thr+=0.02){
-            double R=simulate_reward(Xva,fr_va,pv,thr,thr_pos,thr_neg);
+        for(double thr=0.30; thr<=0.70+1e-9; thr+=0.02){
+            double R=simulate_reward_v8(Xva,fr_va,pv,thr,thr_pos,thr_neg);
             if(R>best_R){ best_R=R; best_thr=thr; }
         }
         best_thr=clampd(best_thr,1e-4,0.99);
@@ -200,7 +242,7 @@ json trainPPO_pro(const arma::mat& raw15,
         out["version"]=FEAT_VERSION_CURRENT;
         out["metrics"]=metrics;
 
-        std::cout<<"[TRAIN] PPO_PRO v7 ok acc="<<acc
+        std::cout<<"[TRAIN] PPO_PRO v8 ok acc="<<acc
                  <<" R="<<best_R
                  <<" thr="<<best_thr
                  <<" D="<<D
