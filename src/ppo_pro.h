@@ -4,8 +4,8 @@
 
 namespace etai {
 
-// PPO-PRO (логрег-политика), v7 (режим+импульс).
-// Параметр use_antimanip оставлен для совместимости с вызовом, в v7 можно не использовать.
+// Тренер PPO-PRO (логрег). С поддержкой флага anti-manip (пока может не использоваться).
+// raw60/raw240/raw1440 — зарезервированы под MTF, можно передавать nullptr.
 nlohmann::json trainPPO_pro(const arma::mat& raw15,
                             const arma::mat* raw60,
                             const arma::mat* raw240,
@@ -14,6 +14,6 @@ nlohmann::json trainPPO_pro(const arma::mat& raw15,
                             double tp,
                             double sl,
                             int ma_len,
-                            bool use_antimanip);
+                            bool use_antimanip = false);
 
 } // namespace etai

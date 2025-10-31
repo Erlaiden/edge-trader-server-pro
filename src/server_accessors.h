@@ -1,31 +1,33 @@
 #pragma once
+#include <cstdint>
 #include "json.hpp"
-#include <atomic>
-#include <string>
 
 namespace etai {
 
-// --- threshold ---
-double     get_model_thr();
-void       set_model_thr(double v);
+// --- Threshold ---
+double        get_model_thr();
+void          set_model_thr(double v);
 
 // --- MA length ---
-long long  get_model_ma_len();
-void       set_model_ma_len(long long v);
+long long     get_model_ma_len();
+void          set_model_ma_len(long long v);
 
-// --- feat_dim (из policy) ---
-int        get_model_feat_dim();
-void       set_model_feat_dim(int v);
+// --- Feature dimension (canonical) ---
+int           get_feat_dim();
+void          set_feat_dim(int d);
 
-// --- текущая модель (JSON) ---
-const nlohmann::json& get_current_model();
-void                  set_current_model(const nlohmann::json& m);
+// --- Back-compat aliases expected by routes/metrics.cpp ---
+inline int    get_model_feat_dim() { return get_feat_dim(); }
+inline void   set_model_feat_dim(int d) { set_feat_dim(d); }
 
-// --- инициализация атомов из файла модели (по умолчанию BTCUSDT/15) ---
-void init_model_atoms_from_disk(const std::string& symbol = "BTCUSDT",
-                                const std::string& interval = "15");
+// --- Current model JSON ---
+nlohmann::json get_current_model();
+void           set_current_model(const nlohmann::json& j);
 
-// (опционально, если используется где-то ещё)
-nlohmann::json get_data_health();
+// --- Startup initialization from disk (with safe defaults) ---
+void init_model_atoms_from_disk(const char* path,
+                                double def_thr,
+                                long long def_ma,
+                                int def_feat_dim);
 
 } // namespace etai

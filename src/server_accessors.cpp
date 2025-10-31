@@ -1,91 +1,69 @@
 #include "server_accessors.h"
-#include <atomic>
-#include <fstream>
-#include <filesystem>
 #include "json.hpp"
-#include "utils_model.h"  // safe_read_json_file(...) если у тебя уже есть
-
-namespace fs = std::filesystem;
-using nlohmann::json;
+#include <atomic>
+#include <limits>
+#include <fstream>
+#include <cmath>
 
 namespace etai {
 
-  // --- атомарные параметры модели (дефолты безопасные) ---
-  std::atomic<double>     MODEL_THR{0.01};
-  std::atomic<long long>  MODEL_MA_LEN{12};
-  std::atomic<int>        MODEL_FEAT_DIM{8};
+using json = nlohmann::json;
 
-  // --- текущая модель целиком ---
-  static json CURRENT_MODEL = json::object();
+// === Глобальное состояние (единый инстанс) ===
+// СРАЗУ корректные дефолты, без NaN:
+static std::atomic<double>    G_MODEL_THR{0.38};
+static std::atomic<long long> G_MODEL_MA{12};
+static std::atomic<int>       G_FEAT_DIM{28};
+static json                   G_CURRENT_MODEL = json::object();
 
-  // --- threshold ---
-  double get_model_thr()                { return MODEL_THR.load(); }
-  void   set_model_thr(double v)        { MODEL_THR.store(v); }
+// --- Threshold ---
+double get_model_thr() { return G_MODEL_THR.load(std::memory_order_relaxed); }
+void   set_model_thr(double v) { G_MODEL_THR.store(v, std::memory_order_relaxed); }
 
-  // --- MA len ---
-  long long get_model_ma_len()          { return MODEL_MA_LEN.load(); }
-  void      set_model_ma_len(long long v){ MODEL_MA_LEN.store(v); }
+// --- MA length ---
+long long get_model_ma_len() { return G_MODEL_MA.load(std::memory_order_relaxed); }
+void      set_model_ma_len(long long v) { G_MODEL_MA.store(v, std::memory_order_relaxed); }
 
-  // --- feat_dim ---
-  int  get_model_feat_dim()             { return MODEL_FEAT_DIM.load(); }
-  void set_model_feat_dim(int v)        { MODEL_FEAT_DIM.store(v); }
+// --- Feature dimension ---
+int  get_feat_dim() { return G_FEAT_DIM.load(std::memory_order_relaxed); }
+void set_feat_dim(int d) { G_FEAT_DIM.store(d, std::memory_order_relaxed); }
 
-  // --- current model ---
-  const json& get_current_model()       { return CURRENT_MODEL; }
-  void        set_current_model(const json& m)
-  {
-    CURRENT_MODEL = m;
+// --- Current model JSON ---
+json get_current_model() { return G_CURRENT_MODEL; }
+void set_current_model(const json& j) { G_CURRENT_MODEL = j; }
 
-    // Поддержим согласованность атомов при обновлении модели
+// --- Safe JSON read ---
+static inline json safe_read_json_file(const char* p){
     try {
-      if (m.contains("best_thr")) set_model_thr(m.at("best_thr").get<double>());
-    } catch (...) {}
-    try {
-      if (m.contains("ma_len"))   set_model_ma_len(m.at("ma_len").get<long long>());
-    } catch (...) {}
-    try {
-      if (m.contains("policy") && m.at("policy").contains("feat_dim")) {
-        set_model_feat_dim(m.at("policy").at("feat_dim").get<int>());
-      }
-    } catch (...) {}
-  }
+        std::ifstream f(p);
+        if(!f.good()) return json::object();
+        json j; f >> j; return j.is_object()? j : json::object();
+    } catch(...) { return json::object(); }
+}
 
-  // --- загрузка json с диска (через твою безопасную утилиту) ---
-  static json read_json_file(const std::string& path)
-  {
-    try {
-      return safe_read_json_file(path);
-    } catch (...) {
-      return json::object();
+// --- Startup init: читаем диск, выставляем атомики, гарантируем не-NaN ---
+void init_model_atoms_from_disk(const char* path,
+                                double def_thr,
+                                long long def_ma,
+                                int def_feat_dim)
+{
+    // выставим дефолты на всякий случай заранее
+    set_model_thr(def_thr);
+    set_model_ma_len(def_ma);
+    set_feat_dim(def_feat_dim);
+    set_current_model(json::object());
+
+    json disk = safe_read_json_file(path);
+    if(disk.is_object()){
+        set_current_model(disk);
+        // предпочитаем значения из файла, но санитизируем
+        double thr = disk.value("best_thr", def_thr);
+        long long ma = disk.value("ma_len", def_ma);
+        if(!std::isfinite(thr)) thr = def_thr;
+        if(ma <= 0) ma = def_ma;
+        set_model_thr(thr);
+        set_model_ma_len(ma);
     }
-  }
-
-  // --- инициализация атомов из файла модели ---
-  void init_model_atoms_from_disk(const std::string& symbol, const std::string& interval)
-  {
-    // Политика именования: cache/models/<SYMBOL>_<INTERVAL>_ppo_pro.json
-    const std::string fname = "cache/models/" + symbol + "_" + interval + "_ppo_pro.json";
-    if (!fs::exists(fname)) {
-      // файла нет — оставляем дефолты и пустую CURRENT_MODEL
-      return;
-    }
-
-    json disk = read_json_file(fname);
-    if (disk.is_object() && disk.contains("model")) {
-      // некоторые ручки хранят под .model — нормализуем
-      disk = disk["model"];
-    }
-
-    if (!disk.is_object()) return;
-
-    // Дополняем policy, если нужно
-    if (!disk.contains("policy")) disk["policy"] = json::object();
-
-    // Обновляем CURRENT_MODEL и атомы
-    set_current_model(disk);
-  }
-
-  // Заглушка-декларация, если где-то зовут (реализация в utils_data.cpp)
-  nlohmann::json get_data_health();
+}
 
 } // namespace etai

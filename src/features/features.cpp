@@ -1,23 +1,22 @@
 #include "features.h"
-#include "money_flow.h"
+#include "context_detector.h"
 #include "json.hpp"
 #include <armadillo>
 #include <cmath>
 #include <algorithm>
 #include <vector>
 
-// Временный хак до правки CMakeLists.txt:
-// подтягиваем реализацию в этот TU, чтобы не ловить undefined reference.
-#include "money_flow.cpp"
+// ВРЕМЕННО до правки CMakeLists.txt — подтягиваем реализацию контекста сюда:
+#include "context_detector.cpp"
 
 using json = nlohmann::json;
 using namespace arma;
 
 namespace etai {
 
-constexpr int FEAT_VERSION = 8;
+constexpr int FEAT_VERSION = 9;
 
-// ------------------ вспомогательные функции ------------------
+// ---------- вспомогательные функции ----------
 static double ema_one(const std::vector<double>& v, int period, size_t i) {
     if (i + 1 < (size_t)period) return NAN;
     double k = 2.0 / (period + 1);
@@ -30,8 +29,7 @@ static double ema_one(const std::vector<double>& v, int period, size_t i) {
 static double sma_one(const std::vector<double>& v, int period, size_t i) {
     if (i + 1 < (size_t)period) return NAN;
     double s = 0;
-    for (size_t j = i + 1 - period; j <= i; ++j)
-        s += v[j];
+    for (size_t j = i + 1 - period; j <= i; ++j) s += v[j];
     return s / period;
 }
 
@@ -50,7 +48,8 @@ static double rsi_one(const std::vector<double>& c, int period, size_t i) {
 static double atr_one(const std::vector<double>& h,
                       const std::vector<double>& l,
                       const std::vector<double>& c,
-                      int period, size_t i) {
+                      int period,
+                      size_t i) {
     if (i + 1 < (size_t)period + 1) return NAN;
     double s = 0;
     for (size_t j = i + 1 - period; j <= i; ++j) {
@@ -62,13 +61,15 @@ static double atr_one(const std::vector<double>& h,
     return s / period;
 }
 
-// ------------------ построение фич ------------------
+// ---------- построение матрицы признаков ----------
 arma::Mat<double> build_feature_matrix(const arma::Mat<double>& raw) {
-    if (raw.n_rows < 50 || raw.n_cols < 6) return arma::Mat<double>();
+    if (raw.n_rows < 30 || raw.n_cols < 6) return arma::Mat<double>();
 
     size_t n = raw.n_rows;
+    std::vector<long long> ts(n);
     std::vector<double> open(n), high(n), low(n), close(n), vol(n);
     for (size_t i = 0; i < n; ++i) {
+        ts[i]    = static_cast<long long>(raw(i, 0));
         open[i]  = raw(i, 1);
         high[i]  = raw(i, 2);
         low[i]   = raw(i, 3);
@@ -76,112 +77,86 @@ arma::Mat<double> build_feature_matrix(const arma::Mat<double>& raw) {
         vol[i]   = raw(i, 5);
     }
 
-    std::vector<double> ema_fast(n), ema_slow(n), rsi_v(n), atr_v(n),
-                        macd_v(n), macd_signal(n), macd_hist(n),
-                        bb_width(n), volr_v(n),
-                        corr_v(n), accel_v(n), slope_v(n),
-                        sr_dist(n), energy_v(n), liq_v(n),
-                        trap_idx(n), vp_ratio(n), manip_flag(n);
+    std::vector<double> ema_fast(n), ema_slow(n), rsi_v(n),
+        macd_v(n), macd_hist(n), atr_v(n), accel_v(n), slope_v(n);
 
-    // --- Технические и режимные признаки ---
     for (size_t i = 0; i < n; ++i) {
         ema_fast[i] = ema_one(close, 12, i);
         ema_slow[i] = ema_one(close, 26, i);
         rsi_v[i]    = rsi_one(close, 14, i);
         atr_v[i]    = atr_one(high, low, close, 14, i);
 
-        macd_v[i] = ema_fast[i] - ema_slow[i];
-        macd_signal[i] = ema_one(macd_v, 9, i);
-        macd_hist[i]   = macd_v[i] - macd_signal[i];
-
-        if (i >= 20) {
-            double sma20 = sma_one(close, 20, i);
-            double sd = 0;
-            for (size_t j = i + 1 - 20; j <= i; ++j)
-                sd += std::pow(close[j] - sma20, 2);
-            sd = std::sqrt(sd / 20);
-            bb_width[i] = (sma20 != 0) ? (4.0 * sd / sma20) : NAN;
-        } else bb_width[i] = NAN;
-
-        volr_v[i] = (i >= 20 && sma_one(vol, 20, i) > 0)
-                    ? vol[i] / sma_one(vol, 20, i)
-                    : NAN;
-
-        // Коррекция к EMA по ATR
-        corr_v[i] = (atr_v[i] > 0) ? (close[i] - ema_fast[i]) / atr_v[i] : NAN;
-
-        // Ускорение цены
-        if (i >= 2)
-            accel_v[i] = (close[i] - 2 * close[i-1] + close[i-2]) / std::max(1e-12, std::fabs(close[i-2]));
-        else accel_v[i] = NAN;
-
-        // Наклон EMA
-        slope_v[i] = (i >= 3) ? (ema_fast[i] - ema_fast[i-3]) / 3.0 : NAN;
-
-        // Поддержка/сопротивление — нормированная дистанция
-        double s_min = *std::min_element(low.begin() + std::max<int>(0, i-20), low.begin() + i+1);
-        double s_max = *std::max_element(high.begin() + std::max<int>(0, i-20), high.begin() + i+1);
-        sr_dist[i] = (s_max - close[i]) / (s_max - s_min + 1e-9);
-
-        // Энергия и ликвидность
-        double atr_sma = sma_one(atr_v, 14, i);
-        energy_v[i] = (atr_sma > 0) ? atr_v[i] / atr_sma : NAN;
-
-        double vol_max = 0;
-        if (i >= 20)
-            vol_max = *std::max_element(vol.begin() + i - 20, vol.begin() + i + 1);
-        liq_v[i] = (vol_max > 0) ? vol[i] / vol_max : NAN;
-
-        // Анти-манип признаки
-        trap_idx[i] = (atr_v[i] > 0) ? (high[i]-low[i])/atr_v[i] - std::fabs(close[i]-open[i])/atr_v[i] : NAN;
-        vp_ratio[i] = (sma_one(vol,20,i) > 0) ? std::fabs(close[i]-open[i]) / (vol[i]/(sma_one(vol,20,i)+1e-9)) : NAN;
-        manip_flag[i] = (trap_idx[i] > 2.0 || vp_ratio[i] > 2.0) ? 1.0 : 0.0;
+        // ускорение и наклон
+        if (i >= 2) {
+            double d1 = close[i] - close[i - 1];
+            double d2 = close[i - 1] - close[i - 2];
+            accel_v[i] = d1 - d2;
+            slope_v[i] = (i >= 3) ? (close[i] - close[i - 3]) : 0.0;
+        } else {
+            accel_v[i] = 0.0;
+            slope_v[i] = 0.0;
+        }
     }
 
-    // --- Денежные потоки (MFI / Flow / SFI) через money_flow.cpp ---
-    FlowMetrics mf = compute_money_flow(open, high, low, close, vol);
+    // MACD
+    for (size_t i = 0; i < n; ++i) {
+        macd_v[i] = ema_fast[i] - ema_slow[i];
+        double macd_signal = ema_one(macd_v, 9, i);
+        macd_hist[i] = macd_v[i] - macd_signal;
+    }
 
-    // --- Сборка матрицы признаков ---
+    // контекст
+    ContextSeries ctx = compute_context(ts, open, high, low, close, vol);
+
+    // Матрица признаков
     const size_t D = 28;
     arma::Mat<double> F(n, D, arma::fill::zeros);
 
     for (size_t i = 0; i < n; ++i) {
-        F(i,0)=ema_fast[i]-ema_slow[i];     // trend spread
-        F(i,1)=rsi_v[i]/100.0;              // норм. RSI
-        F(i,2)=macd_v[i];
-        F(i,3)=macd_hist[i];
-        F(i,4)=atr_v[i];
-        F(i,5)=bb_width[i];
-        F(i,6)=volr_v[i];
-        F(i,7)=(close[i]-open[i]) / std::max(1e-12, open[i]); // дневной % change
-        F(i,8)=corr_v[i];
-        F(i,9)=accel_v[i];
-        F(i,10)=slope_v[i];
-        F(i,11)=sr_dist[i];
-        F(i,12)=energy_v[i];
-        F(i,13)=liq_v[i];
-        F(i,14)=trap_idx[i];
-        F(i,15)=vp_ratio[i];
-        F(i,16)=manip_flag[i];
-        F(i,17)=(std::isfinite(mf.mfi[i]) ? mf.mfi[i]/100.0 : NAN);
-        F(i,18)=mf.flow_ratio[i];
-        F(i,19)=mf.cum_flow[i];
-        F(i,20)=mf.sfi[i];
+        // базовые технические
+        F(i, 0) = ema_fast[i] - ema_slow[i];   // trend spread
+        F(i, 1) = rsi_v[i] / 100.0;            // RSI
+        F(i, 2) = macd_v[i];
+        F(i, 3) = macd_hist[i];
+        F(i, 4) = atr_v[i];
+        F(i, 5) = accel_v[i];
+        F(i, 6) = slope_v[i];
+
+        // контекст
+        F(i, 7)  = ctx.energy[i];
+        F(i, 8)  = ctx.liquidity[i];
+        F(i, 9)  = ctx.sentiment[i];
+        F(i, 10) = ctx.session_sin[i];
+        F(i, 11) = ctx.session_cos[i];
+
+        // one-hot фазы
+        int ph = ctx.phase[i];
+        F(i, 12) = (ph == 1) ? 1.0 : 0.0; // expansion
+        F(i, 13) = (ph == 2) ? 1.0 : 0.0; // distribution
+        F(i, 14) = (ph == 3) ? 1.0 : 0.0; // correction
+
         // производные
-        F(i,21)=(ema_fast[i]>0)?(ema_slow[i]/ema_fast[i]):0;
-        F(i,22)=std::tanh(F(i,8)*F(i,12));     // corr × energy
-        F(i,23)=std::tanh(F(i,17)*F(i,20));    // MFI × SFI
-        F(i,24)=energy_v[i]*liq_v[i];
-        F(i,25)=std::fabs(corr_v[i])*energy_v[i];
-        F(i,26)=trap_idx[i]*vp_ratio[i];
-        F(i,27)=std::tanh(F(i,12)*F(i,20));    // energy × SFI
+        double diff = close[i] - open[i];
+        F(i, 15) = (open[i] > 0) ? diff / open[i] : 0.0; // дневной %
+        F(i, 16) = (i > 0) ? close[i] - close[i - 1] : 0.0;
+        F(i, 17) = (i > 0) ? (vol[i] - vol[i - 1]) : 0.0;
+        F(i, 18) = (i >= 5)  ? sma_one(close, 5, i) - sma_one(close, 10, i) : 0.0;
+        F(i, 19) = (i >= 14) ? (rsi_one(close, 14, i) - 50.0) / 50.0 : 0.0;
+        F(i, 20) = std::fabs(ema_fast[i] - ema_slow[i]) / (atr_v[i] + 1e-8);
+        F(i, 21) = (i >= 10) ? sma_one(vol, 10, i) / (sma_one(vol, 20, i) + 1e-8) : 0.0;
+        F(i, 22) = (i >= 20) ? sma_one(atr_v, 10, i) / (sma_one(atr_v, 20, i) + 1e-8) : 0.0;
+        F(i, 23) = (macd_v[i] > 0 && rsi_v[i] > 50) ? 1.0 : 0.0;
+        F(i, 24) = (macd_v[i] < 0 && rsi_v[i] < 50) ? 1.0 : 0.0;
+        F(i, 25) = ctx.energy[i] * (macd_v[i] > 0 ? 1 : -1);
+        F(i, 26) = ctx.sentiment[i] * (ctx.energy[i]);
+        F(i, 27) = (ctx.phase[i] == 3 && ctx.sentiment[i] < 0) ? 1.0 : 0.0;
     }
 
     F.replace(arma::datum::nan, 0.0);
     return F;
 }
 
-// ------------------ make_features для JSON-экспорта ------------------
+// ---------- JSON экспортер ----------
 json make_features(const std::vector<double>& o,
                    const std::vector<double>& h,
                    const std::vector<double>& l,

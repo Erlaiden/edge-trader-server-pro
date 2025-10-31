@@ -1,46 +1,48 @@
-#include "agents.h"
-#include "json.hpp"
-#include "rt_metrics.h"
+#include <httplib.h>
+#include <armadillo>
+#include "../agents/agent_base.h"
+#include "../json.hpp"
 
+namespace etai {
 using json = nlohmann::json;
 
-void register_agents_routes(httplib::Server& srv){
-  // Просмотр агрегатов агентов
-  srv.Get("/api/agents", [&](const httplib::Request&, httplib::Response& res){
-    json out{
-      {"ok", true},
-      {"long_total",   INFER_SIG_LONG.load(std::memory_order_relaxed)},
-      {"short_total",  INFER_SIG_SHORT.load(std::memory_order_relaxed)},
-      {"neutral_total",INFER_SIG_NEUTRAL.load(std::memory_order_relaxed)},
-      {"last_infer_ts_ms", LAST_INFER_TS.load(std::memory_order_relaxed)}
-    };
-    res.set_content(out.dump(), "application/json");
-  });
+// Фабричные функции определены в соответствующих src/agents/*.cpp
+extern "C" AgentBase* create_agent_long();
+extern "C" AgentBase* create_agent_short();
+extern "C" AgentBase* create_agent_flat();
+extern "C" AgentBase* create_agent_correction();
+extern "C" AgentBase* create_agent_breakout();
 
-  // Сброс агрегатов агентов
-  srv.Post("/api/agents/reset", [&](const httplib::Request&, httplib::Response& res){
-    json before{
-      {"long_total",   INFER_SIG_LONG.load(std::memory_order_relaxed)},
-      {"short_total",  INFER_SIG_SHORT.load(std::memory_order_relaxed)},
-      {"neutral_total",INFER_SIG_NEUTRAL.load(std::memory_order_relaxed)}
-    };
+// /api/agents/test?type=long|short|flat|correction|breakout&thr=0.5
+void setup_agents_routes(httplib::Server& svr) {
+    svr.Get("/api/agents/test", [](const httplib::Request& req, httplib::Response& res) {
+        const std::string type = req.get_param_value("type");
+        const double thr = req.has_param("thr") ? std::stod(req.get_param_value("thr")) : 0.5;
 
-    INFER_SIG_LONG.store(0, std::memory_order_relaxed);
-    INFER_SIG_SHORT.store(0, std::memory_order_relaxed);
-    INFER_SIG_NEUTRAL.store(0, std::memory_order_relaxed);
+        AgentPtr agent;
+        if (type == "long")            agent.reset(create_agent_long());
+        else if (type == "short")      agent.reset(create_agent_short());
+        else if (type == "flat")       agent.reset(create_agent_flat());
+        else if (type == "correction") agent.reset(create_agent_correction());
+        else if (type == "breakout")   agent.reset(create_agent_breakout());
+        else {
+            json err = {{"ok", false}, {"error", "unknown agent type"}};
+            res.set_content(err.dump(2), "application/json");
+            return;
+        }
 
-    json after{
-      {"long_total",   INFER_SIG_LONG.load(std::memory_order_relaxed)},
-      {"short_total",  INFER_SIG_SHORT.load(std::memory_order_relaxed)},
-      {"neutral_total",INFER_SIG_NEUTRAL.load(std::memory_order_relaxed)}
-    };
+        // Заглушка фич: 28 признаков под FEAT_VERSION=9
+        arma::rowvec features = arma::randn<arma::rowvec>(28);
+        const int action = agent->decide(features, thr);
 
-    json out{
-      {"ok", true},
-      {"before", before},
-      {"after", after},
-      {"last_infer_ts_ms", LAST_INFER_TS.load(std::memory_order_relaxed)}
-    };
-    res.set_content(out.dump(), "application/json");
-  });
+        json j = {
+            {"ok", true},
+            {"agent", agent->name()},
+            {"thr", thr},
+            {"confidence", agent->confidence()},
+            {"decision", action}
+        };
+        res.set_content(j.dump(2), "application/json");
+    });
 }
+} // namespace etai
