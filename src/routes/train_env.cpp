@@ -17,6 +17,12 @@ static inline bool feature_on(const char* k) {
     if (!s || !*s) return false;
     return (s[0]=='1') || (s[0]=='T') || (s[0]=='t') || (s[0]=='Y') || (s[0]=='y');
 }
+static inline double clampd(double v,double lo,double hi){
+    if(!std::isfinite(v)) return lo;
+    if(v<lo) return lo;
+    if(v>hi) return hi;
+    return v;
+}
 static inline double sigmoid(double z) {
     if (!std::isfinite(z)) z = 0.0;
     return 1.0 / (1.0 + std::exp(-z));
@@ -53,11 +59,23 @@ static inline double local_winrate(const arma::vec& pnl) {
     return (den > 0) ? (double)pos / (double)den : 0.0;
 }
 
+// «знак тренда» из первой колонки фич (ema_fast - ema_slow)
+static inline int trend_sign_from_features(const arma::mat& F, arma::uword last_k=200){
+    if (F.n_rows==0 || F.n_cols==0) return 0;
+    arma::uword n = F.n_rows;
+    arma::uword from = (n>last_k)? (n-last_k): 0;
+    arma::vec col = F.col(0).rows(from, n-1);
+    double m = arma::mean(col);
+    if (m> 1e-12) return +1;
+    if (m<-1e-12) return -1;
+    return 0;
+}
+
 // ---------- модельная политика ----------
 struct ModelPolicy {
     std::vector<double> W;
     double b = 0.0;
-    double thr = 0.5;
+    double thr = 0.5;  // best_thr
     int feat_dim = 0;
     bool ok = false;
 
@@ -109,10 +127,19 @@ static inline void register_train_env_routes(httplib::Server& svr) {
         }
 
         try {
-            const std::string symbol = req.has_param("symbol") ? req.get_param_value("symbol") : "BTCUSDT";
+            const std::string symbol   = req.has_param("symbol")   ? req.get_param_value("symbol")   : "BTCUSDT";
             const std::string interval = req.has_param("interval") ? req.get_param_value("interval") : "15";
             int steps = 500;
             try { if (req.has_param("steps")) steps = std::stoi(req.get_param_value("steps")); } catch(...) {}
+
+            // policy: model|thr_only|sign_channel
+            std::string policy = req.has_param("policy") ? req.get_param_value("policy") : "model";
+            if (policy!="model" && policy!="thr_only" && policy!="sign_channel") policy="model";
+
+            // fee (комиссия на сделку, абсолютная), клауза безопасности
+            double fee = 0.0005;
+            try { if (req.has_param("fee")) fee = std::stod(req.get_param_value("fee")); } catch(...) {}
+            fee = clampd(fee, 0.0, 0.01);
 
             // 1) Данные и фичи
             arma::mat raw;
@@ -128,38 +155,37 @@ static inline void register_train_env_routes(httplib::Server& svr) {
                 return;
             }
 
-            // 2) Политика из текущей модели
+            // 2) Политика
             ModelPolicy mp = load_model_policy("cache/models/BTCUSDT_15_ppo_pro.json");
-            if (!mp.ok) {
-                json err = {{"ok", false}, {"error", "no_policy"}, {"detail", "model json missing or invalid"}};
-                res.set_content(err.dump(2), "application/json");
-                return;
-            }
-
-            // 2a) Толерантность к рассинхрону фич (за флагом)
             bool adapted = false;
-            if (mp.feat_dim != (int)Fm.n_cols) {
-                if (feature_on("ETAI_TOLERATE_FEAT_MISMATCH") &&
-                    (int)Fm.n_cols + 4 == mp.feat_dim)
-                {
-                    arma::mat Fa(Fm.n_rows, mp.feat_dim, arma::fill::zeros);
-                    Fa.cols(0, Fm.n_cols-1) = Fm; // дополняем 4 нулями (место под Money Flow)
-                    Fm = std::move(Fa);
-                    adapted = true;
-                } else {
-                    json err = {
-                        {"ok", false},
-                        {"error", "feat_dim_mismatch"},
-                        {"policy_feat_dim", mp.feat_dim},
-                        {"features_cols", (int)Fm.n_cols},
-                        {"hint", "export ETAI_FEAT_ENABLE_MFLOW=1  (или ETAI_TOLERATE_FEAT_MISMATCH=1 для нулевого паддинга)"}
-                    };
+            if (policy=="model") {
+                if (!mp.ok) {
+                    json err = {{"ok", false}, {"error", "no_policy"}, {"detail", "model json missing or invalid"}};
                     res.set_content(err.dump(2), "application/json");
                     return;
                 }
+                if (mp.feat_dim != (int)Fm.n_cols) {
+                    if (feature_on("ETAI_TOLERATE_FEAT_MISMATCH") &&
+                        (int)Fm.n_cols + 4 == mp.feat_dim)
+                    {
+                        arma::mat Fa(Fm.n_rows, mp.feat_dim, arma::fill::zeros);
+                        Fa.cols(0, Fm.n_cols-1) = Fm;
+                        Fm = std::move(Fa);
+                        adapted = true;
+                    } else {
+                        json err = {
+                            {"ok", false}, {"error", "feat_dim_mismatch"},
+                            {"policy_feat_dim", mp.feat_dim},
+                            {"features_cols", (int)Fm.n_cols},
+                            {"hint", "export ETAI_FEAT_ENABLE_MFLOW=1  (или ETAI_TOLERATE_FEAT_MISMATCH=1)"}
+                        };
+                        res.set_content(err.dump(2), "application/json");
+                        return;
+                    }
+                }
             }
 
-            // 3) Конвертация в std::vector
+            // 3) Конвертация датасета
             std::vector<std::vector<double>> feats(Fm.n_rows, std::vector<double>(Fm.n_cols));
             for (size_t i = 0; i < Fm.n_rows; ++i)
                 for (size_t j = 0; j < Fm.n_cols; ++j)
@@ -169,18 +195,36 @@ static inline void register_train_env_routes(httplib::Server& svr) {
 
             etai::EnvConfig cfg;
             cfg.start_equity = 1.0;
-            cfg.fee_per_trade = 0.0005;
+            cfg.fee_per_trade = fee;
             cfg.feat_dim = (int)Fm.n_cols;
 
             etai::EnvTrading env;
             env.set_dataset(feats, closes, cfg);
 
-            auto policy_fn = [mp](const std::vector<double>& st)->int { return mp(st); };
+            // 4) Реализация политик
+            std::function<int(const std::vector<double>&)> policy_fn;
+            if (policy=="model") {
+                policy_fn = [mp](const std::vector<double>& st)->int { return mp(st); };
+            } else if (policy=="thr_only") {
+                // упрощённый порог по канальному признаку (feature[0]) через сигмоиду
+                policy_fn = [](const std::vector<double>& st)->int {
+                    if (st.empty()) return 0;
+                    double p = sigmoid(st[0]); // суррогат «уверенности»
+                    double thr = 0.5;
+                    return (p >= thr) ? +1 : -1;
+                };
+            } else { // sign_channel
+                policy_fn = [](const std::vector<double>& st)->int {
+                    if (st.empty()) return 0;
+                    return (st[0] >= 0.0) ? +1 : -1;
+                };
+            }
 
+            // 5) Запуск эпизода
             etai::EpisodeRunner runner;
             auto traj = runner.run_fixed(env, policy_fn, std::min<int>(steps, (int)Fm.n_rows-1));
 
-            // 4) Метрики по pnl (r_t из env)
+            // 6) Метрики по pnl (r_t из env)
             arma::vec pnl(traj.rewards.size());
             for (size_t i = 0; i < traj.rewards.size(); ++i) pnl(i) = traj.rewards[i];
 
@@ -195,13 +239,44 @@ static inline void register_train_env_routes(httplib::Server& svr) {
             }
             double pf = (pos_sum > 0 && neg_sum < 0) ? (pos_sum / std::abs(neg_sum)) : 0.0;
 
+            // 7) MTF-контекст (опционально считаем и возвращаем)
+            json htf = json::object();
+            auto mtf_one = [&](const char* tf_name)->json{
+                arma::mat raw_tf;
+                if (!etai::load_raw_ohlcv(symbol, tf_name, raw_tf)) return json{{"ok",false}};
+                arma::mat F_tf = etai::build_feature_matrix(raw_tf);
+                if (F_tf.n_rows==0 || F_tf.n_cols==0) return json{{"ok",false}};
+                int s = trend_sign_from_features(F_tf, 400);
+                return json{{"ok",true},{"sign",s}};
+            };
+            int sign15 = trend_sign_from_features(Fm, 400);
+            json j60  = mtf_one("60");
+            json j240 = mtf_one("240");
+            json j1440= mtf_one("1440");
+            auto agree = [](int a,int b)->int{ if(a==0||b==0) return 0; return (a==b)? +1 : -1; };
+
+            htf["15"]   = {{"ok",true}, {"sign",sign15}};
+            htf["60"]   = j60;
+            htf["240"]  = j240;
+            htf["1440"] = j1440;
+            htf["agree60"]   = j60.contains("sign")   ? agree(sign15, (int)j60["sign"].get<int>())   : 0;
+            htf["agree240"]  = j240.contains("sign")  ? agree(sign15, (int)j240["sign"].get<int>())  : 0;
+            htf["agree1440"] = j1440.contains("sign") ? agree(sign15, (int)j1440["sign"].get<int>()) : 0;
+
+            // 8) Ответ
             json out;
             out["ok"] = true;
             out["env"] = "v1";
             out["rows"] = (int)Fm.n_rows;
             out["cols"] = (int)Fm.n_cols;
             out["steps"] = (int)traj.steps;
-            out["policy"] = {{"source","model_json"},{"thr", mp.thr},{"feat_dim", mp.feat_dim}};
+            out["fee"]   = fee;
+            out["policy"] = {
+                {"name", policy},
+                {"source", (policy=="model" ? "model_json" : "derived")},
+                {"thr",   (policy=="model" ? mp.thr : 0.5)},
+                {"feat_dim", (int)Fm.n_cols}
+            };
             out["equity_final"] = traj.equity_final;
             out["max_dd"] = dd_max;
             out["max_dd_env"] = traj.max_dd;
@@ -211,6 +286,7 @@ static inline void register_train_env_routes(httplib::Server& svr) {
             out["wins"] = traj.wins;
             out["losses"] = traj.losses;
             out["feat_adapted"] = adapted;
+            out["htf"] = htf;
 
             res.set_content(out.dump(2), "application/json");
         } catch (...) {
