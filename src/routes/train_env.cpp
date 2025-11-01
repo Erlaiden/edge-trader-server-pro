@@ -8,24 +8,55 @@
 #include "features.h"
 #include "env/env_trading.h"
 #include "env/episode_runner.h"
-#include "rewardv2_accessors.h"   // etai::{calc_sharpe,calc_max_drawdown,calc_winrate}
 
 using json = nlohmann::json;
 
-// фичефлаг
+// ---------- helpers ----------
 static inline bool feature_on(const char* k) {
     const char* s = std::getenv(k);
     if (!s || !*s) return false;
     return (s[0]=='1') || (s[0]=='T') || (s[0]=='t') || (s[0]=='Y') || (s[0]=='y');
 }
 
-// Сигмоида
 static inline double sigmoid(double z) {
     if (!std::isfinite(z)) z = 0.0;
     return 1.0 / (1.0 + std::exp(-z));
 }
 
-// Политика на основе модели: action ∈ {-1, +1} по порогу best_thr
+// локальные метрики (без зависимостей)
+static inline double local_sharpe(const arma::vec& pnl, double eps=1e-12) {
+    if (pnl.n_elem == 0) return 0.0;
+    double mu = arma::mean(pnl);
+    double sd = arma::stddev(pnl);
+    if (!std::isfinite(sd) || sd < eps) sd = eps;
+    return mu / sd;
+}
+static inline double local_max_drawdown(const arma::vec& pnl) {
+    // считаем эквити как 1 + cum(pnl)
+    if (pnl.n_elem == 0) return 0.0;
+    arma::vec eq(pnl.n_elem + 1, arma::fill::ones);
+    for (arma::uword i = 0; i < pnl.n_elem; ++i) eq(i+1) = eq(i) + pnl(i);
+    double peak = eq(0), maxdd = 0.0;
+    for (arma::uword i = 1; i < eq.n_elem; ++i) {
+        if (eq(i) > peak) peak = eq(i);
+        if (peak > 0.0) {
+            double dd = (peak - eq(i)) / peak;
+            if (dd > maxdd) maxdd = dd;
+        }
+    }
+    return maxdd;
+}
+static inline double local_winrate(const arma::vec& pnl) {
+    if (pnl.n_elem == 0) return 0.0;
+    arma::uword pos = 0, den = 0;
+    for (arma::uword i = 0; i < pnl.n_elem; ++i) {
+        if (pnl(i) > 0) { ++pos; ++den; }
+        else if (pnl(i) < 0) { ++den; }
+    }
+    return (den > 0) ? (double)pos / (double)den : 0.0;
+}
+
+// ---------- модельная политика ----------
 struct ModelPolicy {
     std::vector<double> W;
     double b = 0.0;
@@ -42,7 +73,6 @@ struct ModelPolicy {
     }
 };
 
-// Загрузка policy из JSON модели
 static ModelPolicy load_model_policy(const std::string& path) {
     ModelPolicy mp;
     try {
@@ -72,7 +102,7 @@ static ModelPolicy load_model_policy(const std::string& path) {
     }
 }
 
-// публичная функция регистрации (как ждёт main.cpp)
+// ---------- роут ----------
 static inline void register_train_env_routes(httplib::Server& svr) {
     svr.Get("/api/train_env", [](const httplib::Request& req, httplib::Response& res) {
         if (!feature_on("ETAI_ENABLE_TRAIN_ENV")) {
@@ -101,7 +131,7 @@ static inline void register_train_env_routes(httplib::Server& svr) {
                 return;
             }
 
-            // 2) Политика из текущей модели на диске
+            // 2) Политика из текущей модели
             ModelPolicy mp = load_model_policy("cache/models/BTCUSDT_15_ppo_pro.json");
             if (!mp.ok) {
                 json err = {{"ok", false}, {"error", "no_policy"}, {"detail", "model json missing or invalid"}};
@@ -117,12 +147,11 @@ static inline void register_train_env_routes(httplib::Server& svr) {
                 return;
             }
 
-            // 3) Конвертация для env
+            // 3) Конвертация в std::vector
             std::vector<std::vector<double>> feats(Fm.n_rows, std::vector<double>(Fm.n_cols));
             for (size_t i = 0; i < Fm.n_rows; ++i)
                 for (size_t j = 0; j < Fm.n_cols; ++j)
                     feats[i][j] = Fm(i, j);
-
             std::vector<double> closes(Fm.n_rows);
             for (size_t i = 0; i < Fm.n_rows; ++i) closes[i] = raw(i,4);
 
@@ -134,20 +163,18 @@ static inline void register_train_env_routes(httplib::Server& svr) {
             etai::EnvTrading env;
             env.set_dataset(feats, closes, cfg);
 
-            // 4) Политика: модельная логрегия
             auto policy_fn = [mp](const std::vector<double>& st)->int { return mp(st); };
 
-            // 5) Запуск эпизода
             etai::EpisodeRunner runner;
             auto traj = runner.run_fixed(env, policy_fn, std::min<int>(steps, (int)Fm.n_rows-1));
 
-            // 6) Метрики по pnl (r_t из env)
+            // 4) Метрики по pnl (r_t из env)
             arma::vec pnl(traj.rewards.size());
             for (size_t i = 0; i < traj.rewards.size(); ++i) pnl(i) = traj.rewards[i];
 
-            double sharpe  = etai::calc_sharpe(pnl, 1e-12, 1.0);
-            double dd_max  = etai::calc_max_drawdown(pnl);
-            double winrate = etai::calc_winrate(pnl);
+            double sharpe  = local_sharpe(pnl, 1e-12);
+            double dd_max  = local_max_drawdown(pnl);
+            double winrate = local_winrate(pnl);
 
             double pos_sum = 0.0, neg_sum = 0.0;
             for (double r : traj.rewards) {
