@@ -1,171 +1,204 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ====== Конфиг через ENV ======
+# === ВХОДНЫЕ ПАРАМЕТРЫ ===
 SYMBOL="${SYMBOL:-BTCUSDT}"
-MONTHS="${MONTHS:-6}"                       # окно ретро-месяцев, включая текущий
-INTERVALS="${INTERVALS:-15 60 240 1440}"    # список ТФ через пробел
+MONTHS="${MONTHS:-6}"
+INTERVALS="${INTERVALS:-"15 60 240 1440"}"
 
-# Где лежат/складываются месячные архивы (csv или csv.gz)
-LOCAL_DIR="${LOCAL_DIR:-/opt/edge-trader-server/public}"
+# Источник по умолчанию — Bybit MT4 archive
+ARCHIVE_URL_TMPL="${ARCHIVE_URL_TMPL:-https://public.bybit.com/kline_for_metatrader4/{SYMBOL}/{YYYY}/{SYMBOL}_{SRC_TF}_{YYYY}-{MM}-01_{YYYY}-{MM_LAST}.csv.gz}"
+ALLOWED_HOST="${ALLOWED_HOST:-public.bybit.com}"
+ALLOW_ANY_HOST="${ALLOW_ANY_HOST:-0}"
 
-# Публичный шаблон архива. Если пусто — скачиваний НЕ делаем, используем только локальные файлы.
-# Пример: https://mirror.example.com/futures/{SYMBOL}/{INTERVAL}/{YYYY}-{MM}.csv.gz
-ARCHIVE_URL_TMPL="${ARCHIVE_URL_TMPL:-}"
-
-# Белый список для защиты от подмены
-ALLOWED_HOST="${ALLOWED_HOST:-mirror.example.com}"
-# Для стенда можно отключить проверку домена:
-ALLOW_ANY_HOST="${ALLOW_ANY_HOST:-0}"   # 1 = отключить проверку ALLOWED_HOST
-
-# Выходные каталоги
+# Куда кладём промежуточные месяцы и итог
+PUB_DIR="public/bybit/kline_for_metatrader4/${SYMBOL}"
 CACHE_DIR="cache"
-CLEAN_DIR="cache/clean"
+RAW="${CACHE_DIR}/${SYMBOL}_%s.csv"      # raw: 7 колонок
+CLEAN="${CACHE_DIR}/clean/${SYMBOL}_%s.csv"
 
-fail(){ echo "[FAIL] $*" >&2; exit 1; }
-ok(){   echo "[OK]  $*"; }
-info(){ echo "[INFO] $*"; }
+mkdir -p "${PUB_DIR}" "${CACHE_DIR}" "${CACHE_DIR}/clean"
 
-tf_ok(){ case "$1" in 15|60|240|1440) return 0;; *) return 1;; esac; }
+log(){ printf '[%s] %s\n' "$(date -u +%H:%M:%S)" "$*"; }
 
-host_from_url(){
-  python3 - "$1" <<'PY'
-import sys,urllib.parse
-u=sys.argv[1] if len(sys.argv)>1 else ""
-try:
-    print(urllib.parse.urlparse(u).hostname or "")
-except:
-    print("")
-PY
+# === УТИЛИТЫ ДАТЫ ===
+# Последний день месяца
+last_day_of_month(){
+  local y="$1" m="$2"
+  case "$m" in
+    01|03|05|07|08|10|12) echo 31;;
+    04|06|09|11) echo 30;;
+    02)
+      # простая проверка високосного
+      if (( (y%4==0 && y%100!=0) || (y%400==0) )); then echo 29; else echo 28; fi
+    ;;
+  esac
 }
 
-months_list(){
-  python3 - "$MONTHS" <<'PY'
+# N=0..MONTHS-1 месяцев назад от текущего UTC
+month_offset(){
+  python3 - <<PY
 import sys,datetime,calendar
 n=int(sys.argv[1])
-# Берем первый день текущего месяца в UTC
-today=datetime.datetime.now(datetime.timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-out=[]
-cur=today
-for _ in range(max(1,n)):
-    out.append(f"{cur.year:04d}-{cur.month:02d}")
-    # шаг на предыдущий месяц
-    first_prev = (cur.replace(day=1) - datetime.timedelta(days=1)).replace(day=1)
-    cur=first_prev
-print(" ".join(reversed(out)))    # от старых к новым
+now=datetime.datetime.now(datetime.UTC)
+y=now.year; m=now.month
+m -= n
+while m<=0:
+    m+=12; y-=1
+print(y, f"{m:02d}")
 PY
 }
 
-cat_maybe_gz(){ case "$1" in *.gz) gzip -cd "$1";; *) cat "$1";; esac; }
-
-local_month_path(){
-  local ym="$1" tf="$2"
-  local p="${LOCAL_DIR}/${SYMBOL}/${tf}/${ym}.csv"
-  local g="${p}.gz"
-  if   [ -f "$p" ]; then echo "$p"
-  elif [ -f "$g" ]; then echo "$g"
-  else echo ""; fi
+# === МАППИНГ ТФ В ИСТОЧНИК ===
+# Bybit хранит: 1,5,15,30,60. 240 и 1440 делаем локально из 60м.
+src_tf_for(){
+  case "$1" in
+    1|5|15|30|60) echo "$1" ;;
+    240|1440)     echo "60" ;;
+    *) echo "unsupported" ;;
+  esac
 }
 
-download_month(){
-  local ym="$1" tf="$2"
-  [ -n "$ARCHIVE_URL_TMPL" ] || return 0
+# === СКАЧИВАНИЕ ЕЖЕМЕСЯЧНЫХ ФАЙЛОВ ===
+fetch_month(){
+  local tf="$1" y="$2" mm="$3"
+  local src_tf; src_tf="$(src_tf_for "$tf")"
+  [ "$src_tf" = "unsupported" ] && { log "SKIP unsupported TF=${tf}"; return 0; }
 
-  mkdir -p "${LOCAL_DIR}/${SYMBOL}/${tf}"
-
-  local y="${ym%-*}" m="${ym#*-}"
+  local dd; dd="$(last_day_of_month "$y" "$mm")"
   local url="${ARCHIVE_URL_TMPL}"
   url="${url//\{SYMBOL\}/$SYMBOL}"
-  url="${url//\{INTERVAL\}/$tf}"
   url="${url//\{YYYY\}/$y}"
-  url="${url//\{MM\}/$m}"
+  url="${url//\{MM\}/$mm}"
+  url="${url//\{MM_LAST\}/$mm-$dd}"
+  url="${url//\{SRC_TF\}/$src_tf}"
 
-  local host
-  host="$(host_from_url "$url")"
+  # Валидация хоста
   if [ "$ALLOW_ANY_HOST" != "1" ]; then
-    [ -n "$host" ] || fail "Bad URL: $url"
-    [ "$host" = "$ALLOWED_HOST" ] || fail "URL host '$host' not in whitelist '$ALLOWED_HOST'"
+    host="$(printf '%s' "$url" | sed -E 's#^https?://([^/]+)/.*$#\1#')"
+    if [ "$host" != "$ALLOWED_HOST" ]; then
+      log "FAIL host not allowed: $host"
+      return 1
+    fi
   fi
 
-  local dst="${LOCAL_DIR}/${SYMBOL}/${tf}/${ym}.csv.gz"
-  if [ -f "$dst" ] || [ -f "${dst%.gz}" ]; then
-    info "exists: $dst"
+  local outdir="${PUB_DIR}/${src_tf}/${y}"
+  mkdir -p "$outdir"
+  local fname="${SYMBOL}_${src_tf}_${y}-${mm}-01_${y}-${mm}-${dd}.csv.gz"
+  local dst="${outdir}/${fname}"
+
+  if [ -f "$dst" ]; then
+    log "HIT  $dst (skip)"
     return 0
   fi
 
-  info "fetch: $url"
-  curl -fSL --connect-timeout 10 --max-time 120 --retry 3 --retry-delay 2 "$url" -o "$dst"
+  log "GET  $url"
+  if ! curl -fL --retry 3 --retry-delay 2 -sS "$url" -o "$dst"; then
+    log "MISS $y-$mm tf=${tf} (no file)"
+    rm -f "$dst"
+    return 2
+  fi
+
+  return 0
 }
 
-build_tf(){
+# === РАЗВОРАЧИВАЕМ В raw CSV ПО TF (склейка месяцев, сортировка, дедуп) ===
+inflate_concat_to_raw(){
   local tf="$1"
-  tf_ok "$tf" || fail "Bad TF: $tf"
+  local src_tf; src_tf="$(src_tf_for "$tf")"
+  [ "$src_tf" = "unsupported" ] && return 0
 
   local tmp="$(mktemp)"
-  trap 'rm -f "$tmp"' RETURN
+  : > "$tmp"
 
-  local got=0
-  for ym in $(months_list); do
-    download_month "$ym" "$tf" || true
-    local mf; mf="$(local_month_path "$ym" "$tf")"
-    if [ -z "$mf" ]; then
-      info "missing $ym tf=$tf (skip)"
-      continue
-    fi
-    got=1
-    # удаляем заголовок если он строковый (эвристика)
-    if head -n1 "$mf" | gzip -cd 2>/dev/null | head -n1 | grep -Eq '^[A-Za-z]'; then
-      cat_maybe_gz "$mf" | tail -n +2 >> "$tmp"
-    else
-      cat_maybe_gz "$mf" >> "$tmp"
-    fi
+  # Собираем все скачанные .csv.gz за нужные месяцы
+  find "${PUB_DIR}/${src_tf}" -type f -name '*.csv.gz' | sort | while read -r gz; do
+    gzip -cd "$gz" >> "$tmp" || true
   done
 
-  [ "$got" -eq 1 ] || fail "No monthly files for tf=$tf (SYMBOL=$SYMBOL). Provide local files or valid ARCHIVE_URL_TMPL."
+  if [ ! -s "$tmp" ]; then
+    log "FAIL no monthly files unpacked for tf=${tf} (src=${src_tf})"
+    rm -f "$tmp"
+    return 2
+  fi
 
-  mkdir -p "$CACHE_DIR" "$CLEAN_DIR"
+  # Нормализуем: сортировка по 1-й колонке (ts ms), удаляем дубли
+  # Ожидаемый формат строк: ts,open,high,low,close,volume,quoteVolume
+  awk -F',' 'NF>=6{print $0}' "$tmp" \
+    | sort -t',' -k1,1n \
+    | awk -F',' '!seen[$1]++' \
+    > "$(printf "$RAW" "$src_tf")"
 
-  local out_raw="${CACHE_DIR}/${SYMBOL}_${tf}.csv"
-  local out_clean="${CLEAN_DIR}/${SYMBOL}_${tf}.csv"
+  rm -f "$tmp"
 
-  # dedup + sort по первому столбцу (ts ms)
-  # аккуратнее с awk: позволим дробные ts (иногда встречаются как 1.746e+12)
-  awk -F, '{
-    key=$1
-    if(!(key in seen)){ seen[key]=1; print $0 }
-  }' "$tmp" | sort -t, -k1,1n > "$out_raw"
+  # Если tf совпадает с источником — просто копируем
+  if [ "$tf" = "$src_tf" ]; then
+    cp -f "$(printf "$RAW" "$src_tf")" "$(printf "$RAW" "$tf")"
+    return 0
+  fi
 
-  # clean = первые 6 колонок
-  awk -F, 'NF>=6{print $1","$2","$3","$4","$5","$6}' "$out_raw" > "$out_clean"
-
-  # отчёт
-  local rows first last
-  rows=$(wc -l < "$out_raw")
-  first=$(head -n1 "$out_raw" | cut -d, -f1)
-  last=$(tail -n1 "$out_raw" | cut -d, -f1)
-
-  python3 - "$rows" "$first" "$last" "$tf" <<'PY'
-import sys,datetime,decimal
-rows=int(sys.argv[1])
-def to_int_ms(x):
-    try:
-        return int(decimal.Decimal(x))
-    except:
-        return int(float(x))
-first=to_int_ms(sys.argv[2]); last=to_int_ms(sys.argv[3]); tf=sys.argv[4]
-def iso(ms): return datetime.datetime.fromtimestamp(ms/1000, tz=datetime.timezone.utc).isoformat().replace('+00:00','Z')
-days=(last-first)/1000/86400 if last>first else 0
-months=days/30.4375
-print(f"[REPORT] tf={tf} rows={rows} first={iso(first)} last={iso(last)} coverage≈{days:.2f}d (~{months:.2f}m)")
-PY
-
-  ok "tf=${tf} -> $out_raw ; $out_clean"
+  # Иначе агрегируем из 60м
+  if [ "$tf" = "240" ] || [ "$tf" = "1440" ]; then
+    local in="$(printf "$RAW" "$src_tf")"
+    local out="$(printf "$RAW" "$tf")"
+    local win_minutes="$tf"
+    # Группируем окнами win_minutes, берём O=первый open, H=max, L=min, C=последний close, V=sum(volume)
+    awk -F',' -v W="$win_minutes" '
+      function flush(){
+        if(n>0){
+          printf "%d,%.10f,%.10f,%.10f,%.10f,%.10f\n", T*60000, O,H,L,C,V;
+        }
+        n=0
+      }
+      {
+        ts=$1; o=$2; h=$3; l=$4; c=$5; v=$6;
+        # база минут
+        base = int(ts/60000);
+        Tbin = int(base/W); # номер окна
+        if(n==0){ T=Tbin; O=o; H=h; L=l; C=c; V=v; n=1; }
+        else if(Tbin!=T){ flush(); T=Tbin; O=o; H=h; L=l; C=c; V=v; n=1; }
+        else { if(h>H)H=h; if(l<L)L=l; C=c; V+=v; n++; }
+      }
+      END{ flush(); }
+    ' "$in" > "$out"
+  fi
 }
 
-main(){
-  for tf in $INTERVALS; do
-    build_tf "$tf"
+# === ПРОСТОЙ CLEAN (6 колонок, без quoteVolume), зеркалим naming ===
+make_clean(){
+  local tf="$1"
+  local in="$(printf "$RAW"  "$tf")"
+  local out="$(printf "$CLEAN" "$tf")"
+  if [ ! -s "$in" ]; then
+    log "SKIP clean tf=${tf} (no raw)"
+    return 0
+  fi
+  awk -F',' 'NF>=6{printf "%s,%.10f,%.10f,%.10f,%.10f,%.10f\n",$1,$2,$3,$4,$5,$6}' "$in" > "$out"
+}
+
+# === MAIN ===
+# 1) Скачиваем помесячно за N месяцев назад для каждого TF (по источнику/маппингу)
+for tf in $INTERVALS; do
+  for ((i=0;i<MONTHS;i++)); do
+    read -r YY MM < <(month_offset "$i")
+    fetch_month "$tf" "$YY" "$MM" || true
   done
-  ok "ALL DONE (SYMBOL=$SYMBOL, MONTHS=$MONTHS, TFs=$INTERVALS)"
-}
-main
+done
+
+# 2) Склейка в raw и возможная агрегация 240/1440 из 60м
+for tf in $INTERVALS; do
+  inflate_concat_to_raw "$tf" || true
+done
+
+# 3) Готовим clean
+for tf in $INTERVALS; do
+  make_clean "$tf" || true
+done
+
+# 4) Краткий отчёт
+for tf in $INTERVALS; do
+  f_raw="$(printf "$RAW" "$tf")"
+  f_clean="$(printf "$CLEAN" "$tf")"
+  if [ -f "$f_raw" ];  then head -n1 "$f_raw"   | awk -v F="$f_raw"  -F',' '{printf("RAW  %s  cols=%d sample=%s\n",F,NF,$0)}'; fi
+  if [ -f "$f_clean" ];then head -n1 "$f_clean" | awk -v F="$f_clean" -F',' '{printf("CLEAN%s  cols=%d sample=%s\n",F,NF,$0)}'; fi
+done
