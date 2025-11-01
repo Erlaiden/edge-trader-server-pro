@@ -14,10 +14,12 @@ using json = nlohmann::json;
 
 namespace {
 
-inline std::string qs_str(const httplib::Request& req, const char* k, const char* defv){
+// == ВНИМАНИЕ ==
+// Уникальные имена хелперов, чтобы не конфликтовать с qs_str/qs_num в других TU.
+inline std::string ag_qs_str(const httplib::Request& req, const char* k, const char* defv){
     return req.has_param(k) ? req.get_param_value(k) : std::string(defv);
 }
-inline double qs_num(const httplib::Request& req, const char* k, double defv){
+inline double ag_qs_num(const httplib::Request& req, const char* k, double defv){
     if (!req.has_param(k)) return defv;
     try { return std::stod(req.get_param_value(k)); } catch (...) { return defv; }
 }
@@ -52,9 +54,9 @@ void setup_agents_routes(httplib::Server& svr) {
             return json_reply(res, r);
         }
 
-        const std::string symbol   = qs_str(req, "symbol", "BTCUSDT");
-        const std::string interval = qs_str(req, "interval", "15");
-        const double thr           = qs_num(req, "thr", 0.5);
+        const std::string symbol   = ag_qs_str(req, "symbol", "BTCUSDT");
+        const std::string interval = ag_qs_str(req, "interval", "15");
+        const double      thr      = ag_qs_num(req, "thr", 0.5);
 
         arma::mat X; arma::mat y;
         if (!etai::load_cached_xy(symbol, interval, X, y) || X.n_rows == 0) {
@@ -69,9 +71,9 @@ void setup_agents_routes(httplib::Server& svr) {
         etai::AgentSummary summary = layer.decide_all(feat, thr);
 
         r["ok"] = true;
-        r["final_signal"] = summary.final_signal;
+        r["final_signal"]     = summary.final_signal;
         r["final_confidence"] = summary.final_confidence;
-        r["conflict_ratio"] = summary.conflict_ratio;
+        r["conflict_ratio"]   = summary.conflict_ratio;
 
         json ags = json::object();
         for (auto& kv : summary.agents) {
@@ -91,15 +93,15 @@ void setup_agents_routes(httplib::Server& svr) {
             return json_reply(res, r);
         }
 
-        const std::string symbol   = qs_str(req, "symbol", "BTCUSDT");
-        const std::string interval = qs_str(req, "interval", "15");
-        const std::string mode     = qs_str(req, "mode", "live");
+        const std::string symbol   = ag_qs_str(req, "symbol", "BTCUSDT");
+        const std::string interval = ag_qs_str(req, "interval", "15");
+        const std::string mode     = ag_qs_str(req, "mode", "live");
 
         // 1) Health по данным (clean/raw наличие, строки/колонки)
         json dh = etai::data_health_report(symbol, interval);
         const bool data_ok = dh.value("ok", false);
 
-        // 2) Пытаемся подготовить/прочитать кэш фич (X/y) — чтобы сразу понять, что всё подхватится
+        // 2) Готовим кэш фич X/y
         arma::mat X, y;
         bool xy_ok = false;
         if (data_ok) {
@@ -107,18 +109,17 @@ void setup_agents_routes(httplib::Server& svr) {
         }
 
         if (!data_ok || !xy_ok) {
-            // Ничего не запускаем — отдаём подробный отчёт, что именно не так.
             r["ok"] = false;
             r["error"] = "Data not ready for the requested symbol/interval";
             r["symbol"] = symbol;
             r["interval"] = interval;
             r["agents"] = { {"running", false}, {"mode", "idle"} };
-            r["data_health"] = dh;                 // показывает paths/rows/cols/exists
+            r["data_health"] = dh;   // paths/rows/cols/exists
             r["xy_ready"]    = xy_ok;
-            return json_reply(res, r, 409);        // 409 Conflict — требуются подготовительные шаги
+            return json_reply(res, r, 409);  // Требуется подготовить данные
         }
 
-        // 3) Всё готово — сохраняем состояние и запускаем
+        // 3) Всё готово — сохраняем состояние и «запускаем»
         auto& S = agent_state();
         S.symbol   = symbol;
         S.interval = interval;
@@ -139,11 +140,7 @@ void setup_agents_routes(httplib::Server& svr) {
             {"raw_rows",   dh["raw"].value("rows", 0)},
             {"raw_cols",   dh["raw"].value("cols", 0)}
         };
-        // Оценка размерности фич по факту X
-        r["features"] = {
-            {"rows", (unsigned)X.n_rows},
-            {"cols", (unsigned)X.n_cols}
-        };
+        r["features"] = { {"rows", (unsigned)X.n_rows}, {"cols", (unsigned)X.n_cols} };
 
         return json_reply(res, r);
     });
