@@ -20,6 +20,9 @@
 // Новый файл с установкой модели
 #include "routes/model_set.cpp"
 
+// Новый блок: выбор символа
+#include "routes/symbol.cpp"
+
 int main(int argc, char** argv) {
     int port = 3000;
     if (argc > 1) port = std::atoi(argv[1]);
@@ -46,6 +49,7 @@ int main(int argc, char** argv) {
     register_backfill_routes(svr);
     etai::setup_agents_routes(svr);
     register_train_env_routes(svr);     // безопасная заглушка под ETAI_ENABLE_TRAIN_ENV
+    register_symbol_routes(svr);        // <-- новый набор маршрутов
 
     std::cout << "[EdgeTrader] server started on port " << port
               << " (thr=" << etai::get_model_thr()
