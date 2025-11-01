@@ -17,13 +17,11 @@ static inline bool feature_on(const char* k) {
     if (!s || !*s) return false;
     return (s[0]=='1') || (s[0]=='T') || (s[0]=='t') || (s[0]=='Y') || (s[0]=='y');
 }
-
 static inline double sigmoid(double z) {
     if (!std::isfinite(z)) z = 0.0;
     return 1.0 / (1.0 + std::exp(-z));
 }
-
-// локальные метрики (без зависимостей)
+// локальные метрики
 static inline double local_sharpe(const arma::vec& pnl, double eps=1e-12) {
     if (pnl.n_elem == 0) return 0.0;
     double mu = arma::mean(pnl);
@@ -32,7 +30,6 @@ static inline double local_sharpe(const arma::vec& pnl, double eps=1e-12) {
     return mu / sd;
 }
 static inline double local_max_drawdown(const arma::vec& pnl) {
-    // считаем эквити как 1 + cum(pnl)
     if (pnl.n_elem == 0) return 0.0;
     arma::vec eq(pnl.n_elem + 1, arma::fill::ones);
     for (arma::uword i = 0; i < pnl.n_elem; ++i) eq(i+1) = eq(i) + pnl(i);
@@ -60,7 +57,7 @@ static inline double local_winrate(const arma::vec& pnl) {
 struct ModelPolicy {
     std::vector<double> W;
     double b = 0.0;
-    double thr = 0.5;  // best_thr
+    double thr = 0.5;
     int feat_dim = 0;
     bool ok = false;
 
@@ -138,13 +135,28 @@ static inline void register_train_env_routes(httplib::Server& svr) {
                 res.set_content(err.dump(2), "application/json");
                 return;
             }
+
+            // 2a) Толерантность к рассинхрону фич (за флагом)
+            bool adapted = false;
             if (mp.feat_dim != (int)Fm.n_cols) {
-                json err = {
-                    {"ok", false}, {"error", "feat_dim_mismatch"},
-                    {"policy_feat_dim", mp.feat_dim}, {"features_cols", (int)Fm.n_cols}
-                };
-                res.set_content(err.dump(2), "application/json");
-                return;
+                if (feature_on("ETAI_TOLERATE_FEAT_MISMATCH") &&
+                    (int)Fm.n_cols + 4 == mp.feat_dim)
+                {
+                    arma::mat Fa(Fm.n_rows, mp.feat_dim, arma::fill::zeros);
+                    Fa.cols(0, Fm.n_cols-1) = Fm; // дополняем 4 нулями (место под Money Flow)
+                    Fm = std::move(Fa);
+                    adapted = true;
+                } else {
+                    json err = {
+                        {"ok", false},
+                        {"error", "feat_dim_mismatch"},
+                        {"policy_feat_dim", mp.feat_dim},
+                        {"features_cols", (int)Fm.n_cols},
+                        {"hint", "export ETAI_FEAT_ENABLE_MFLOW=1  (или ETAI_TOLERATE_FEAT_MISMATCH=1 для нулевого паддинга)"}
+                    };
+                    res.set_content(err.dump(2), "application/json");
+                    return;
+                }
             }
 
             // 3) Конвертация в std::vector
@@ -191,13 +203,14 @@ static inline void register_train_env_routes(httplib::Server& svr) {
             out["steps"] = (int)traj.steps;
             out["policy"] = {{"source","model_json"},{"thr", mp.thr},{"feat_dim", mp.feat_dim}};
             out["equity_final"] = traj.equity_final;
-            out["max_dd"] = dd_max;              // из pnl
-            out["max_dd_env"] = traj.max_dd;     // из env
+            out["max_dd"] = dd_max;
+            out["max_dd_env"] = traj.max_dd;
             out["winrate"] = winrate;
             out["pf"] = pf;
             out["sharpe"] = sharpe;
             out["wins"] = traj.wins;
             out["losses"] = traj.losses;
+            out["feat_adapted"] = adapted;
 
             res.set_content(out.dump(2), "application/json");
         } catch (...) {
