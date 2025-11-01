@@ -1,0 +1,46 @@
+{
+  "label": "btc15-final-benchmark",
+  "timestamp_utc": "20251101-073609Z",
+  "git_commit": "1f92de2cd3d11259be190a6ae5930cd67790312b",
+  "model": {
+    "path": "cache/models/BTCUSDT_15_ppo_pro.json",
+    "sha256": "b96f36eee1520e52beefd4b3125c345ab5bce632e3db14eebc2eef8e3ba2d000",
+    "best_thr": 0.36,
+    "ma_len": 12,
+    "feat_dim": 32,
+    "policy_source": "learn",
+    "feat_version": 10
+  },
+  "train_params": {
+    "symbol": "BTCUSDT",
+    "interval": "15",
+    "tp": 0.0044,
+    "sl": 0.0016,
+    "episodes": 80,
+    "anti_manip": true,
+    "mtf_enable": true
+  },
+  "reward_v2_params": {
+    "fee_per_trade": 0.0002,
+    "alpha_sharpe": 0.60,
+    "lambda_risk": null,
+    "mu_manip": null
+  },
+  "validation_metrics": {
+    "reward_v2": 0.7045907751638891,
+    "sharpe": 1.4459258443316465,
+    "winrate": 0.8568665377176016,
+    "drawdown": 0.006599999999999939,
+    "feat_cols": 32
+  },
+  "prometheus_snapshot": {
+    "edge_reward_avg": 0.704590775164,
+    "edge_reward_wctx": 0.704590775164,
+    "edge_sharpe": 1.445925844332,
+    "edge_winrate": 0.856866537718,
+    "edge_drawdown": 0.0066,
+    "edge_model_thr": 0.36,
+    "edge_model_ma_len": 12,
+    "edge_model_feat_dim": 32
+  }
+}
