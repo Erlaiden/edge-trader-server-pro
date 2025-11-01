@@ -120,9 +120,11 @@ agg_from_60(){
 
   # generic aggregator: period minutes -> ms bin
   _agg(){
-    local period_min="$1" out="cache/${SYMBOL}_${period_min}.csv"
-    awk -F',' -v P_MS="$(( $1 * 60 * 1000 ))" '
-      function flush(){ if(n){ printf("%s,%.10f,%.10f,%.10f,%.10f,%.10f\n", t0,o,h,l,c,v); } }
+    local period_min="$1"
+    local out="cache/${SYMBOL}_${period_min}.csv"
+    local P_MS=$(( period_min * 60 * 1000 ))
+    awk -F',' -v P_MS="${P_MS}" '
+      function flush(){ if(n){ printf("%ld,%.10f,%.10f,%.10f,%.10f,%.10f\n", t0,o,h,l,c,v); } }
       BEGIN{OFS=","; n=0}
       {
         t=$1+0; key=int(t/P_MS)
@@ -134,12 +136,12 @@ agg_from_60(){
         }
       }
       END{ flush() }
-    ' "$2" > "${out}"
+    ' "${base}" > "${out}"
     [ -s "${out}" ] || { echo "[FAIL] ${out} empty"; return 1; }
     log "AGG ${out} rows=$(wc -l < "${out}")"
   }
-  _agg 240 "${base}"
-  _agg 1440 "${base}"
+  _agg 240
+  _agg 1440
 }
 
 # ---- main ----
@@ -158,11 +160,7 @@ done
 [ "${need15}" -eq 1 ] && fetch_tf 15
 [ "${need60}" -eq 1 ] && agg_from_60
 
-# clean-копии
-mkdir -p cache/clean
-for tf in 15 60 240 1440; do
-  src="cache/${SYMBOL}_${tf}.csv"; dst="cache/clean/${SYMBOL}_${tf}.csv"
-  [ -s "${src}" ] && { cp -f "${src}" "${dst}"; log "CLEAN -> ${dst}"; } || true
-done
+# Генерируем CLEAN из RAW корректно
+./scripts/make_clean.sh
 
 log "DONE"
