@@ -1,223 +1,198 @@
 #include <httplib.h>
 #include "json.hpp"
 #include <armadillo>
-#include <cstdlib>
-#include <string>
-#include <algorithm>
 #include <fstream>
 #include <cmath>
-
+#include <cstdlib>
+#include <algorithm>
 #include "utils_data.h"
 #include "features/features.h"
-#include "server_accessors.h"   // get_model_thr,get_model_ma_len,get_model_feat_dim
+#include "server_accessors.h"
 
-using nlohmann::json;
 using namespace arma;
+using nlohmann::json;
 
-// ---- utils ----
-static inline bool env_enabled(const char* k){ const char* s=getenv(k); return s && *s && (s[0]=='1'||s[0]=='T'||s[0]=='t'||s[0]=='Y'||s[0]=='y'); }
-static inline int qs_int(const httplib::Request& r, const char* k, int defv){ try{ return r.has_param(k)? std::stoi(r.get_param_value(k)):defv; }catch(...){ return defv; } }
-static inline double qs_dbl(const httplib::Request& r, const char* k, double defv){ try{ return r.has_param(k)? std::stod(r.get_param_value(k)):defv; }catch(...){ return defv; } }
-static inline std::string qs_str(const httplib::Request& r, const char* k, const char* defv){ return r.has_param(k)? r.get_param_value(k): std::string(defv); }
-static inline double clampd(double v,double lo,double hi){ if(!std::isfinite(v)) return lo; if(v<lo) return lo; if(v>hi) return hi; return v; }
-
-// ---- local metrics (no external deps) ----
-static double local_sharpe(const vec& pnl, double eps=1e-12, double scale=1.0){
-    if(pnl.n_rows==0) return 0.0; double mu=mean(pnl); double sd=stddev(pnl,0);
-    if(!std::isfinite(sd) || sd<eps) return 0.0; return scale * (mu/(sd+eps));
+// ---------- helpers ----------
+static inline double clampd(double v,double lo,double hi){
+    if(!std::isfinite(v)) return lo;
+    if(v<lo) return lo;
+    if(v>hi) return hi;
+    return v;
 }
-static double local_max_drawdown(const vec& pnl){
-    if(pnl.n_rows==0) return 0.0; vec eq=cumsum(pnl); double peak=eq(0), maxdd=0.0;
-    for(uword i=0;i<eq.n_rows;i++){ peak=std::max(peak, eq(i)); maxdd=std::max(maxdd, peak-eq(i)); }
-    return maxdd;
+static inline bool env_enabled(const char* k){
+    const char* s=getenv(k);
+    return s && *s && (s[0]=='1'||s[0]=='T'||s[0]=='t'||s[0]=='Y'||s[0]=='y');
+}
+static inline double env_get(const char* k,double defv){
+    const char* s=getenv(k);
+    if(!s||!*s) return defv;
+    try{ return std::stod(s);}catch(...){return defv;}
+}
+static inline double local_sharpe(const vec& pnl){
+    if(pnl.n_rows==0) return 0.0;
+    double mu=mean(pnl), sd=stddev(pnl,0);
+    if(sd<=1e-9) return 0.0;
+    return mu/sd;
+}
+static inline double local_maxdd(const vec& pnl){
+    if(pnl.n_rows==0) return 0.0;
+    vec eq=cumsum(pnl);
+    double peak=eq(0), mdd=0.0;
+    for(uword i=0;i<eq.n_rows;i++){
+        peak=std::max(peak,eq(i));
+        mdd=std::max(mdd,peak-eq(i));
+    }
+    return mdd;
 }
 
-// ---- load model W,b from JSON ----
-struct ModelWB { std::vector<double> W; double b=0.0; int feat_dim=0; bool ok=false; };
-static ModelWB load_model_wb(const std::string& path){
-    ModelWB m;
+// ---------- model load ----------
+struct Policy {
+    vec W;
+    double b=0.0;
+    vec mu;
+    vec sd;
+    int feat_dim=0;
+    bool ok=false;
+};
+static Policy load_policy(const std::string& path){
+    Policy p;
     try{
-        std::ifstream f(path); if(!f.good()) return m;
+        std::ifstream f(path);
+        if(!f.good()) return p;
         json j; f >> j;
-        if(!j.contains("policy")) return m;
-        const auto& p = j["policy"];
-        if(p.contains("W") && p["W"].is_array()){
-            m.W = p["W"].get<std::vector<double>>();
+        if(!j.contains("policy")) return p;
+        const auto& pj=j["policy"];
+        if(pj.contains("W")) p.W=vec(pj["W"].get<std::vector<double>>());
+        if(pj.contains("b")){
+            if(pj["b"].is_array() && pj["b"].size()>0)
+                p.b=pj["b"][0].get<double>();
+            else if(pj["b"].is_number()) p.b=pj["b"].get<double>();
         }
-        if(p.contains("b") && p["b"].is_array() && p["b"].size()>0){
-            m.b = p["b"][0].get<double>();
-        }else if(p.contains("b") && p["b"].is_number()){
-            m.b = p["b"].get<double>();
+        if(pj.contains("feat_dim")) p.feat_dim=pj["feat_dim"].get<int>();
+        if(pj.contains("norm")){
+            const auto& n=pj["norm"];
+            if(n.contains("mu")) p.mu=vec(n["mu"].get<std::vector<double>>());
+            if(n.contains("sd")) p.sd=vec(n["sd"].get<std::vector<double>>());
         }
-        if(p.contains("feat_dim")) m.feat_dim = p["feat_dim"].get<int>();
-        m.ok = !m.W.empty();
+        p.ok=!p.W.is_empty();
     }catch(...){}
-    return m;
+    return p;
 }
 
-// simple Z-score by train slice (proxy; real training stats недоступны)
-static void zscore_by_ref(mat& X, const mat& ref){
-    if(X.n_rows==0||X.n_cols==0||ref.n_rows==0) return;
-    vec mu = arma::mean(ref,0).t(); vec sd = arma::stddev(ref,0,0).t();
-    for(uword j=0;j<X.n_cols;j++){
-        double s=(std::isfinite(sd(j)) && sd(j)>1e-12)? sd(j):1.0;
-        X.col(j) = (X.col(j)-mu(j))/s;
-    }
-}
-
-// ATR proxy (col 4 в фичах — наш ATR)
-static vec atr_col(const mat& F){ if(F.n_cols>4) return abs(F.col(4)); return vec(F.n_rows,fill::zeros); }
-
-// aggressive bias (логит-сдвиг по тренду; ограничен)
-static void apply_aggr_bias(vec& logits, const mat& F){
-    double k = getenv("ETAI_AGGR_K")? std::atof(getenv("ETAI_AGGR_K")): 0.15;
-    if(!std::isfinite(k) || k<0) k=0.15;
-    vec trend = F.n_cols>0? F.col(0): vec(F.n_rows,fill::zeros);
-    for(uword i=0;i<logits.n_rows;i++){
-        logits(i) = clampd(logits(i) + k*trend(i), -0.25, 0.25);
-    }
-}
-
-// simulate one-step TP/SL with optional ATR scaling
-static vec simulate_pnl(const vec& fut_ret, const vec& p_long01,
-                        const vec& atr, double tp, double sl, double fee_abs, bool atr_scale){
-    uword N=fut_ret.n_rows; vec r(N,fill::zeros);
-    double k_atr = getenv("ETAI_ATR_K")? std::atof(getenv("ETAI_ATR_K")): 0.35;
-    for(uword i=0;i<N;i++){
-        double tp_e=tp, sl_e=sl;
-        if(atr_scale && i<atr.n_rows){
-            double z = atr(i);
-            tp_e = tp*(1.0 + k_atr*z);   // шире цель на импульсе
-            sl_e = sl*(1.0 - k_atr*z*0.5); // чуть уже стоп
-            tp_e = clampd(tp_e, 1e-5, 0.05);
-            sl_e = clampd(sl_e, 1e-5, 0.05);
-        }
-        double fr=fut_ret(i); bool is_long = (p_long01(i)>=0.5); double rr=0.0;
-        if(is_long){ if(fr>=tp_e) rr= tp_e; else if(fr<=-sl_e) rr=-sl_e; else rr= fr; }
-        else       { if(fr<=-sl_e) rr= tp_e; else if(fr>= tp_e) rr=-sl_e; else rr=-fr; }
-        rr -= fee_abs; r(i)=rr;
-    }
-    return r;
-}
-
-static vec sigmoid_vec(const vec& z){ vec p=z; for(uword i=0;i<p.n_rows;i++){ double t=p(i); p(i)=1.0/(1.0+std::exp(-t)); } return p; }
-
-// policy: real model (W,b) or simple thresholds
-static vec make_signals(const mat& F, const std::string& policy_name){
-    uword N=F.n_rows; vec s(N,fill::zeros);
-    if(policy_name=="model"){
-        // load model
-        ModelWB m = load_model_wb("cache/models/BTCUSDT_15_ppo_pro.json");
-        if(!m.ok){ // fallback на thr_only
-            vec trend = F.n_cols>0? F.col(0): vec(N,fill::zeros);
-            // логит ~ trend/scale
-            vec logits = trend; logits.for_each([](double& v){ v *= 1.0; });
-            apply_aggr_bias(logits, F);
-            return sigmoid_vec(logits);
-        }
-        // подгонка размерности
-        mat X = F;
-        if((int)X.n_cols > m.feat_dim && m.feat_dim>0) X = X.cols(0, m.feat_dim-1);
-        if((int)X.n_cols < m.feat_dim && m.feat_dim>0){
-            mat pad(X.n_rows, m.feat_dim, fill::zeros); pad.cols(0, X.n_cols-1)=X; X=std::move(pad);
-        }
-        // приблизительная стандартизация по первой половине (proxy)
-        uword split = std::max<uword>(1, (uword)(X.n_rows*0.5));
-        mat ref = X.rows(0, split-1);
-        zscore_by_ref(X, ref);
-
-        // логиты = X·W + b
-        vec logits = X * vec(m.W);
-        logits += m.b;
-        apply_aggr_bias(logits, X);
-        return sigmoid_vec(logits);
-    }else if(policy_name=="thr_only" || policy_name=="sign_channel"){
-        vec trend = F.n_cols>0? F.col(0): vec(N,fill::zeros);
-        vec logits = trend;
-        apply_aggr_bias(logits, F);
-        return sigmoid_vec(logits);
-    }else{
-        vec trend = F.n_cols>0? F.col(0): vec(N,fill::zeros);
-        vec logits = trend;
-        apply_aggr_bias(logits, F);
-        return sigmoid_vec(logits);
-    }
-}
-
-// ---- main route ----
+// ---------- main route ----------
 void register_train_env_routes(httplib::Server& svr){
-    svr.Get("/api/train_env",[](const httplib::Request& req, httplib::Response& res){
-        json out; out["ok"]=false; out["env"]="v1";
-        if(!env_enabled("ETAI_ENABLE_TRAIN_ENV")){ out["error"]="not_enabled"; res.set_content(out.dump(2),"application/json"); return; }
+    svr.Get("/api/train_env",[&](const httplib::Request& req, httplib::Response& res){
+        json out; out["ok"]=false; out["env"]="v2";
+        if(!env_enabled("ETAI_ENABLE_TRAIN_ENV")){
+            out["error"]="not_enabled";
+            res.set_content(out.dump(2),"application/json");
+            return;
+        }
 
-        std::string symbol   = qs_str(req,"symbol","BTCUSDT");
-        std::string interval = qs_str(req,"interval","15");
-        int steps            = std::max(10, qs_int(req,"steps",3000));
-        double fee           = std::max(0.0, qs_dbl(req,"fee",0.0005));
-        double tp            = std::max(1e-5, qs_dbl(req,"tp",0.003));
-        double sl            = std::max(1e-5, qs_dbl(req,"sl",0.0018));
-        std::string policy   = qs_str(req,"policy","model"); // model | thr_only | sign_channel
+        std::string symbol= req.has_param("symbol")?req.get_param_value("symbol"):"BTCUSDT";
+        std::string interval=req.has_param("interval")?req.get_param_value("interval"):"15";
+        int steps= req.has_param("steps")?std::stoi(req.get_param_value("steps")):3000;
+        double fee=req.has_param("fee")?std::stod(req.get_param_value("fee")):0.0005;
+        double tp=req.has_param("tp")?std::stod(req.get_param_value("tp")):0.003;
+        double sl=req.has_param("sl")?std::stod(req.get_param_value("sl")):0.0018;
+        std::string policy_name=req.has_param("policy")?req.get_param_value("policy"):"model";
 
         arma::mat raw;
-        if(!etai::load_raw_ohlcv(symbol,interval,raw)){ out["error"]="data_load_fail"; res.set_content(out.dump(2),"application/json"); return; }
+        if(!etai::load_raw_ohlcv(symbol,interval,raw)){
+            out["error"]="data_load_fail";
+            res.set_content(out.dump(2),"application/json");
+            return;
+        }
 
-        // future return (t+1)
-        vec close = raw.col(4);
-        uword Nraw = raw.n_rows;
-        vec fut(Nraw, fill::zeros);
-        for(uword i=0;i+1<Nraw;i++){ double c0=close(i), c1=close(i+1); fut(i)=(c0>0.0)? (c1/c0-1.0):0.0; }
-        fut(Nraw-1)=0.0;
+        vec close=raw.col(4);
+        vec fut(close.n_rows,fill::zeros);
+        for(uword i=0;i+1<close.n_rows;i++)
+            fut(i)=(close(i)>0.0)?(close(i+1)/close(i)-1.0):0.0;
 
-        // features
-        mat F = etai::build_feature_matrix(raw);
-        if(F.n_cols==0){ out["error"]="feature_build_fail"; res.set_content(out.dump(2),"application/json"); return; }
+        mat F=etai::build_feature_matrix(raw);
+        if(F.n_rows==0){ out["error"]="feature_build_fail"; res.set_content(out.dump(2),"application/json"); return; }
+        uword N=std::min<uword>(std::min(F.n_rows,fut.n_rows),(uword)steps);
+        mat X=F.tail_rows(N);
+        vec futN=fut.tail_rows(N);
 
-        // align length
-        uword N = std::min<uword>(std::min(F.n_rows, fut.n_rows), (uword)steps);
-        mat Fw = F.tail_rows(N);
-        vec fr = fut.tail_rows(N);
+        Policy pol=load_policy("cache/models/"+symbol+"_"+interval+"_ppo_pro.json");
+        if(!pol.ok){ out["error"]="model_load_fail"; res.set_content(out.dump(2),"application/json"); return; }
 
-        // signals
-        vec p_long01 = make_signals(Fw, policy);
+        if(pol.feat_dim>0 && (int)X.n_cols>pol.feat_dim) X=X.cols(0,pol.feat_dim-1);
+        if(pol.mu.n_rows==pol.sd.n_rows && pol.mu.n_rows==X.n_cols){
+            for(uword j=0;j<X.n_cols;j++){
+                double m=pol.mu(j), s=pol.sd(j);
+                if(!std::isfinite(s)||s<1e-9) s=1.0;
+                X.col(j)=(X.col(j)-m)/s;
+            }
+        }
 
-        // ATR scaling switch
-        bool use_atr = env_enabled("ETAI_ENV_ATR");
+        vec logits=X*pol.W + pol.b;
+        double aggr=env_get("ETAI_AGGR_K",0.15);
+        double elo=env_get("ETAI_CTX_E_LO",0.20);
+        double thr=env_get("ETAI_THR",0.40);
 
-        // pnl simulation
-        vec atrv = atr_col(Fw);
-        vec pnl = simulate_pnl(fr, p_long01, atrv, tp, sl, fee, use_atr);
+        // сигмоид
+        vec p=1.0/(1.0+exp(-logits));
+        vec act(N,fill::zeros);
+        for(uword i=0;i<N;i++){
+            double s=(p(i)-0.5)*2.0*(1.0+aggr); // [-1,+1]
+            if(std::fabs(s)<elo) act(i)=0.0;
+            else if(s>=thr) act(i)=1.0;
+            else if(s<=-thr) act(i)=-1.0;
+            else act(i)=0.0;
+        }
 
-        // metrics
-        double sum_pos=0.0, sum_neg=0.0; int wins=0, losses=0;
-        for(uword i=0;i<pnl.n_rows;i++){ if(pnl(i)>0){sum_pos+=pnl(i); wins++;} else if(pnl(i)<0){sum_neg+=pnl(i); losses++;} }
-        double pf = (sum_pos>0 && sum_neg<0)? (sum_pos/std::fabs(sum_neg)) : 0.0;
-        double sharpe = local_sharpe(pnl, 1e-12, 1.0);
-        double dd_max = local_max_drawdown(pnl);
-        double winrate = (wins+losses>0)? (double)wins/(wins+losses):0.0;
-        double equity_final = arma::accu(pnl);
-        double profit_avg = (sum_pos - std::fabs(sum_neg))/std::max<uword>(pnl.n_rows,1);
+        bool use_atr=env_enabled("ETAI_ENV_ATR");
+        vec pnl(N,fill::zeros);
+        vec atr_col;
+        if(F.n_cols>4){
+            vec atr_all = abs(F.col(4));
+            atr_col = atr_all.tail(N);
+        } else {
+            atr_col = vec(N,fill::zeros);
+        }
+        double k_atr=env_get("ETAI_ATR_K",0.35);
 
-        // PRO reward
-        double ALPHA = getenv("ETAI_R_ALPHA") ? std::atof(getenv("ETAI_R_ALPHA")) : 0.7;
-        double LAMBDA= getenv("ETAI_R_LAMBDA")? std::atof(getenv("ETAI_R_LAMBDA")): 1.5;
-        double BETA  = getenv("ETAI_R_BETA")  ? std::atof(getenv("ETAI_R_BETA"))  : 0.4;
-        double GAMMA = getenv("ETAI_R_GAMMA") ? std::atof(getenv("ETAI_R_GAMMA")) : 0.3;
-        double ETA   = getenv("ETAI_R_ETA")   ? std::atof(getenv("ETAI_R_ETA"))   : 1.0;
+        for(uword i=0;i<N;i++){
+            double frv=futN(i);
+            double rr=0.0;
+            double tp_e=tp, sl_e=sl;
+            if(use_atr){
+                double z=clampd(atr_col(i),0,1);
+                tp_e=clampd(tp*(1.0+k_atr*z),1e-5,0.05);
+                sl_e=clampd(sl*(1.0-k_atr*z*0.5),1e-5,0.05);
+            }
+            if(act(i)>0){
+                if(frv>=tp_e) rr=tp_e;
+                else if(frv<=-sl_e) rr=-sl_e;
+                else rr=frv;
+            }else if(act(i)<0){
+                if(frv<=-sl_e) rr=tp_e;
+                else if(frv>=tp_e) rr=-sl_e;
+                else rr=-frv;
+            }else rr=0.0;
+            pnl(i)=rr-fee;
+        }
 
-        double trades = wins+losses;
-        double fee_pen = ETA * fee * trades;
-        double reward = profit_avg - LAMBDA*dd_max + ALPHA*sharpe + BETA*(pf-1.0) + GAMMA*(winrate-0.5) - fee_pen;
+        double sum_pos=0,sum_neg=0; int w=0,l=0;
+        for(double v:pnl){ if(v>0){sum_pos+=v;w++;} else if(v<0){sum_neg+=v;l++;} }
 
-        // gate (soft, informative)
-        json gate; gate["mode"]="soft"; gate["checked"]=(int)N; gate["allowed"]=(int)N; gate["skipped"]=0;
+        double pf=(sum_pos>0&&sum_neg<0)?(sum_pos/std::fabs(sum_neg)):0.0;
+        double sharpe=local_sharpe(pnl);
+        double dd=local_maxdd(pnl);
+        double winrate=(w+l>0)?(double)w/(w+l):0.0;
+        double eq_final=accu(pnl);
 
         out["ok"]=true;
-        out["rows"]=(int)raw.n_rows; out["cols"]=(int)F.n_cols; out["steps"]=(int)N;
-        out["fee"]=fee; out["tp"]=tp; out["sl"]=sl; out["use_atr"]=use_atr;
-        out["policy"]={{"name",policy},{"source",(policy=="model"?"model_json":"derived")},{"thr", etai::get_model_thr()},{"feat_dim",(int)Fw.n_cols}};
-        out["pf"]=pf; out["sharpe"]=sharpe; out["winrate"]=winrate; out["max_dd"]=dd_max; out["equity_final"]=equity_final;
-        out["reward"]=reward; out["wins"]=wins; out["losses"]=losses; out["gate"]=gate;
-
+        out["steps"]=(int)N;
+        out["winrate"]=winrate;
+        out["pf"]=pf;
+        out["sharpe"]=sharpe;
+        out["max_dd"]=dd;
+        out["equity_final"]=eq_final;
+        out["policy"]={{"name",policy_name},{"source","model_json"},{"thr",thr},{"feat_dim",(int)X.n_cols}};
+        out["params"]={{"elo",elo},{"aggr",aggr},{"use_atr",use_atr}};
         res.set_content(out.dump(2),"application/json");
     });
 }
