@@ -5,7 +5,7 @@
 #include "ppo.h"
 #include "utils.h"
 #include "infer_policy.h"
-#include "utils_data.h"   // load_raw_ohlcv, load_cached_matrix
+#include "utils_data.h"
 #include "features/features.h"
 #include <armadillo>
 #include <set>
@@ -63,7 +63,6 @@ void register_infer_routes(httplib::Server& srv) {
         std::string symbol   = qp(req, "symbol", "BTCUSDT");
         std::string interval = qp(req, "interval", "15");
         const std::string path = "cache/models/" + symbol + "_" + interval + "_ppo_pro.json";
-
         std::ifstream f(path);
         if (!f) {
             json out{{"ok",false},{"error","model_not_found"},{"path",path}};
@@ -78,7 +77,6 @@ void register_infer_routes(httplib::Server& srv) {
         double tp       = model.value("tp", 0.0);
         double sl       = model.value("sl", 0.0);
 
-        // Кэшированная матрица 6×N (ряды = поля: ts,open,high,low,close,vol; колонки = бары)
         arma::mat M15 = etai::load_cached_matrix(symbol, interval);
         if (M15.n_elem == 0) {
             json out{{"ok",false},{"error","no_cached_data"},{"hint","call /api/backfill first"}};
@@ -123,7 +121,10 @@ void register_infer_routes(httplib::Server& srv) {
                 {"score15", inf.value("score15", 0.0)},
                 {"sigma15", inf.value("sigma15", 0.0)},
                 {"vol_threshold", inf.value("vol_threshold", 0.0)},
+                {"wctx_htf", inf.value("wctx_htf", 1.0)},
                 {"htf", inf.value("htf", json::object())},
+                {"used_norm", inf.value("used_norm", false)},
+                {"feat_dim_used", inf.value("feat_dim_used", 0)},
                 {"agents", make_agents_summary()}
             };
             enrich_with_levels(out, M15, tp, sl);
@@ -132,7 +133,6 @@ void register_infer_routes(httplib::Server& srv) {
         }
 
         // ===== single-TF: Подаём policy правильным форматом N×6 =====
-        // M15 сейчас 6×N → транспонируем
         arma::mat raw_for_policy = M15.t(); // теперь N×6
         json inf_pol = etai::infer_with_policy(raw_for_policy, model);
         bool used_policy = inf_pol.value("ok", false);
@@ -161,6 +161,8 @@ void register_infer_routes(httplib::Server& srv) {
             {"score", inf.value("score", 0.0)},
             {"sigma", inf.value("sigma", 0.0)},
             {"vol_threshold", inf.value("vol_threshold", 0.0)},
+            {"used_norm", inf.value("used_norm", false)},
+            {"feat_dim_used", inf.value("feat_dim_used", 0)},
             {"agents", make_agents_summary()},
             {"used_policy", used_policy}
         };
@@ -232,7 +234,6 @@ void register_infer_routes(httplib::Server& srv) {
         if (wanted.count("1440")) { M1440  = etai::load_cached_matrix(symbol, "1440"); if (M1440.n_elem)  p1440  = &M1440; }
 
         json batch = etai::infer_mtf_batch(M15, thr15, ma15, p60, ma60, p240, ma240, p1440, ma1440, n);
-
         long long ts_start = (long long)M15.row(0)(std::max<size_t>(0, M15.n_cols - (size_t)n));
         long long ts_end   = (long long)M15.row(0)(M15.n_cols-1);
 
@@ -250,7 +251,6 @@ void register_infer_routes(httplib::Server& srv) {
         batch["sl"] = sl;
         batch["agents"] = make_agents_summary();
         enrich_with_levels(batch, M15, tp, sl);
-
         LAST_INFER_TS.store((long long)time(nullptr)*1000, std::memory_order_relaxed);
         res.set_content(batch.dump(), "application/json");
     });
