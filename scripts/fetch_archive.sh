@@ -14,21 +14,21 @@ ALLOW_ANY_HOST="${ALLOW_ANY_HOST:-0}"
 
 log(){ printf '[%s] %s\n' "$(date -u +%H:%M:%S)" "$*"; }
 
-# Sanity guard on template (kill legacy leftovers)
+# Санитайзер старых шаблонов
 if [[ "$ARCHIVE_URL_TMPL" == *"{INTERVAL}"* ]] || [[ "$ARCHIVE_URL_TMPL" == *"{YYYY}-{MM}.csv.gz"* ]]; then
-  log "WARN old template detected; overriding."
+  log "WARN: legacy template detected; overriding to default"
   ARCHIVE_URL_TMPL="$DEFAULT_TMPL"
 fi
 if echo "$ARCHIVE_URL_TMPL" | grep -Eq '\{YYYY\}.+/\{YYYY\}'; then
-  log "WARN suspicious template; overriding."
+  log "WARN: suspicious template; overriding to default"
   ARCHIVE_URL_TMPL="$DEFAULT_TMPL"
 fi
 
 # === PATHS ===
 PUB_DIR="public/bybit/kline_for_metatrader4/${SYMBOL}"
 CACHE_DIR="cache"
-RAW_TMPL="${CACHE_DIR}/${SYMBOL}_%s.csv"         # 7 cols, epoch ms
-CLEAN_TMPL="${CACHE_DIR}/clean/${SYMBOL}_%s.csv" # 6 cols
+RAW_TMPL="${CACHE_DIR}/${SYMBOL}_%s.csv"         # epoch ms,6 cols
+CLEAN_TMPL="${CACHE_DIR}/clean/${SYMBOL}_%s.csv" # epoch ms,6 cols
 mkdir -p "${PUB_DIR}" "${CACHE_DIR}/clean"
 
 # === DATE UTILS ===
@@ -65,10 +65,10 @@ render_url(){
   url="${url//\{MM_LAST\}/$mm-$dd}"
   url="${url//\{SRC_TF\}/$src_tf}"
   if [[ "$url" == *"{"* ]] || [[ "$url" == *"}"* ]]; then
-    log "FAIL template not fully rendered: $url"; exit 2
+    log "FAIL: template not fully rendered: $url"; exit 2
   fi
   if echo "$url" | grep -Eq '\.csv\.gz/.*\.csv\.gz'; then
-    log "FAIL duplicated tail after .csv.gz: $url"; exit 2
+    log "FAIL: duplicated suffix after .csv.gz: $url"; exit 2
   fi
   echo "$url"
 }
@@ -78,7 +78,7 @@ fetch_month(){
   local url; url="$(render_url "$tf" "$y" "$mm")"
   local host; host="$(printf '%s' "$url" | sed -E 's#^https?://([^/]+)/.*$#\1#')"
   if [[ "$ALLOW_ANY_HOST" != "1" && "$host" != "$ALLOWED_HOST" ]]; then
-    log "FAIL host not allowed: $host"; return 1
+    log "FAIL: host not allowed: $host"; return 1
   fi
   local src_tf; src_tf="$(src_tf_for "$tf")"
   local dd; dd="$(last_day_of_month "$y" "$mm")"
@@ -95,82 +95,90 @@ fetch_month(){
   fi
 }
 
-# Convert MT4 datetime ("YYYY.MM.DD HH:MM") → epoch ms, keep numeric OHLCV
+# === NORMALIZATION: MT4 "YYYY.MM.DD HH:MM[:SS]" → epoch_ms ===
 normalize_to_epoch(){
-  # stdin: raw concatenated monthly CSVs
   python3 - <<'PY'
-import sys, datetime
+import sys, re, datetime
 utc=datetime.timezone.utc
+ts_re = re.compile(r'^\d{4}\.\d{2}\.\d{2}\s+\d{2}:\d{2}(:\d{2})?$')
 for ln in sys.stdin:
-    ln=ln.strip()
+    ln=ln.strip().replace('\r','')
     if not ln: continue
     parts=ln.split(',')
     if len(parts) < 6: continue
-    # If first field already looks like integer epoch -> passthrough
-    if parts[0].isdigit():
+    head = parts[0]
+    # already epoch?
+    if head.isdigit():
         print(','.join(parts[:6])); continue
-    # Expect "YYYY.MM.DD HH:MM"
-    try:
-        dt=datetime.datetime.strptime(parts[0], "%Y.%m.%d %H:%M").replace(tzinfo=utc)
-        ts=int(dt.timestamp()*1000)
-        o,h,l,c,v = parts[1:6]
-        print(f"{ts},{o},{h},{l},{c},{v}")
-    except Exception:
-        # Try "YYYY.MM.DD H:MM"
+    # header line?
+    if head.lower().startswith('time') or head.lower().startswith('datetime'):
+        continue
+    # MT4 format
+    if ts_re.match(head):
+        fmt = "%Y.%m.%d %H:%M:%S" if len(head.split()[-1].split(':'))==3 else "%Y.%m.%d %H:%M"
         try:
-            dt=datetime.datetime.strptime(parts[0], "%Y.%m.%d %H:%M").replace(tzinfo=utc)
-            ts=int(dt.timestamp()*1000)
+            dt = datetime.datetime.strptime(head, fmt).replace(tzinfo=utc)
+            ts = int(dt.timestamp()*1000)
             o,h,l,c,v = parts[1:6]
             print(f"{ts},{o},{h},{l},{c},{v}")
         except Exception:
             continue
+    # Unknown → skip silently
 PY
 }
 
 inflate_concat_to_raw(){
   local tf="$1" src_tf; src_tf="$(src_tf_for "$tf")"
   [[ "$src_tf" == "unsupported" ]] && return 0
+
   local tmp_concat; tmp_concat="$(mktemp)"
   : > "$tmp_concat"
   if compgen -G "${PUB_DIR}/${src_tf}/*/*.csv.gz" > /dev/null; then
-    # concatenate all months
+    # concat months
     find "${PUB_DIR}/${src_tf}" -type f -name '*.csv.gz' | sort | while read -r gz; do
       gzip -cd "$gz" >> "$tmp_concat" || true
     done
   fi
-  # Normalize timestamps to epoch ms
+
   local tmp_norm; tmp_norm="$(mktemp)"
+  : > "$tmp_norm"
   if [[ -s "$tmp_concat" ]]; then
     normalize_to_epoch < "$tmp_concat" > "$tmp_norm" || true
   fi
   rm -f "$tmp_concat"
-  if [[ ! -s "$tmp_norm" ]]; then
-    log "FAIL no monthly files unpacked for tf=${tf} (src=${src_tf})"
-    rm -f "$tmp_norm"
-    return 2
-  fi
+
   local raw_src; raw_src="$(printf "$RAW_TMPL" "$src_tf")"
-  awk -F',' 'NF>=6{print $0}' "$tmp_norm" \
-    | sort -t',' -k1,1n \
-    | awk -F',' '!seen[$1]++' \
-    > "$raw_src"
+  local raw_tf ; raw_tf ="$(printf "$RAW_TMPL" "$tf")"
+
+  # Если нормализация пустая — явно обнуляем целевой RAW, чтобы не висели старые строки.
+  if [[ ! -s "$tmp_norm" ]]; then
+    log "FAIL: normalization produced 0 rows for tf=${tf} (src=${src_tf}) — clearing stale RAW"
+    : > "$raw_src"
+  else
+    awk -F',' 'NF>=6{print $0}' "$tmp_norm" \
+      | sort -t',' -k1,1n \
+      | awk -F',' '!seen[$1]++' \
+      > "$raw_src"
+  fi
   rm -f "$tmp_norm"
 
-  local raw_tf; raw_tf="$(printf "$RAW_TMPL" "$tf")"
+  # Если tf==src_tf — копируем в tf-файл (но без same-file)
   if [[ "$tf" == "$src_tf" ]]; then
-    # avoid cp same-file warning
     if [[ "$raw_src" != "$raw_tf" ]]; then cp -f "$raw_src" "$raw_tf"; fi
     return 0
   fi
 
-  # Aggregate from minutes to 240/1440 (W in minutes)
+  # Агрегация в 240/1440 (W минут)
   if [[ "$tf" == "240" || "$tf" == "1440" ]]; then
+    # Если исходный raw пуст — создадим пустой агрегат
+    if [[ ! -s "$raw_src" ]]; then : > "$raw_tf"; return 0; fi
     awk -F',' -v W="$tf" '
       BEGIN{ OFS=","; have=0; }
       function flush(){ if(have){ printf "%d,%.10f,%.10f,%.10f,%.10f,%.10f\n", T0, O,H,L,C,V; have=0; } }
       {
         ts=$1+0; o=$2+0; h=$3+0; l=$4+0; c=$5+0; v=$6+0;
-        # bin start in ms: floor to W-minute boundary
+        if(ts<=0) next;
+        # floor to W-minute boundary in UTC
         bin_ms = int(ts/60000/W)*W*60000;
         if(!have){ T0=bin_ms; O=o; H=h; L=l; C=c; V=v; have=1; next; }
         if(bin_ms!=T0){ flush(); T0=bin_ms; O=o; H=h; L=l; C=c; V=v; have=1; }
@@ -185,12 +193,13 @@ make_clean(){
   local tf="$1"
   local in ; in="$(printf "$RAW_TMPL"  "$tf")"
   local out; out="$(printf "$CLEAN_TMPL" "$tf")"
-  if [[ ! -s "$in" ]]; then log "SKIP clean tf=${tf} (no raw)"; return 0; fi
+  if [[ ! -f "$in" || ! -s "$in" ]]; then : > "$out"; return 0; fi
   awk -F',' 'NF>=6{printf "%s,%.10f,%.10f,%.10f,%.10f,%.10f\n",$1,$2,$3,$4,$5,$6}' "$in" > "$out"
 }
 
 log "TEMPLATE: $ARCHIVE_URL_TMPL"
-# Fetch last N months for each requested TF (allow 404 for current month)
+
+# 1) FETCH последних N месяцев по каждому TF (404 для текущего месяца — ок)
 for tf in $INTERVALS; do
   for ((i=0;i<MONTHS;i++)); do
     read -r YY MM < <(month_offset "$i")
@@ -198,11 +207,11 @@ for tf in $INTERVALS; do
   done
 done
 
-# Inflate → normalize → raw per TF; aggregate 240/1440 from 60
+# 2) CONCAT → NORMALIZE → RAW; 240/1440 собираем из 60
 for tf in $INTERVALS; do inflate_concat_to_raw "$tf" || true; done
 for tf in $INTERVALS; do make_clean "$tf" || true; done
 
-# Quick samples (should show integer epoch ms in col1)
+# 3) Быстрые сэмплы — должны быть epoch ms (целые) в первом столбце
 for tf in $INTERVALS; do
   f_raw="$(printf "$RAW_TMPL" "$tf")"
   f_clean="$(printf "$CLEAN_TMPL" "$tf")"
