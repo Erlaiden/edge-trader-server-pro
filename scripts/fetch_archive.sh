@@ -14,7 +14,7 @@ ALLOW_ANY_HOST="${ALLOW_ANY_HOST:-0}"
 
 log(){ printf '[%s] %s\n' "$(date -u +%H:%M:%S)" "$*"; }
 
-# Санитайзер устаревших шаблонов
+# Санитайзер шаблонов
 if [[ "$ARCHIVE_URL_TMPL" == *"{INTERVAL}"* ]] || [[ "$ARCHIVE_URL_TMPL" == *"{YYYY}-{MM}.csv.gz"* ]]; then
   log "WARN: legacy template detected; overriding to default"
   ARCHIVE_URL_TMPL="$DEFAULT_TMPL"
@@ -27,8 +27,8 @@ fi
 # === PATHS ===
 PUB_DIR="public/bybit/kline_for_metatrader4/${SYMBOL}"
 CACHE_DIR="cache"
-RAW_TMPL="${CACHE_DIR}/${SYMBOL}_%s.csv"         # epoch_ms,6 cols
-CLEAN_TMPL="${CACHE_DIR}/clean/${SYMBOL}_%s.csv" # epoch_ms,6 cols
+RAW_TMPL="${CACHE_DIR}/${SYMBOL}_%s.csv"
+CLEAN_TMPL="${CACHE_DIR}/clean/${SYMBOL}_%s.csv"
 mkdir -p "${PUB_DIR}" "${CACHE_DIR}/clean"
 
 # === DATE UTILS ===
@@ -41,7 +41,7 @@ esac; }
 month_offset(){ python3 - "$1" <<'PY'
 import sys, datetime
 i=int(sys.argv[1])
-now=datetime.datetime.now(datetime.UTC)
+now=datetime.datetime.now(datetime.timezone.utc)
 y,m=now.year,now.month
 m-=i
 while m<=0:
@@ -96,53 +96,65 @@ fetch_month(){
   fi
 }
 
-# === NORMALIZATION: более терпимый парсер ===
+# === NORMALIZATION: regex + без буфера ===
 normalize_to_epoch(){
-  python3 - <<'PY'
+  python3 -u - <<'PY'
 import sys, re, datetime
-utc=datetime.timezone.utc
+utc = datetime.timezone.utc
 
-# Разделитель: запятая / таб / точка с запятой
+# 2025.06.01 00:15 или 2025-06-01 00:15[:SS] или 2025/06/01 00:15[:SS]
+re_dt = re.compile(
+    r"""^\s*
+    (\d{4})[./-](\d{2})[./-](\d{2})      # Y M D
+    \s+
+    (\d{2}):(\d{2})(?::(\d{2}))?         # H M [S]
+    \s*$
+    """, re.X
+)
+
+# Сплит по запятая/таб/точка-с-запятой
 splitter = re.compile(r'[,\t;]+')
 
-# Поддерживаем несколько форматов времени (без/с секундами, разные разделители даты)
-fmts = [
-  "%Y.%m.%d %H:%M:%S", "%Y.%m.%d %H:%M",
-  "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M",
-  "%Y/%m/%d %H:%M:%S", "%Y/%m/%d %H:%M",
-]
-def to_epoch_ms(s):
-    s = s.strip().lstrip('\ufeff').strip('"').strip("'")
-    if s.isdigit():
-        return int(s)
-    for fmt in fmts:
-        try:
-            return int(datetime.datetime.strptime(s, fmt).replace(tzinfo=utc).timestamp()*1000)
-        except Exception:
-            pass
-    return None
-
+cnt_in = cnt_ok = 0
 for ln in sys.stdin:
     ln = ln.strip().replace('\r','')
     if not ln: continue
     parts = [p.strip().strip('"').strip("'") for p in splitter.split(ln)]
     if len(parts) < 6:
-        # заголовки вида "time,open,..." или пустышки — пропускаем
         continue
-    head = parts[0].lower()
-    if head.startswith('time') or head.startswith('datetime'):
+    # пропустить заголовки
+    if parts[0].lower().startswith(('time','datetime')): 
         continue
-    ts = to_epoch_ms(parts[0])
-    if ts is None or ts <= 0:
-        continue
-    try:
-        o,h,l,c,v = parts[1:6]
-        # Бывают «—» или пустые строки — фильтруем
-        if any(x in ("", "-", "null", "NaN") for x in (o,h,l,c,v)): 
+    cnt_in += 1
+    m = re_dt.match(parts[0])
+    if not m:
+        # если уже epoch в ms
+        if parts[0].isdigit() and len(parts[0]) >= 10:
+            ts = int(parts[0])
+            if ts < 10**12:  # sec → ms
+                ts *= 1000
+        else:
             continue
-        print(f"{ts},{float(o)},{float(h)},{float(l)},{float(c)},{float(v)}")
+    else:
+        Y,M,D, h,mi, s = m.groups()
+        s = s or "00"
+        dt = datetime.datetime(int(Y),int(M),int(D),int(h),int(mi),int(s), tzinfo=utc)
+        ts = int(dt.timestamp()*1000)
+
+    try:
+        o,h,l,c,v = map(float, parts[1:6])
     except Exception:
         continue
+
+    # фильтры на мусор
+    if not (o and h and l and c) or h < l:
+        continue
+
+    sys.stdout.write(f"{ts},{o:.10f},{h:.10f},{l:.10f},{c:.10f},{v:.10f}\n")
+    cnt_ok += 1
+
+# Телеметрия в stderr (не мешает пайпам)
+print(f"[NORMALIZE] in={cnt_in} out={cnt_ok}", file=sys.stderr)
 PY
 }
 
@@ -153,7 +165,6 @@ inflate_concat_to_raw(){
   local tmp_concat; tmp_concat="$(mktemp)"
   : > "$tmp_concat"
   if compgen -G "${PUB_DIR}/${src_tf}/*/*.csv.gz" > /dev/null; then
-    # concat months
     find "${PUB_DIR}/${src_tf}" -type f -name '*.csv.gz' | sort | while read -r gz; do
       gzip -cd "$gz" >> "$tmp_concat" || true
     done
@@ -162,12 +173,14 @@ inflate_concat_to_raw(){
   local tmp_norm; tmp_norm="$(mktemp)"
   : > "$tmp_norm"
   if [[ -s "$tmp_concat" ]]; then
-    normalize_to_epoch < "$tmp_concat" > "$tmp_norm" || true
+    if ! normalize_to_epoch < "$tmp_concat" > "$tmp_norm"; then
+      : # python уже напишет телеметрию
+    fi
   fi
 
-  # DEBUG: если пусто — сохраним первые 20 строк конкатенации
+  # DEBUG: если пусто — сохраним первые строки источника
   if [[ ! -s "$tmp_norm" && -s "$tmp_concat" ]]; then
-    head -n 20 "$tmp_concat" > "/tmp/mt4_debug_${tf}.txt" || true
+    head -n 50 "$tmp_concat" > "/tmp/mt4_debug_${tf}.txt" || true
     log "DEBUG dump: /tmp/mt4_debug_${tf}.txt"
   fi
   rm -f "$tmp_concat"
@@ -186,13 +199,13 @@ inflate_concat_to_raw(){
   fi
   rm -f "$tmp_norm"
 
-  # Если tf==src_tf — копируем (избегая same-file)
+  # tf==src → копируем (если не тот же файл)
   if [[ "$tf" == "$src_tf" ]]; then
     if [[ "$raw_src" != "$raw_tf" ]]; then cp -f "$raw_src" "$raw_tf"; fi
     return 0
   fi
 
-  # Агрегация 240/1440 по UTC биннам
+  # Агрегация 240/1440 из 60
   if [[ "$tf" == "240" || "$tf" == "1440" ]]; then
     if [[ ! -s "$raw_src" ]]; then : > "$raw_tf"; return 0; fi
     awk -F',' -v W="$tf" '
@@ -221,7 +234,7 @@ make_clean(){
 
 log "TEMPLATE: $ARCHIVE_URL_TMPL"
 
-# 1) FETCH последних N месяцев по каждому TF (404 для текущего месяца — ок)
+# 1) FETCH
 for tf in $INTERVALS; do
   for ((i=0;i<MONTHS;i++)); do
     read -r YY MM < <(month_offset "$i")
@@ -229,11 +242,11 @@ for tf in $INTERVALS; do
   done
 done
 
-# 2) CONCAT → NORMALIZE → RAW; 240/1440 собираем из 60
+# 2) CONCAT→NORMALIZE→RAW, затем CLEAN
 for tf in $INTERVALS; do inflate_concat_to_raw "$tf" || true; done
 for tf in $INTERVALS; do make_clean "$tf" || true; done
 
-# 3) Быстрые сэмплы
+# 3) Сэмплы
 for tf in $INTERVALS; do
   f_raw="$(printf "$RAW_TMPL" "$tf")"
   f_clean="$(printf "$CLEAN_TMPL" "$tf")"
