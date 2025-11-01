@@ -1,6 +1,6 @@
 #include "../httplib.h"
 #include "json.hpp"
-#include "../server_accessors.h"  // etai::{get_current_model,get_model_thr,get_model_ma_len}
+#include "../server_accessors.h"  // etai::{get_current_model,get_model_thr,get_model_ma_len,get_model_feat_dim}
 #include "../utils_model.h"
 #include "../utils_data.h"
 #include <fstream>
@@ -110,7 +110,6 @@ static std::optional<fs::path> expected_model_path(const std::string& symbol, co
     // формируем cache/models/<SYMBOL>_<INTERVAL>_ppo_pro.json
     fs::path p = fs::path("cache") / "models" / (symbol + "_" + interval + "_ppo_pro.json");
     if (fs::exists(p) && fs::is_regular_file(p)) return p;
-    // иногда пишут минутный ТФ цифрой без суффикса
     return std::nullopt;
 }
 
@@ -172,7 +171,7 @@ void register_health_ai(httplib::Server& svr) {
             } catch (...) {}
         }
 
-        // аксессоры: записываем в out и дублируем в тело модели, если там пусто
+        // Аксессоры: thr, ma_len
         try {
             auto thr = etai::get_model_thr();
             out["model_thr"] = thr;
@@ -183,12 +182,15 @@ void register_health_ai(httplib::Server& svr) {
             out["model_ma_len"] = ml;
             if (!ms.contains("ma_len") || ms["ma_len"].is_null()) ms["ma_len"] = ml;
         } catch (...) {}
+
+        // feat_dim — читаем из атомика, затем дублируем в модель при отсутствии
         try {
-            if (ms.contains("feat_dim") && !ms["feat_dim"].is_null())
-                out["model_feat_dim"] = ms["feat_dim"];
-            else
-                out["model_feat_dim"] = nullptr;
-        } catch (...) { out["model_feat_dim"] = nullptr; }
+            auto fd = etai::get_model_feat_dim();
+            out["model_feat_dim"] = fd;
+            if (!ms.contains("feat_dim") || ms["feat_dim"].is_null()) ms["feat_dim"] = fd;
+        } catch (...) {
+            out["model_feat_dim"] = nullptr;
+        }
 
         out["model"] = ms;
 

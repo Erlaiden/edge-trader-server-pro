@@ -11,7 +11,6 @@
 #include "routes/health_ai.cpp"
 #include "routes/train.cpp"
 #include "routes/model.cpp"
-#include "routes/infer.cpp"
 #include "routes/metrics.cpp"     // внутри namespace etai
 #include "routes/agents.cpp"
 #include "routes/backfill.inc.cpp" // static inline register_backfill_routes(...)
@@ -27,9 +26,9 @@ int main(int argc, char** argv) {
     // 1) Инициализация состояния модели (из диска + дефолты)
     etai::init_model_atoms_from_disk(
         "cache/models/BTCUSDT_15_ppo_pro.json",
-        /*def_thr*/ 0.38,
+        /*def_thr*/ 0.30,
         /*def_ma*/  12,
-        /*feat*/    28
+        /*feat*/    32
     );
 
     // 2) HTTP-сервер
