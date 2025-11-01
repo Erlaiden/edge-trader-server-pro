@@ -65,14 +65,26 @@ json run_train_pro_and_save(const std::string& symbol,
     // --- 3) Тренировка
     json trainer = trainPPO_pro(raw15, p60, p240, p1440, episodes, tp, sl, ma_len, use_antimanip);
 
-    // --- 4) Сохранение модели на диск (включая policy.norm, если есть)
+    // --- 4) ДОЗАПОЛНЯЕМ trainer служебными полями ДЛЯ СЕРИАЛИЗАЦИИ
+    // Контракт: модель на диске несёт параметры, которыми она получена.
+    // Эти поля потом увидит /api/model → mobile app.
+    try {
+        trainer["tp"]     = tp;
+        trainer["sl"]     = sl;
+        trainer["ma_len"] = ma_len;
+    } catch (...) {
+        // не валим процесс — просто лог
+        std::cerr << "[TRAIN] warn: failed to stamp tp/sl/ma_len into model json\n";
+    }
+
+    // --- 5) Сохранение модели на диск (включая policy.norm, если есть)
     const std::string model_path = "cache/models/" + symbol + "_" + interval + "_ppo_pro.json";
     {
         std::ofstream f(model_path);
         f << trainer.dump(2);
     }
 
-    // --- 5) Обновляем атомики для health/metrics (thr, ma, feat_dim, current_model)
+    // --- 6) Обновляем атомики для health/metrics (thr, ma, feat_dim, current_model)
     const double best_thr = trainer.value("best_thr", 0.5);
 
     int feat_dim = 0;
@@ -98,7 +110,7 @@ json run_train_pro_and_save(const std::string& symbol,
     if (feat_dim > 0) set_model_feat_dim(feat_dim);
     set_current_model(trainer);
 
-    // --- 6) Лог в stdout
+    // --- 7) Лог в stdout
     try {
         const auto& m = trainer.at("metrics");
         std::cout << "[TRAIN] rows="       << m.value("N_rows", 0)
@@ -112,12 +124,16 @@ json run_train_pro_and_save(const std::string& symbol,
                   << " dd="                << m.value("val_drawdown", 0.0)
                   << " Rv2="               << m.value("val_reward_v2", 0.0)
                   << " feat_dim="          << feat_dim
+                  << " tp="                << tp
+                  << " sl="                << sl
+                  << " ma="                << ma_len
                   << std::endl;
     } catch (...) {
-        std::cout << "[TRAIN] metrics missing (feat_dim=" << feat_dim << ")\n";
+        std::cout << "[TRAIN] metrics missing (feat_dim=" << feat_dim
+                  << ", tp=" << tp << ", sl=" << sl << ", ma=" << ma_len << ")\n";
     }
 
-    // --- 7) Стабилизированный ответ
+    // --- 8) Стабилизированный ответ
     return make_train_reply(trainer, tp, sl, ma_len, model_path);
 }
 
