@@ -1,74 +1,50 @@
-// health_ai: strict, deterministic model object (+ robust numeric serialization & self-heal).
+#include "httplib.h"
 #include "json.hpp"
-#include "../httplib.h"
-#include "../server_accessors.h"   // etai::{get/set_model_thr,get/set_model_ma_len,get/set_current_model}
-#include "../utils_data.h"         // etai::get_data_health()
-#include "../utils_model.h"        // safe_read_json_file(), make_model()
-#include "../agents.h"             // etai::get_agent_public()
-#include <cmath>
-#include <algorithm>
-#include <string>
+#include "utils_data.h"     // etai::get_data_health()
+#include "utils_model.h"    // make_model(), j_number(), j_integer()
+#include "agents.h"         // etai::get_agent_public()
 
 using json = nlohmann::json;
 
-static inline double     sanitize_thr(double x, double defv){ return std::isfinite(x) ? x : defv; }
-static inline long long  sanitize_ma (long long x, long long defv){ return x > 0 ? x : defv; }
-static inline json j_number(double v){ return json::parse(std::to_string(v)); }
-static inline json j_integer(long long v){ return json::parse(std::to_string(v)); }
+// /api/health/ai — возвращает общее состояние модели, данных и агентов
+static inline void register_health_ai(httplib::Server& svr) {
+    svr.Get("/api/health/ai", [](const httplib::Request&, httplib::Response& res) {
+        json out;
+        out["ok"] = true;
 
-void register_health_ai(httplib::Server& srv){
-    auto handler = [](bool extended){
-        return [extended](const httplib::Request&, httplib::Response& res){
-            double     thr_raw = etai::get_model_thr();
-            long long  ma_raw  = etai::get_model_ma_len();
-            json       disk    = etai::get_current_model();
-
-            const double    thr = sanitize_thr(thr_raw, 0.38);
-            const long long ma  = sanitize_ma (ma_raw,  12);
-
-            if (!std::isfinite(thr_raw)) etai::set_model_thr(thr);
-            if (!(ma_raw > 0))           etai::set_model_ma_len(ma);
-            if (!disk.is_object())       etai::set_current_model(json::object());
-
-            json out = json::object();
-            out["ok"]            = true;
-            out["model"]         = make_model(thr, ma, disk);
-            out["model_thr"]     = j_number(thr);
-            out["model_ma_len"]  = j_integer(ma);
-
-            // agents public status (важно: правильный неймспейс)
-            try { out["agents"] = etai::get_agent_public(); } catch(...) {}
-
-            try{
-                json d = etai::get_data_health();
-                if(d.is_object()){
-                    if(!d.contains("ok")) d["ok"] = true;
-                    out["data"] = d;
-                }
-            }catch(...){}
-
-            auto policy_stats_from = [](const json& dj){
-                json o = json::object();
-                if(!dj.is_object() || !dj.contains("policy")) return o;
-                const json& P = dj["policy"];
-                o["source"]    = dj.value("policy_source", std::string());
-                o["feat_dim"]  = P.value("feat_dim", 0);
-                if(P.contains("W") && P["W"].is_array()){
-                    const auto& W = P["W"];
-                    o["W_len"] = (unsigned)W.size();
-                    json head = json::array();
-                    for(size_t i=0;i<std::min<size_t>(8,W.size());++i) head.push_back(W[i]);
-                    o["W_head"] = head;
-                }
-                if(P.contains("b") && P["b"].is_array()) o["b_len"] = (unsigned)P["b"].size();
-                return o;
+        // Модель
+        try {
+            json disk = safe_read_json_file("cache/models/BTCUSDT_15_ppo_pro.json");
+            out["model"] = make_model(0.3, 12, disk);
+        } catch (...) {
+            out["model"] = json{
+                {"best_thr", nullptr}, {"ma_len", nullptr},
+                {"tp", nullptr}, {"sl", nullptr},
+                {"feat_dim", nullptr}, {"version", nullptr},
+                {"symbol", nullptr}, {"interval", nullptr},
+                {"schema", nullptr}, {"mode", nullptr}
             };
-            out["policy_stats"] = policy_stats_from(disk);
+        }
 
-            res.set_content(out.dump(2), "application/json");
-        };
-    };
+        // Агент
+        try {
+            out["agents"] = etai::get_agent_public();
+        } catch (...) {
+            out["agents"] = json{
+                {"symbol","BTCUSDT"},
+                {"interval","15"},
+                {"mode","idle"},
+                {"running",false}
+            };
+        }
 
-    srv.Get("/api/health/ai",           handler(false));
-    srv.Get("/api/health/ai/extended",  handler(true));
+        // Проверка данных
+        try {
+            out["data"] = etai::get_data_health();
+        } catch (...) {
+            out["data"] = json{{"ok",false}};
+        }
+
+        res.set_content(out.dump(2), "application/json");
+    });
 }
