@@ -14,8 +14,7 @@ using json = nlohmann::json;
 
 namespace {
 
-// == ВНИМАНИЕ ==
-// Уникальные имена хелперов, чтобы не конфликтовать с qs_str/qs_num в других TU.
+// Уникальные имена хелперов, чтобы не конфликтовать с другими TU.
 inline std::string ag_qs_str(const httplib::Request& req, const char* k, const char* defv){
     return req.has_param(k) ? req.get_param_value(k) : std::string(defv);
 }
@@ -24,7 +23,7 @@ inline double ag_qs_num(const httplib::Request& req, const char* k, double defv)
     try { return std::stod(req.get_param_value(k)); } catch (...) { return defv; }
 }
 
-// Простое состояние агента в памяти.
+// Состояние агента в памяти (v1).
 struct AgentState {
     std::atomic<bool> running{false};
     std::string symbol{"BTCUSDT"};
@@ -42,10 +41,21 @@ inline void json_reply(httplib::Response& res, const json& j, int code=200){
 
 namespace etai {
 
+// Публичный статус для health_ai
+nlohmann::json get_agent_public(){
+    auto& S = agent_state();
+    json j;
+    j["running"]  = S.running.load();
+    j["mode"]     = S.mode;
+    j["symbol"]   = S.symbol;
+    j["interval"] = S.interval;
+    return j;
+}
+
 void setup_agents_routes(httplib::Server& svr) {
     const bool agent_enabled = std::getenv("ETAI_AGENT_ENABLE") != nullptr;
 
-    // ===== Decision preview (как было) =====
+    // ===== Decision preview =====
     svr.Get("/api/agents/decision", [agent_enabled](const httplib::Request& req, httplib::Response& res) {
         json r;
         if (!agent_enabled) {
@@ -84,7 +94,7 @@ void setup_agents_routes(httplib::Server& svr) {
         return json_reply(res, r);
     });
 
-    // ===== New: run/stop/status (v1 wiring + проверка данных) =====
+    // ===== run/stop/status (v1) с валидацией данных =====
     svr.Get("/api/agents/run", [agent_enabled](const httplib::Request& req, httplib::Response& res){
         json r;
         if (!agent_enabled) {
@@ -97,11 +107,11 @@ void setup_agents_routes(httplib::Server& svr) {
         const std::string interval = ag_qs_str(req, "interval", "15");
         const std::string mode     = ag_qs_str(req, "mode", "live");
 
-        // 1) Health по данным (clean/raw наличие, строки/колонки)
+        // Health по данным
         json dh = etai::data_health_report(symbol, interval);
         const bool data_ok = dh.value("ok", false);
 
-        // 2) Готовим кэш фич X/y
+        // Кэш фич X/y
         arma::mat X, y;
         bool xy_ok = false;
         if (data_ok) {
@@ -114,12 +124,11 @@ void setup_agents_routes(httplib::Server& svr) {
             r["symbol"] = symbol;
             r["interval"] = interval;
             r["agents"] = { {"running", false}, {"mode", "idle"} };
-            r["data_health"] = dh;   // paths/rows/cols/exists
+            r["data_health"] = dh;
             r["xy_ready"]    = xy_ok;
-            return json_reply(res, r, 409);  // Требуется подготовить данные
+            return json_reply(res, r, 409);
         }
 
-        // 3) Всё готово — сохраняем состояние и «запускаем»
         auto& S = agent_state();
         S.symbol   = symbol;
         S.interval = interval;
@@ -131,8 +140,6 @@ void setup_agents_routes(httplib::Server& svr) {
         r["symbol"]   = S.symbol;
         r["interval"] = S.interval;
         r["mode"]     = S.mode;
-
-        // Короткая сводка по данным
         r["data_health"] = {
             {"ok", true},
             {"clean_rows", dh["clean"].value("rows", 0)},
