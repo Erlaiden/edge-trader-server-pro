@@ -15,6 +15,7 @@
 #include "routes/metrics.cpp"     // внутри namespace etai
 #include "routes/agents.cpp"
 #include "routes/backfill.inc.cpp" // static inline register_backfill_routes(...)
+#include "routes/train_env.cpp"    // новый роут: /api/train_env (за фичефлагом)
 
 int main(int argc, char** argv) {
     int port = 3000;
@@ -40,6 +41,7 @@ int main(int argc, char** argv) {
     etai::register_metrics_routes(svr); // <-- квалификация namespace
     register_backfill_routes(svr);
     etai::setup_agents_routes(svr);
+    register_train_env_routes(svr);     // безопасная заглушка под ETAI_ENABLE_TRAIN_ENV
 
     std::cout << "[EdgeTrader] server started on port " << port
               << " (thr=" << etai::get_model_thr()
