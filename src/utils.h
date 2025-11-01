@@ -13,6 +13,10 @@
 #include <algorithm>
 #include <sstream>
 #include <iomanip>
+#include <charconv>
+#include <optional>
+#include <string_view>
+#include <cctype>
 #include <sys/stat.h>
 #include <sys/types.h>
 
@@ -23,8 +27,21 @@ using json = nlohmann::json;
 // ===== БАЗОВЫЕ ХЕЛПЕРЫ =====
 inline void ensure_dir(const std::string& path) { ::mkdir(path.c_str(), 0755); }
 
+// Нормализация интервала к каноническому виду файлов/расчётов
+inline std::string canonical_interval(std::string interval) {
+  interval.erase(std::remove_if(interval.begin(), interval.end(), [](unsigned char c){
+    return std::isspace(c) || c=='\"' || c=='\'';
+  }), interval.end());
+  // допустимые формы → канон
+  if (interval == "15m"   || interval == "15")                   return "15";
+  if (interval == "60m"   || interval == "1h"  || interval=="60") return "60";
+  if (interval == "240m"  || interval == "4h"  || interval=="240")return "240";
+  if (interval == "1440m" || interval == "1d"  || interval=="D" || interval=="1440") return "1440";
+  return interval;
+}
+
 inline std::string cache_file(const std::string& symbol, const std::string& interval) {
-  return "cache/" + symbol + "_" + interval + ".csv";
+  return "cache/" + symbol + "_" + canonical_interval(interval) + ".csv";
 }
 
 inline std::string join_csv(const std::vector<std::string>& cols) {
@@ -57,31 +74,63 @@ inline std::string make_query(const std::vector<std::pair<std::string,std::strin
 
 // ===== TIMEFRAME (с поддержкой 1440) =====
 inline long long tf_ms(const std::string& interval) {
-  if (interval=="15")   return 15ll   * 60 * 1000;
-  if (interval=="60")   return 60ll   * 60 * 1000;
-  if (interval=="240")  return 240ll  * 60 * 1000;
-  if (interval=="1440") return 1440ll * 60 * 1000; // 1d
+  const std::string tf = canonical_interval(interval);
+  if (tf=="15")   return 15ll   * 60 * 1000;
+  if (tf=="60")   return 60ll   * 60 * 1000;
+  if (tf=="240")  return 240ll  * 60 * 1000;
+  if (tf=="1440") return 1440ll * 60 * 1000; // 1d
   return 60ll * 60 * 1000; // default 1h
 }
 
 // Bybit ожидает 'D' для дневки. Всё остальное — как есть.
 inline std::string bybit_interval_param(const std::string& interval) {
-  if (interval == "1440") return "D";
-  return interval;
+  const std::string tf = canonical_interval(interval);
+  if (tf == "1440") return "D";
+  return tf;
+}
+
+// ===== Безопасный парсинг timestamp =====
+inline std::optional<long long> parse_timestamp_token(std::string_view token) {
+  // trim left spaces
+  while (!token.empty() && std::isspace(static_cast<unsigned char>(token.front()))) {
+    token.remove_prefix(1);
+  }
+  // пропустить BOM
+  if (token.size() >= 3 &&
+      static_cast<unsigned char>(token[0]) == 0xEF &&
+      static_cast<unsigned char>(token[1]) == 0xBB &&
+      static_cast<unsigned char>(token[2]) == 0xBF) {
+    token.remove_prefix(3);
+  }
+  // взять только ведущие цифры
+  auto end = std::find_if_not(token.begin(), token.end(), [](unsigned char c){
+    return std::isdigit(c);
+  });
+  if (end == token.begin()) return std::nullopt; // не начинается с цифры
+  const char* begin_ptr = token.data();
+  const char* end_ptr   = begin_ptr + (end - token.begin());
+  long long value = 0;
+  auto res = std::from_chars(begin_ptr, end_ptr, value);
+  if (res.ec != std::errc()) return std::nullopt;
+  return value;
 }
 
 // ===== CSV CACHE =====
-inline void read_cache(const std::string& path, std::map<long long, std::string>& out) {
+// Возвращает число пропущенных строк
+inline size_t read_cache(const std::string& path, std::map<long long, std::string>& out) {
   std::ifstream f(path);
-  if (!f.good()) return;
+  if (!f.good()) return 0;
   std::string line;
+  size_t skipped = 0;
   while (std::getline(f, line)) {
     if (line.empty()) continue;
     size_t pos = line.find(',');
     if (pos == std::string::npos) continue;
-    long long ts = std::stoll(line.substr(0, pos));
-    out[ts] = line;
+    auto ts = parse_timestamp_token(std::string_view(line.data(), pos));
+    if (!ts) { ++skipped; continue; }
+    out[*ts] = line;
   }
+  return skipped;
 }
 
 inline void write_cache(const std::string& path, const std::map<long long, std::string>& data) {
@@ -96,7 +145,8 @@ inline bool bybit_fetch_batch(httplib::SSLClient& cli,
                               const std::string& interval,
                               long long start_ms,
                               long long end_ms,
-                              std::vector<std::array<std::string,7>>& out_rows) {
+                              std::vector<std::array<std::string,7>>& out_rows,
+                              size_t* skipped_rows = nullptr) {
   const std::string interval_param = bybit_interval_param(interval);
   std::vector<std::pair<std::string,std::string>> kv{
     {"category", category},
@@ -120,7 +170,7 @@ inline bool bybit_fetch_batch(httplib::SSLClient& cli,
   const auto& arr = j["result"]["list"];
   if (!arr.is_array()) return true;
 
-  std::vector<std::array<std::string,7>> batch;
+  std::vector<std::pair<long long, std::array<std::string,7>>> batch;
   batch.reserve(arr.size());
   for (const auto& row : arr) {
     if (!row.is_array() || row.size() < 7) continue;
@@ -133,14 +183,21 @@ inline bool bybit_fetch_batch(httplib::SSLClient& cli,
       row.at(5).get<std::string>(),
       row.at(6).get<std::string>()
     };
-    batch.emplace_back(std::move(r));
+    auto ts = parse_timestamp_token(r[0]);
+    if (!ts) {
+      if (skipped_rows) ++(*skipped_rows);
+      continue;
+    }
+    batch.emplace_back(*ts, std::move(r));
   }
 
   std::sort(batch.begin(), batch.end(), [](const auto& a, const auto& b){
-    return std::stoll(a[0]) < std::stoll(b[0]);
+    return a.first < b.first;
   });
 
-  out_rows.insert(out_rows.end(), batch.begin(), batch.end());
+  for (auto& item : batch) {
+    out_rows.emplace_back(std::move(item.second));
+  }
   return true;
 }
 
@@ -167,10 +224,11 @@ inline nlohmann::json backfill_last_months(const std::string& symbol,
   long long cursor = since_ms;
   const long long frame = tf_ms(interval);
   long long last_ts_seen = -1;
+  size_t skipped_rows = 0;
 
   while (cursor < now_ms) {
     long long end_ms = std::min(cursor + frame * 1000, now_ms);
-    if (!bybit_fetch_batch(cli, category, symbol, interval, cursor, end_ms, rows)) {
+    if (!bybit_fetch_batch(cli, category, symbol, interval, cursor, end_ms, rows, &skipped_rows)) {
       std::this_thread::sleep_for(std::chrono::milliseconds(200));
       continue;
     }
@@ -178,7 +236,12 @@ inline nlohmann::json backfill_last_months(const std::string& symbol,
       cursor += frame * 1000;
       continue;
     }
-    long long new_last = std::stoll(rows.back()[0]);
+    // найти последний валидный ts
+    auto it = std::find_if(rows.rbegin(), rows.rend(), [](const auto& r){
+      return parse_timestamp_token(r[0]).has_value();
+    });
+    if (it == rows.rend()) { ++skipped_rows; cursor += frame; continue; }
+    long long new_last = *parse_timestamp_token((*it)[0]);
     if (new_last <= last_ts_seen) { cursor += frame; }
     else { last_ts_seen = new_last; cursor = last_ts_seen + frame; }
     std::this_thread::sleep_for(std::chrono::milliseconds(60));
@@ -187,28 +250,42 @@ inline nlohmann::json backfill_last_months(const std::string& symbol,
   // merge → cache
   std::map<long long, std::string> merged;
   const auto path = cache_file(symbol, interval);
-  read_cache(path, merged);
+  skipped_rows += read_cache(path, merged);
 
   for (const auto& r : rows) {
-    long long ts = std::stoll(r[0]);
+    auto ts = parse_timestamp_token(r[0]);
+    if (!ts) { ++skipped_rows; continue; }
+    const long long ts_value = *ts;
     std::vector<std::string> cols{ r[0], r[1], r[2], r[3], r[4], r[5], r[6] };
-    merged[ts] = join_csv(cols);
+    merged[ts_value] = join_csv(cols);
   }
 
   // trim N месяцев
   if (!merged.empty()) {
     std::map<long long, std::string> trimmed;
-    for (auto it = merged.lower_bound(since_ms); it != merged.end(); ++it)
-      trimmed.emplace(it->first, it->second);
+    for (auto it2 = merged.lower_bound(since_ms); it2 != merged.end(); ++it2)
+      trimmed.emplace(it2->first, it2->second);
     merged.swap(trimmed);
   }
 
   write_cache(path, merged);
 
+  if (skipped_rows > 0) {
+    return json{
+      {"ok", false},
+      {"symbol", symbol},
+      {"interval", canonical_interval(interval)},
+      {"months", months},
+      {"rows", (int)merged.size()},
+      {"error", "invalid_timestamp"},
+      {"skipped_rows", skipped_rows}
+    };
+  }
+
   return json{
     {"ok", true},
     {"symbol", symbol},
-    {"interval", interval},
+    {"interval", canonical_interval(interval)},
     {"months", months},
     {"rows", (int)merged.size()}
   };
