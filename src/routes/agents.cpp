@@ -6,24 +6,23 @@
 #include <cstdlib>
 #include <string>
 
-// Подтягиваем реализацию AgentLayer в этот TU,
-// чтобы не трогать CMake прямо сейчас.
+// Подтягиваем реализацию AgentLayer в этот TU.
 #include "../agents/agent_layer.cpp"
 
 using json = nlohmann::json;
 
 namespace {
 
-inline std::string qs_str(const httplib::Request& req, const char* k, const char* defv){
+// ВНИМАНИЕ: уникальные имена, чтобы не конфликтовать с train_env.cpp
+inline std::string ag_qs_str(const httplib::Request& req, const char* k, const char* defv){
     return req.has_param(k) ? req.get_param_value(k) : std::string(defv);
 }
-inline double qs_num(const httplib::Request& req, const char* k, double defv){
+inline double ag_qs_num(const httplib::Request& req, const char* k, double defv){
     if (!req.has_param(k)) return defv;
     try { return std::stod(req.get_param_value(k)); } catch (...) { return defv; }
 }
 
-// Простое состояние агента в памяти.
-// Этого достаточно для UI v1 (кнопки Start/Stop и health).
+// Простое состояние агента для v1.
 struct AgentState {
     std::atomic<bool> running{false};
     std::string symbol{"BTCUSDT"};
@@ -53,9 +52,9 @@ void setup_agents_routes(httplib::Server& svr) {
             return json_reply(res, r);
         }
 
-        const std::string symbol   = qs_str(req, "symbol", "BTCUSDT");
-        const std::string interval = qs_str(req, "interval", "15");
-        const double thr           = qs_num(req, "thr", 0.5);
+        const std::string symbol   = ag_qs_str(req, "symbol", "BTCUSDT");
+        const std::string interval = ag_qs_str(req, "interval", "15");
+        const double thr           = ag_qs_num(req, "thr", 0.5);
 
         arma::mat X; arma::vec y;
         if (!etai::load_cached_xy(symbol, interval, X, y) || X.n_rows == 0) {
@@ -83,7 +82,7 @@ void setup_agents_routes(httplib::Server& svr) {
         return json_reply(res, r);
     });
 
-    // ===== New: run/stop/status (v1 wiring) =====
+    // ===== run/stop/status для UI v1 =====
     svr.Get("/api/agents/run", [agent_enabled](const httplib::Request& req, httplib::Response& res){
         json r;
         if (!agent_enabled) {
@@ -93,16 +92,18 @@ void setup_agents_routes(httplib::Server& svr) {
         }
 
         auto& S = agent_state();
-        S.symbol   = qs_str(req, "symbol", "BTCUSDT");
-        S.interval = qs_str(req, "interval", "15");
-        S.mode     = qs_str(req, "mode", "live");
+        S.symbol   = ag_qs_str(req, "symbol", "BTCUSDT");
+        S.interval = ag_qs_str(req, "interval", "15");
+        S.mode     = ag_qs_str(req, "mode", "live");
         S.running  = true;
 
-        r["ok"] = true;
-        r["symbol"] = S.symbol;
-        r["interval"] = S.interval;
-        r["mode"] = S.mode;
-        r["running"] = S.running.load();
+        r = {
+            {"ok", true},
+            {"running", S.running.load()},
+            {"symbol", S.symbol},
+            {"interval", S.interval},
+            {"mode", S.mode}
+        };
         return json_reply(res, r);
     });
 
@@ -110,7 +111,6 @@ void setup_agents_routes(httplib::Server& svr) {
         auto& S = agent_state();
         S.running = false;
         S.mode = "idle";
-
         json r = {
             {"ok", true},
             {"running", false},
