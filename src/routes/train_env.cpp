@@ -59,7 +59,7 @@ static ModelWB load_model_wb(const std::string& path){
         else if(p.contains("b") && p["b"].is_number())             m.b = p["b"].get<double>();
         if(p.contains("feat_dim")) m.feat_dim = p["feat_dim"].get<int>();
         m.ok = !m.W.empty();
-    }catch(...){}
+    }catch(...) {}
     return m;
 }
 
@@ -76,6 +76,20 @@ static void zscore_by_ref(mat& X, const mat& ref){
 // ATR proxy (col 4 в фичах — наш ATR)
 static vec atr_col(const mat& F){ if(F.n_cols>4) return abs(F.col(4)); return vec(F.n_rows,fill::zeros); }
 
+// Энергия из ATR в [0..1] (робастная нормировка через медиану)
+static vec energy01_from_atr(const vec& atr){
+    vec a = atr;
+    if(a.n_rows==0) return a;
+    double med = arma::median(a);
+    if(!std::isfinite(med) || med<=1e-12) med = 1e-3;
+    vec e = a / (3.0*med);            // ~1 при ~3*median
+    for(uword i=0;i<e.n_rows;i++){
+        double v = e(i); if(!std::isfinite(v)) v=0.0;
+        e(i) = std::max(0.0, std::min(1.0, v));
+    }
+    return e;
+}
+
 // aggressive bias (логит-сдвиг по тренду; ограничен)
 static void apply_aggr_bias(vec& logits, const mat& F){
     double k = getenv("ETAI_AGGR_K")? std::atof(getenv("ETAI_AGGR_K")): 0.15;
@@ -88,13 +102,24 @@ static void apply_aggr_bias(vec& logits, const mat& F){
 
 static vec sigmoid_vec(const vec& z){ vec p=z; for(uword i=0;i<p.n_rows;i++){ double t=p(i); p(i)=1.0/(1.0+std::exp(-t)); } return p; }
 
-// Пороговая симуляция c произвольным порогом THR (вместо зашитых 0.5)
+// Пороговая симуляция c THR и E_LO-гейтингом
 static vec simulate_pnl_thr(const vec& fut_ret, const vec& p_long01,
-                            const vec& atr, double tp, double sl, double fee_abs,
-                            bool atr_scale, double thr_cut){
+                            const vec& atr, const vec& energy01,
+                            double tp, double sl, double fee_abs,
+                            bool atr_scale, double thr_cut, double e_lo,
+                            unsigned& skipped_out)
+{
     uword N=fut_ret.n_rows; vec r(N,fill::zeros);
+    skipped_out = 0u;
     double k_atr = getenv("ETAI_ATR_K")? std::atof(getenv("ETAI_ATR_K")): 0.35;
     for(uword i=0;i<N;i++){
+        // Гейтинг по энергии
+        if(i<energy01.n_rows && energy01(i) < e_lo){
+            // сделку не открываем — считаем скип
+            skipped_out++;
+            continue;
+        }
+
         double tp_e=tp, sl_e=sl;
         if(atr_scale && i<atr.n_rows){
             double z = atr(i);
@@ -162,19 +187,19 @@ void register_train_env_routes(httplib::Server& svr){
         }
         std::string symbol   = qs_str(req,"symbol","BTCUSDT");
         std::string interval = qs_str(req,"interval","15");
-        int steps            = std::max(10, qs_int(req,"steps",3000));
+        int    steps         = std::max(10, qs_int(req,"steps",3000));
         double fee           = std::max(0.0, qs_dbl(req,"fee",0.0005));
         double tp            = std::max(1e-5, qs_dbl(req,"tp",0.003));
         double sl            = std::max(1e-5, qs_dbl(req,"sl",0.0018));
         std::string policy   = qs_str(req,"policy","model"); // model | thr_only
 
         // --- overrides via URL OR ENV ---
-        // THR: url param 'thr' приоритетнее; затем ENV ETAI_THR; иначе дефолт=0.40
+        // THR
         double thr_cut = qs_dbl(req,"thr",
                            std::getenv("ETAI_THR")? std::atof(getenv("ETAI_THR")) : 0.40);
         thr_cut = clampd(thr_cut, 0.01, 0.99);
 
-        // E_LO (просто возвращаем, как параметр контекста)
+        // E_LO (контекст энергии)
         double e_lo = qs_dbl(req,"elo",
                          std::getenv("ETAI_CTX_E_LO")? std::atof(getenv("ETAI_CTX_E_LO")) : 0.20);
         e_lo = clampd(e_lo, 0.0, 1.0);
@@ -183,11 +208,10 @@ void register_train_env_routes(httplib::Server& svr){
         double aggr = qs_dbl(req,"aggr",
                          std::getenv("ETAI_AGGR_K")? std::atof(getenv("ETAI_AGGR_K")) : 0.15);
         if(!std::isfinite(aggr) || aggr<0) aggr=0.15;
-        setenv("ETAI_AGGR_K",(std::to_string(aggr)).c_str(),1); // чтобы apply_aggr_bias видел актуальное
+        setenv("ETAI_AGGR_K",(std::to_string(aggr)).c_str(),1);
 
         // ATR on/off
-        bool use_atr = qs_int(req,"atr",
-                         env_enabled("ETAI_ENV_ATR")?1:0) != 0;
+        bool use_atr = qs_int(req,"atr", env_enabled("ETAI_ENV_ATR")?1:0) != 0;
 
         arma::mat raw;
         if(!etai::load_raw_ohlcv(symbol,interval,raw)){
@@ -222,9 +246,13 @@ void register_train_env_routes(httplib::Server& svr){
         // signals
         vec p_long01 = make_signals(Fw, policy);
 
-        // pnl simulation c порогом thr_cut
+        // energy + atr
         vec atrv = atr_col(Fw);
-        vec pnl = simulate_pnl_thr(fr, p_long01, atrv, tp, sl, fee, use_atr, thr_cut);
+        vec e01  = energy01_from_atr(atrv);
+
+        // pnl simulation with THR + E_LO gating
+        unsigned skipped=0u;
+        vec pnl = simulate_pnl_thr(fr, p_long01, atrv, e01, tp, sl, fee, use_atr, thr_cut, e_lo, skipped);
 
         // metrics
         double sum_pos=0.0, sum_neg=0.0; int wins=0, losses=0;
@@ -250,6 +278,7 @@ void register_train_env_routes(httplib::Server& svr){
                        {"thr", thr_cut},{"feat_dim",(int)Fw.n_cols}};
         out["pf"]=pf; out["sharpe"]=sharpe; out["winrate"]=winrate; out["max_dd"]=dd_max; out["equity_final"]=equity_final;
         out["wins"]=wins; out["losses"]=losses;
+        out["skipped"]=(int)skipped;
         out["params"]=params;
 
         res.set_content(out.dump(2),"application/json");
