@@ -1,9 +1,8 @@
 #include "../httplib.h"
 #include "json.hpp"
 #include "../server_accessors.h"  // etai::{get_current_model,get_model_thr,get_model_ma_len}
-#include "../utils_model.h"
-#include "../utils_data.h"
-
+#include "../utils_model.h"       // совместимые хелперы, без дубликатов
+#include "../utils_data.h"        // etai::get_data_health()
 #include <fstream>
 #include <string>
 #include <vector>
@@ -17,7 +16,7 @@
   #error "C++17 filesystem is required"
 #endif
 
-// Опционально подключаем агентов
+// Агенты — опционально
 #if __has_include("../agents.h")
   #include "../agents.h"
   #define ETAI_HAS_AGENTS 1
@@ -46,20 +45,11 @@ static inline json null_model_short() {
     };
 }
 
-// Безопасный доступ по пути a.b.c
-static inline json jget_path(const json& j, std::initializer_list<const char*> path) {
-    const json* cur = &j;
-    for (auto k : path) {
-        if (!cur->is_object() || !cur->contains(k)) return nullptr;
-        cur = &((*cur)[k]);
-    }
-    return *cur;
-}
-
-static std::optional<json> load_json_file(const std::string& path) {
+// Безопасное чтение JSON файла
+static std::optional<json> read_json_file(const fs::path& p) {
     try {
-        std::ifstream ifs(path);
-        if (!ifs.is_open()) return std::nullopt;
+        std::ifstream ifs(p);
+        if (!ifs.good()) return std::nullopt;
         json j; ifs >> j;
         return j;
     } catch (...) {
@@ -67,62 +57,87 @@ static std::optional<json> load_json_file(const std::string& path) {
     }
 }
 
-static std::optional<std::string> find_latest_model_path(const std::string& dir = "cache/models") {
+// Находит самый свежий *.json в cache/models/
+static std::optional<fs::path> latest_model_on_disk() {
     try {
+        fs::path dir = fs::path("cache") / "models";
         if (!fs::exists(dir) || !fs::is_directory(dir)) return std::nullopt;
-        std::vector<fs::directory_entry> files;
-        for (const auto& e : fs::directory_iterator(dir)) {
+        fs::path best;
+        std::time_t best_ts = 0;
+        for (auto &e : fs::directory_iterator(dir)) {
             if (!e.is_regular_file()) continue;
-            if (e.path().extension() == ".json") files.push_back(e);
+            auto p = e.path();
+            if (p.extension() != ".json") continue;
+            auto ts = fs::last_write_time(p);
+            // convert file_time_type -> time_t
+            auto sctp = decltype(ts)::clock::to_time_t(ts);
+            if (sctp >= best_ts) { best_ts = sctp; best = p; }
         }
-        if (files.empty()) return std::nullopt;
-        std::sort(files.begin(), files.end(),
-                  [](const fs::directory_entry& a, const fs::directory_entry& b){
-                      return fs::last_write_time(a) > fs::last_write_time(b);
-                  });
-        return files.front().path().string();
+        if (best_ts == 0) return std::nullopt;
+        return best;
     } catch (...) {
         return std::nullopt;
     }
 }
 
-static void fill_model_fields_from_json(json& dst_ms, const json& src) {
-    auto set_if_null = [&](const char* k, const json& v){
-        if (dst_ms[k].is_null() && !v.is_null()) dst_ms[k] = v;
+// Попытаться заполнить поля модели из RAM-json
+static void fill_from_ram(json& dst, const json& m) {
+    auto put = [&](const char* k){ if (m.contains(k)) dst[k] = m[k]; };
+    put("best_thr"); put("ma_len"); put("tp"); put("sl");
+    put("version"); put("symbol"); put("interval"); put("schema"); put("mode");
+    // feat_dim из policy
+    try {
+        if (m.contains("policy") && m["policy"].contains("feat_dim")) {
+            dst["feat_dim"] = m["policy"]["feat_dim"];
+        }
+    } catch (...) {}
+    // model_path если есть
+    if (m.contains("model_path") && m["model_path"].is_string()) {
+        dst["model_path"] = m["model_path"];
+    }
+}
+
+// Попытаться добить недостающие поля из файла на диске
+static void fill_from_disk(json& dst) {
+    // приоритет: путь из dst["model_path"], иначе берём latest *.json
+    std::optional<fs::path> mp;
+    try {
+        if (dst.contains("model_path") && dst["model_path"].is_string()) {
+            fs::path p(dst["model_path"].get<std::string>());
+            if (fs::exists(p) && fs::is_regular_file(p)) mp = p;
+        }
+    } catch (...) { /* ignore */ }
+    if (!mp) mp = latest_model_on_disk();
+    if (!mp) return;
+
+    auto j = read_json_file(*mp);
+    if (!j) return;
+
+    // Сохраним путь
+    dst["model_path"] = mp->string();
+
+    auto put_if_missing = [&](const char* k){
+        if (!dst.contains(k) || dst[k].is_null()) {
+            if (j->contains(k)) dst[k] = (*j)[k];
+        }
     };
+    put_if_missing("best_thr");
+    put_if_missing("ma_len");
+    put_if_missing("tp");
+    put_if_missing("sl");
+    put_if_missing("version");
+    put_if_missing("symbol");
+    put_if_missing("interval");
+    put_if_missing("schema");
+    put_if_missing("mode");
 
-    set_if_null("best_thr", jget_path(src, {"best_thr"}));
-    set_if_null("ma_len",   jget_path(src, {"ma_len"}));
-    set_if_null("tp",       jget_path(src, {"tp"}));
-    set_if_null("sl",       jget_path(src, {"sl"}));
-    set_if_null("feat_dim", jget_path(src, {"feat_dim"})); // вдруг лежит плоско
-
-    // Основной случай: policy.feat_dim
-    json fd = jget_path(src, {"policy","feat_dim"});
-    if (dst_ms["feat_dim"].is_null() && !fd.is_null()) dst_ms["feat_dim"] = fd;
-
-    // Иногда TP/SL лежат под params.* или metrics.*
-    if (dst_ms["tp"].is_null()) {
-        json v = jget_path(src, {"params","tp"});
-        if (v.is_null()) v = jget_path(src, {"metrics","tp"});
-        set_if_null("tp", v);
-    }
-    if (dst_ms["sl"].is_null()) {
-        json v = jget_path(src, {"params","sl"});
-        if (v.is_null()) v = jget_path(src, {"metrics","sl"});
-        set_if_null("sl", v);
-    }
-
-    // Часто встречающиеся метаданные
-    set_if_null("version",  jget_path(src, {"version"}));
-    set_if_null("symbol",   jget_path(src, {"symbol"}));
-    set_if_null("interval", jget_path(src, {"interval"}));
-    set_if_null("schema",   jget_path(src, {"schema"}));
-    set_if_null("mode",     jget_path(src, {"mode"}));
-
-    // Сохраним и путь к модели, если присутствует
-    if (dst_ms["model_path"].is_null() && src.contains("model_path") && src["model_path"].is_string())
-        dst_ms["model_path"] = src["model_path"];
+    // feat_dim
+    try {
+        if ((!dst.contains("feat_dim") || dst["feat_dim"].is_null())
+            && j->contains("policy") && (*j)["policy"].contains("feat_dim")) {
+            dst["feat_dim"] = (*j)["policy"]["feat_dim"];
+        }
+    } catch (...) {}
 }
 
 void register_health_ai(httplib::Server& svr) {
@@ -140,65 +155,37 @@ void register_health_ai(httplib::Server& svr) {
             out["data_ok"] = false;
         }
 
-        // 2) Модель: сначала то, что есть в рантайме; затем — жёсткий диск
+        // 2) Модель
         json ms = null_model_short();
-        json m_rt;
-        bool have_rt = false;
         try {
-            m_rt = etai::get_current_model();
-            have_rt = true;
+            json m = etai::get_current_model();
+            fill_from_ram(ms, m);
         } catch (...) {
-            have_rt = false;
+            // игнор, пойдём читать с диска
+        }
+        try {
+            // добиваем отсутствующие поля с диска (без исключений)
+            fill_from_disk(ms);
+        } catch (...) {
+            // не даём упасть роуту
         }
 
-        if (have_rt) {
-            // Копируем основные верхнеуровневые поля из рантайма
-            auto put = [&](const char* k){
-                if (m_rt.contains(k)) ms[k] = m_rt[k];
-            };
-            put("best_thr"); put("ma_len"); put("tp"); put("sl");
-            put("version");  put("symbol"); put("interval");
-            put("schema");   put("mode");   put("model_path");
-
-            // policy.feat_dim из рантайма
-            try {
-                if (m_rt.contains("policy") && m_rt["policy"].contains("feat_dim"))
-                    ms["feat_dim"] = m_rt["policy"]["feat_dim"];
-            } catch (...) {}
-        }
-
-        // Если всё ещё нет tp/sl/feat_dim — читаем модель с диска:
-        // 1) если m_rt.model_path указан — пробуем его
-        // 2) иначе берём самый свежий JSON из cache/models/
-        std::optional<std::string> model_path;
-        if (ms.contains("model_path") && ms["model_path"].is_string())
-            model_path = ms["model_path"].get<std::string>();
-        if (!model_path.has_value()) {
-            // иногда путь лежит в m_rt["model"]["model_path"] на разных роутингах
-            json mp = jget_path(m_rt, {"model_path"});
-            if (mp.is_string()) model_path = mp.get<std::string>();
-        }
-        if (!model_path.has_value()) {
-            model_path = find_latest_model_path("cache/models");
-        }
-
-        if (model_path.has_value()) {
-            if (auto jdisk = load_json_file(*model_path)) {
-                fill_model_fields_from_json(ms, *jdisk);
-                // если в файле нет model_path — явно укажем, откуда читали
-                if (ms["model_path"].is_null()) ms["model_path"] = *model_path;
-            }
-        }
-
-        // Верхнеуровневые агрегаты (как и раньше)
+        // быстрые аксессоры (если есть), в отдельном блоке, чтобы исключения не прорывались
         try { out["model_thr"]    = etai::get_model_thr(); }    catch (...) {}
         try { out["model_ma_len"] = etai::get_model_ma_len(); } catch (...) {}
-        // model_feat_dim дублируем из ms
-        out["model_feat_dim"] = ms.value("feat_dim", nullptr);
+        try {
+            if (ms.contains("feat_dim") && !ms["feat_dim"].is_null()) {
+                out["model_feat_dim"] = ms["feat_dim"];
+            } else {
+                out["model_feat_dim"] = nullptr;
+            }
+        } catch (...) {
+            out["model_feat_dim"] = nullptr;
+        }
 
         out["model"] = ms;
 
-        // 3) Агенты
+        // 3) Агенты (если заголовок есть)
         json ag = json{
             {"ok", true},
             {"running", false},
