@@ -1,4 +1,5 @@
 #include <cstdlib>
+#include <fstream>
 #include <armadillo>
 #include <httplib.h>
 #include "json.hpp"
@@ -7,7 +8,7 @@
 #include "features.h"
 #include "env/env_trading.h"
 #include "env/episode_runner.h"
-#include "rewardv2_accessors.h"   // calc_sharpe, calc_max_drawdown, calc_winrate
+#include "rewardv2_accessors.h"   // etai::{calc_sharpe,calc_max_drawdown,calc_winrate}
 
 using json = nlohmann::json;
 
@@ -32,7 +33,6 @@ struct ModelPolicy {
     int feat_dim = 0;
     bool ok = false;
 
-    // score = sigmoid(W·x + b)
     inline int operator()(const std::vector<double>& state) const {
         if (!ok || (int)state.size() != feat_dim) return 0;
         double z = b;
@@ -46,9 +46,9 @@ struct ModelPolicy {
 static ModelPolicy load_model_policy(const std::string& path) {
     ModelPolicy mp;
     try {
-        arma::Mat<char> buf;
-        if (!buf.load(path, arma::raw_ascii)) return mp;
-        std::string s((char*)buf.memptr(), buf.n_elem);
+        std::ifstream f(path);
+        if (!f.good()) return mp;
+        std::string s((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
         json j = json::parse(s);
 
         if (!j.contains("policy") || !j["policy"].is_object()) return mp;
@@ -58,14 +58,12 @@ static ModelPolicy load_model_policy(const std::string& path) {
         mp.W.reserve(pol["W"].size());
         for (auto& v : pol["W"]) mp.W.push_back(v.get<double>());
 
-        // b может быть массивом [b] или скаляром
         if (pol.contains("b")) {
             if (pol["b"].is_array() && !pol["b"].empty()) mp.b = pol["b"][0].get<double>();
             else if (pol["b"].is_number()) mp.b = pol["b"].get<double>();
         }
         if (pol.contains("feat_dim")) mp.feat_dim = pol["feat_dim"].get<int>();
-
-        if (j.contains("best_thr")) mp.thr = j["best_thr"].get<double>();
+        if (j.contains("best_thr"))   mp.thr = j["best_thr"].get<double>();
 
         mp.ok = (int)mp.W.size() == mp.feat_dim && mp.feat_dim > 0;
         return mp;
@@ -143,8 +141,7 @@ static inline void register_train_env_routes(httplib::Server& svr) {
             etai::EpisodeRunner runner;
             auto traj = runner.run_fixed(env, policy_fn, std::min<int>(steps, (int)Fm.n_rows-1));
 
-            // 6) Метрики
-            // r_t — это уже (action*ret - fee*|action|) из env
+            // 6) Метрики по pnl (r_t из env)
             arma::vec pnl(traj.rewards.size());
             for (size_t i = 0; i < traj.rewards.size(); ++i) pnl(i) = traj.rewards[i];
 
@@ -167,8 +164,8 @@ static inline void register_train_env_routes(httplib::Server& svr) {
             out["steps"] = (int)traj.steps;
             out["policy"] = {{"source","model_json"},{"thr", mp.thr},{"feat_dim", mp.feat_dim}};
             out["equity_final"] = traj.equity_final;
-            out["max_dd"] = dd_max;              // из pnl, ближе к классике
-            out["max_dd_env"] = traj.max_dd;     // как посчитал env
+            out["max_dd"] = dd_max;              // из pnl
+            out["max_dd_env"] = traj.max_dd;     // из env
             out["winrate"] = winrate;
             out["pf"] = pf;
             out["sharpe"] = sharpe;
