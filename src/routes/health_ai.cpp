@@ -1,8 +1,8 @@
 #include "../httplib.h"
 #include "json.hpp"
 #include "../server_accessors.h"  // etai::{get_current_model,get_model_thr,get_model_ma_len}
-#include "../utils_model.h"       // совместимые хелперы, без дубликатов
-#include "../utils_data.h"        // etai::get_data_health()
+#include "../utils_model.h"
+#include "../utils_data.h"
 #include <fstream>
 #include <string>
 #include <vector>
@@ -31,21 +31,21 @@ using json = nlohmann::json;
 
 static inline json null_model_short() {
     return json{
-        {"best_thr", nullptr},
-        {"ma_len",   nullptr},
-        {"tp",       nullptr},
-        {"sl",       nullptr},
-        {"feat_dim", nullptr},
-        {"version",  nullptr},
-        {"symbol",   nullptr},
-        {"interval", nullptr},
-        {"schema",   nullptr},
-        {"mode",     nullptr},
+        {"best_thr",   nullptr},
+        {"ma_len",     nullptr},
+        {"tp",         nullptr},
+        {"sl",         nullptr},
+        {"feat_dim",   nullptr},
+        {"version",    nullptr},
+        {"symbol",     nullptr},
+        {"interval",   nullptr},
+        {"schema",     nullptr},
+        {"mode",       nullptr},
         {"model_path", nullptr}
     };
 }
 
-// Безопасное чтение JSON файла
+// Безопасное чтение JSON-файла
 static std::optional<json> read_json_file(const fs::path& p) {
     try {
         std::ifstream ifs(p);
@@ -57,30 +57,41 @@ static std::optional<json> read_json_file(const fs::path& p) {
     }
 }
 
-// Находит самый свежий *.json в cache/models/
+// Находим самый свежий *.json в cache/models/ (C++17: сравниваем file_time_type напрямую)
 static std::optional<fs::path> latest_model_on_disk() {
     try {
-        fs::path dir = fs::path("cache") / "models";
+        const fs::path dir = fs::path("cache") / "models";
         if (!fs::exists(dir) || !fs::is_directory(dir)) return std::nullopt;
-        fs::path best;
-        std::time_t best_ts = 0;
-        for (auto &e : fs::directory_iterator(dir)) {
+
+        bool has_best = false;
+        fs::file_time_type best_time{};
+        fs::path best_path;
+
+        for (auto it = fs::directory_iterator(dir);
+             it != fs::directory_iterator(); ++it)
+        {
+            const auto& e = *it;
             if (!e.is_regular_file()) continue;
-            auto p = e.path();
+            const auto p = e.path();
             if (p.extension() != ".json") continue;
-            auto ts = fs::last_write_time(p);
-            // convert file_time_type -> time_t
-            auto sctp = decltype(ts)::clock::to_time_t(ts);
-            if (sctp >= best_ts) { best_ts = sctp; best = p; }
+
+            fs::file_time_type ts;
+            try { ts = fs::last_write_time(p); }
+            catch (...) { continue; }
+
+            if (!has_best || ts > best_time) {
+                best_time = ts;
+                best_path = p;
+                has_best = true;
+            }
         }
-        if (best_ts == 0) return std::nullopt;
-        return best;
+        if (!has_best) return std::nullopt;
+        return best_path;
     } catch (...) {
         return std::nullopt;
     }
 }
 
-// Попытаться заполнить поля модели из RAM-json
 static void fill_from_ram(json& dst, const json& m) {
     auto put = [&](const char* k){ if (m.contains(k)) dst[k] = m[k]; };
     put("best_thr"); put("ma_len"); put("tp"); put("sl");
@@ -91,29 +102,27 @@ static void fill_from_ram(json& dst, const json& m) {
             dst["feat_dim"] = m["policy"]["feat_dim"];
         }
     } catch (...) {}
-    // model_path если есть
+    // model_path (если есть)
     if (m.contains("model_path") && m["model_path"].is_string()) {
         dst["model_path"] = m["model_path"];
     }
 }
 
-// Попытаться добить недостающие поля из файла на диске
 static void fill_from_disk(json& dst) {
-    // приоритет: путь из dst["model_path"], иначе берём latest *.json
+    // 1) путь из dst["model_path"], 2) иначе latest *.json
     std::optional<fs::path> mp;
     try {
         if (dst.contains("model_path") && dst["model_path"].is_string()) {
             fs::path p(dst["model_path"].get<std::string>());
             if (fs::exists(p) && fs::is_regular_file(p)) mp = p;
         }
-    } catch (...) { /* ignore */ }
+    } catch (...) {}
     if (!mp) mp = latest_model_on_disk();
     if (!mp) return;
 
     auto j = read_json_file(*mp);
     if (!j) return;
 
-    // Сохраним путь
     dst["model_path"] = mp->string();
 
     auto put_if_missing = [&](const char* k){
@@ -131,10 +140,10 @@ static void fill_from_disk(json& dst) {
     put_if_missing("schema");
     put_if_missing("mode");
 
-    // feat_dim
     try {
         if ((!dst.contains("feat_dim") || dst["feat_dim"].is_null())
-            && j->contains("policy") && (*j)["policy"].contains("feat_dim")) {
+            && j->contains("policy") && (*j)["policy"].contains("feat_dim"))
+        {
             dst["feat_dim"] = (*j)["policy"]["feat_dim"];
         }
     } catch (...) {}
@@ -145,7 +154,7 @@ void register_health_ai(httplib::Server& svr) {
         json out;
         out["ok"] = true;
 
-        // 1) Состояние данных
+        // 1) Данные
         try {
             json dh = etai::get_data_health();
             out["data"] = dh;
@@ -161,16 +170,13 @@ void register_health_ai(httplib::Server& svr) {
             json m = etai::get_current_model();
             fill_from_ram(ms, m);
         } catch (...) {
-            // игнор, пойдём читать с диска
+            // нет RAM-модели — не страшно
         }
         try {
-            // добиваем отсутствующие поля с диска (без исключений)
-            fill_from_disk(ms);
-        } catch (...) {
-            // не даём упасть роуту
-        }
+            fill_from_disk(ms); // безопасная догрузка
+        } catch (...) {}
 
-        // быстрые аксессоры (если есть), в отдельном блоке, чтобы исключения не прорывались
+        // аксессоры (не даём бросать исключения наружу)
         try { out["model_thr"]    = etai::get_model_thr(); }    catch (...) {}
         try { out["model_ma_len"] = etai::get_model_ma_len(); } catch (...) {}
         try {
@@ -185,7 +191,7 @@ void register_health_ai(httplib::Server& svr) {
 
         out["model"] = ms;
 
-        // 3) Агенты (если заголовок есть)
+        // 3) Агенты
         json ag = json{
             {"ok", true},
             {"running", false},
