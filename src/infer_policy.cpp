@@ -16,7 +16,7 @@ static inline double clamp(double v, double a, double b){
     return std::max(a, std::min(v, b));
 }
 
-// Z-score per column
+// Z-score per column (fallback, если нет policy.norm)
 static arma::mat zscore_cols(const arma::mat& X) {
     arma::mat Z = X;
     const arma::uword D = Z.n_cols;
@@ -46,8 +46,32 @@ static double last_sigma_returns_from_raw_close(const arma::mat& raw, size_t loo
     return sd;
 }
 
-// Build score a = tanh(Wx+b) on any TF raw OHLCV
-// Нормализация: если policy.norm.{mu,sd} корректны и совпадают с feat_dim — используем их, иначе — z-score.
+// Попытка достать нормировку из policy
+static bool extract_policy_norm(const json& policy, arma::vec& mu, arma::vec& sd, int D){
+    if (!policy.contains("norm") || !policy["norm"].is_object()) return false;
+    const json& n = policy["norm"];
+    if (!n.contains("mu") || !n.contains("sd")) return false;
+    if (!n["mu"].is_array() || !n["sd"].is_array()) return false;
+    if ((int)n["mu"].size() != D || (int)n["sd"].size() != D) return false;
+
+    mu.set_size(D); sd.set_size(D);
+    for (int i = 0; i < D; ++i) {
+        mu(i) = n["mu"][i].get<double>();
+        sd(i) = n["sd"][i].get<double>();
+        if (!std::isfinite(sd(i)) || sd(i) < 1e-12) sd(i) = 1.0;
+    }
+    return true;
+}
+
+// Применить нормировку X = (X - mu) / sd
+static void apply_norm_inplace(arma::mat& X, const arma::vec& mu, const arma::vec& sd){
+    const arma::uword D = X.n_cols;
+    for (arma::uword j = 0; j < D; ++j) {
+        X.col(j) = (X.col(j) - mu(j)) / sd(j);
+    }
+}
+
+// Build score a = tanh(Wx+b) на любом TF raw OHLCV (N×6)
 static bool policy_score_on_raw(const arma::mat& raw,
                                 const json& policy,
                                 double& out_score,
@@ -65,25 +89,14 @@ static bool policy_score_on_raw(const arma::mat& raw,
     arma::mat F = build_feature_matrix(raw);
     if ((int)F.n_cols != D || F.n_rows < 2) return false;
 
-    // Попробуем нормализацию из policy.norm
-    if (policy.contains("norm") && policy["norm"].is_object()) {
-        const json& N = policy["norm"];
-        if (N.contains("mu") && N.contains("sd") && N["mu"].is_array() && N["sd"].is_array()
-            && (int)N["mu"].size() == D && (int)N["sd"].size() == D)
-        {
-            // применяем сохранённые mu/sd
-            for (int j = 0; j < D; ++j) {
-                double mu = N["mu"][j].get<double>();
-                double sd = N["sd"][j].get<double>();
-                if (!std::isfinite(sd) || sd < 1e-12) sd = 1.0;
-                F.col((arma::uword)j) = (F.col((arma::uword)j) - mu) / sd;
-            }
-            out_used_norm = true;
-        }
-    }
-    // Если norm не применён — z-score на лету (чтобы не падать)
-    if (!out_used_norm) {
+    // Нормализация: сперва пробуем policy.norm; если нет — локальный zscore
+    arma::vec mu, sd;
+    if (extract_policy_norm(policy, mu, sd, D)) {
+        apply_norm_inplace(F, mu, sd);
+        out_used_norm = true;
+    } else {
         F = zscore_cols(F);
+        out_used_norm = false;
     }
 
     const arma::uword last = F.n_rows - 1;
@@ -136,28 +149,25 @@ nlohmann::json infer_with_policy_mtf(const arma::mat& raw15,
                                      const nlohmann::json& model,
                                      const arma::mat* raw60,   int /*ma60*/,
                                      const arma::mat* raw240,  int /*ma240*/,
-                                     const arma::mat* raw1440, int /*ma1440*/) {
+                                     const arma::mat* raw1440, int /*ma1440*/)
+{
     if (!model.is_object() || !model.contains("policy"))
         return json{{"ok", false}, {"error", "no_policy_in_model"}};
     const json& P = model["policy"];
 
+    // 1) score on 15m (required)
     int D = 0;
     double s15 = 0.0;
     bool used_norm_15 = false;
     if (!policy_score_on_raw(raw15, P, s15, D, used_norm_15))
         return json{{"ok", false}, {"error", "policy_scoring_failed_15"}};
 
-    auto score_opt = [&](const arma::mat* raw, double& s, bool& used_norm)->bool{
-        if (!raw || raw->n_rows==0) return false;
-        int Dtmp=0; used_norm=false;
-        return policy_score_on_raw(*raw, P, s, Dtmp, used_norm);
-    };
-
-    double s60=0.0,s240=0.0,s1440=0.0;
-    bool un60=false, un240=false, un1440=false;
-    bool has60   = score_opt(raw60,   s60,   un60);
-    bool has240  = score_opt(raw240,  s240,  un240);
-    bool has1440 = score_opt(raw1440, s1440, un1440);
+    // 2) optional HTF scores
+    double s60 = 0.0, s240 = 0.0, s1440 = 0.0;
+    bool used_norm_60=false, used_norm_240=false, used_norm_1440=false;
+    bool has60   = raw60   && raw60->n_elem   && policy_score_on_raw(*raw60,   P, s60,   D, used_norm_60);
+    bool has240  = raw240  && raw240->n_elem  && policy_score_on_raw(*raw240,  P, s240,  D, used_norm_240);
+    bool has1440 = raw1440 && raw1440->n_elem && policy_score_on_raw(*raw1440, P, s1440, D, used_norm_1440);
 
     auto sgn = [](double x)->int { return (x>0) - (x<0); };
 
@@ -165,16 +175,27 @@ nlohmann::json infer_with_policy_mtf(const arma::mat& raw15,
     int avail = 0, agree = 0;
 
     json htf = json::object();
-    if (has60)   { ++avail; bool ok = (sgn(s60)   == s15sgn); htf["agree60"]  = ok; if (ok) ++agree; }
-    if (has240)  { ++avail; bool ok = (sgn(s240)  == s15sgn); htf["agree240"] = ok; if (ok) ++agree; }
-    if (has1440) { ++avail; bool ok = (sgn(s1440) == s15sgn); htf["agree1440"]= ok; if (ok) ++agree; }
+    auto push_htf = [&](const char* key, bool present, double score){
+        if (!present) { htf[key] = json{{"agree", nullptr},{"score", nullptr},{"strong", nullptr},{"eps", 0.0}}; return; }
+        bool ok = (sgn(score) == s15sgn);
+        double eps = std::abs(score);
+        bool strong = eps >= 0.3;
+        htf[key] = json{{"agree", ok},{"score", score},{"strong", strong},{"eps", eps}};
+        ++avail; if (ok) ++agree;
+    };
 
+    push_htf("60",   has60,   s60);
+    push_htf("240",  has240,  s240);
+    push_htf("1440", has1440, s1440);
+
+    // 3) compute soft HTF weight (как в тренере по духу)
     double wctx_htf = 1.0;
     if (avail > 0) {
-        double frac = (double)agree / (double)avail; // [0..1]
-        wctx_htf = 0.75 + 0.25 * frac;               // [0.75..1]
+        double frac = (double)agree / (double)avail;
+        wctx_htf = 0.75 + 0.25 * frac; // [0.75..1]
     }
 
+    // 4) weighted decision by HTF context
     const double act_gate = 0.10;
     double a_w = s15 * wctx_htf;
 
@@ -183,6 +204,9 @@ nlohmann::json infer_with_policy_mtf(const arma::mat& raw15,
 
     double sigma15 = last_sigma_returns_from_raw_close(raw15, 64);
     double vol_threshold = 0.001;
+
+    // used_norm для всего ответа — если 15m использовал нормировку
+    bool used_norm_any = used_norm_15 || used_norm_60 || used_norm_240 || used_norm_1440;
 
     json out{
         {"ok", true},
@@ -193,12 +217,9 @@ nlohmann::json infer_with_policy_mtf(const arma::mat& raw15,
         {"vol_threshold", vol_threshold},
         {"wctx_htf", wctx_htf},
         {"htf", htf},
-        {"used_norm", used_norm_15},
+        {"used_norm", used_norm_any},
         {"feat_dim_used", D}
     };
-    if (!has60)   out["htf"]["agree60"]   = nullptr;
-    if (!has240)  out["htf"]["agree240"]  = nullptr;
-    if (!has1440) out["htf"]["agree1440"] = nullptr;
     return out;
 }
 

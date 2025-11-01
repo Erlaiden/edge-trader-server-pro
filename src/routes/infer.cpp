@@ -34,11 +34,10 @@ static inline void enrich_with_levels(json &out, const arma::mat& M15, double tp
 }
 
 void register_infer_routes(httplib::Server& srv) {
-    // --- DIAG: реальный D фич на сырых данных (N×6)
+    // DIAG: реальный D фич
     srv.Get("/api/infer/feat_cols", [&](const httplib::Request& req, httplib::Response& res){
         std::string symbol   = qp(req, "symbol", "BTCUSDT");
         std::string interval = qp(req, "interval", "15");
-
         arma::mat raw;
         json out{{"ok", false}};
         if (!etai::load_raw_ohlcv(symbol, interval, raw)) {
@@ -48,10 +47,8 @@ void register_infer_routes(httplib::Server& srv) {
         }
         arma::mat F = etai::build_feature_matrix(raw);
         out["ok"] = true;
-        out["raw_rows"] = (int)raw.n_rows;
-        out["raw_cols"] = (int)raw.n_cols;
-        out["F_rows"]   = (int)F.n_rows;
-        out["F_cols"]   = (int)F.n_cols;
+        out["raw_rows"] = (int)raw.n_rows;   out["raw_cols"] = (int)raw.n_cols;
+        out["F_rows"]   = (int)F.n_rows;     out["F_cols"]   = (int)F.n_cols;
         out["ETAI_FEAT_ENABLE_MFLOW"] = (std::getenv("ETAI_FEAT_ENABLE_MFLOW")? true:false);
         res.set_content(out.dump(), "application/json");
     });
@@ -63,6 +60,7 @@ void register_infer_routes(httplib::Server& srv) {
         std::string symbol   = qp(req, "symbol", "BTCUSDT");
         std::string interval = qp(req, "interval", "15");
         const std::string path = "cache/models/" + symbol + "_" + interval + "_ppo_pro.json";
+
         std::ifstream f(path);
         if (!f) {
             json out{{"ok",false},{"error","model_not_found"},{"path",path}};
@@ -77,6 +75,7 @@ void register_infer_routes(httplib::Server& srv) {
         double tp       = model.value("tp", 0.0);
         double sl       = model.value("sl", 0.0);
 
+        // Кэшированная матрица 6×N (ряды = ts,open,high,low,close,vol)
         arma::mat M15 = etai::load_cached_matrix(symbol, interval);
         if (M15.n_elem == 0) {
             json out{{"ok",false},{"error","no_cached_data"},{"hint","call /api/backfill first"}};
@@ -89,17 +88,19 @@ void register_infer_routes(httplib::Server& srv) {
             std::set<std::string> wanted;
             { std::string t; for (char c: htf){ if(c==','){ if(!t.empty()){wanted.insert(t); t.clear();} } else t.push_back(c);} if(!t.empty()) wanted.insert(t); }
 
+            // HTF грузим как 6×N и ТРАНСПОНИРУЕМ в N×6 для policy
             arma::mat M60, M240, M1440;
             const arma::mat *p60=nullptr, *p240=nullptr, *p1440=nullptr;
-            int ma60   = qp(req,"ma60").empty()   ? 12 : std::atoi(qp(req,"ma60").c_str());
-            int ma240  = qp(req,"ma240").empty()  ? 12 : std::atoi(qp(req,"ma240").c_str());
-            int ma1440 = qp(req,"ma1440").empty() ? 12 : std::atoi(qp(req,"ma1440").c_str());
 
-            if (wanted.count("60"))   { M60    = etai::load_cached_matrix(symbol, "60");   if (M60.n_elem)    p60    = &M60; }
-            if (wanted.count("240"))  { M240   = etai::load_cached_matrix(symbol, "240");  if (M240.n_elem)   p240   = &M240; }
-            if (wanted.count("1440")) { M1440  = etai::load_cached_matrix(symbol, "1440"); if (M1440.n_elem)  p1440  = &M1440; }
+            if (wanted.count("60"))   { M60    = etai::load_cached_matrix(symbol, "60");   if (M60.n_elem)    { M60 = M60.t();    p60    = &M60; } }
+            if (wanted.count("240"))  { M240   = etai::load_cached_matrix(symbol, "240");  if (M240.n_elem)   { M240 = M240.t();  p240   = &M240; } }
+            if (wanted.count("1440")) { M1440  = etai::load_cached_matrix(symbol, "1440"); if (M1440.n_elem)  { M1440 = M1440.t();p1440  = &M1440; } }
 
-            json inf = etai::infer_mtf(M15, best_thr, ma_len, p60, ma60, p240, ma240, p1440, ma1440);
+            // 15m → N×6
+            arma::mat raw15 = M15.t();
+
+            json inf = etai::infer_with_policy_mtf(raw15, model, p60, 12, p240, 12, p1440, 12);
+
             std::string sig = inf.value("signal","NEUTRAL");
             if (sig == "LONG") INFER_SIG_LONG.fetch_add(1, std::memory_order_relaxed);
             else if (sig == "SHORT") INFER_SIG_SHORT.fetch_add(1, std::memory_order_relaxed);
@@ -119,9 +120,8 @@ void register_infer_routes(httplib::Server& srv) {
                 {"sl", sl},
                 {"signal", sig},
                 {"score15", inf.value("score15", 0.0)},
-                {"sigma15", inf.value("sigma15", 0.0)},
-                {"vol_threshold", inf.value("vol_threshold", 0.0)},
                 {"wctx_htf", inf.value("wctx_htf", 1.0)},
+                {"vol_threshold", inf.value("vol_threshold", 0.0)},
                 {"htf", inf.value("htf", json::object())},
                 {"used_norm", inf.value("used_norm", false)},
                 {"feat_dim_used", inf.value("feat_dim_used", 0)},
@@ -132,12 +132,12 @@ void register_infer_routes(httplib::Server& srv) {
             return;
         }
 
-        // ===== single-TF: Подаём policy правильным форматом N×6 =====
-        arma::mat raw_for_policy = M15.t(); // теперь N×6
+        // ===== single-TF policy (N×6)
+        arma::mat raw_for_policy = M15.t();
         json inf_pol = etai::infer_with_policy(raw_for_policy, model);
         bool used_policy = inf_pol.value("ok", false);
 
-        // Фоллбек по порогу, если policy не прошёл
+        // Фоллбек по порогу
         json inf = used_policy ? inf_pol : etai::infer_with_threshold(M15, best_thr, ma_len);
 
         std::string sig = inf.value("signal","NEUTRAL");
@@ -161,14 +161,13 @@ void register_infer_routes(httplib::Server& srv) {
             {"score", inf.value("score", 0.0)},
             {"sigma", inf.value("sigma", 0.0)},
             {"vol_threshold", inf.value("vol_threshold", 0.0)},
-            {"used_norm", inf.value("used_norm", false)},
-            {"feat_dim_used", inf.value("feat_dim_used", 0)},
             {"agents", make_agents_summary()},
-            {"used_policy", used_policy}
+            {"used_policy", used_policy},
+            {"used_norm", inf.value("used_norm", nullptr)},
+            {"feat_dim_used", inf.value("feat_dim_used", nullptr)}
         };
 
         if (!used_policy) {
-            // Отдадим причину + пробу фич на сырых данных
             out["policy_dbg"] = inf_pol;
             arma::mat rawN6;
             if (etai::load_raw_ohlcv(symbol, interval, rawN6)) {
@@ -187,7 +186,7 @@ void register_infer_routes(httplib::Server& srv) {
         res.set_content(out.dump(), "application/json");
     });
 
-    // --- batch (без policy)
+    // --- batch (диагностика; оставляем пороговый пайп, но ДОБАВЛЯЕМ ma60/ma240/ma1440)
     srv.Get("/api/infer/batch", [&](const httplib::Request& req, httplib::Response& res){
         REQ_INFER.fetch_add(1, std::memory_order_relaxed);
 
