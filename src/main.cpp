@@ -19,6 +19,7 @@
 
 // Новый файл с установкой модели
 #include "routes/model_set.cpp"
+#include "routes/symbol_queue.cpp"
 
 // Новый блок: выбор символа
 #include "routes/symbol.cpp"
