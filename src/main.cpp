@@ -11,7 +11,8 @@
 #include "routes/health_ai.cpp"
 #include "routes/train.cpp"
 #include "routes/model.cpp"
-#include "routes/metrics.cpp"     // внутри namespace etai
+#include "routes/infer.cpp"        // <-- добавлено
+#include "routes/metrics.cpp"      // внутри namespace etai
 #include "routes/agents.cpp"
 #include "routes/backfill.inc.cpp" // static inline register_backfill_routes(...)
 #include "routes/train_env.cpp"    // новый роут: /api/train_env (за фичефлагом)
@@ -39,7 +40,6 @@ int main(int argc, char** argv) {
     register_health_ai(svr);
     register_train_routes(svr);
     register_model_routes(svr);
-    // Регистрация нового роута установки модели
     register_model_set_routes(svr);
     register_infer_routes(svr);
     etai::register_metrics_routes(svr); // <-- квалификация namespace
