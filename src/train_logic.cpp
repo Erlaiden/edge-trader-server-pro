@@ -11,7 +11,6 @@
 using json = nlohmann::json;
 
 namespace etai {
-
 static std::mutex train_mutex;
 
 static inline bool try_load_raw(const std::string& symbol,
@@ -42,19 +41,19 @@ json run_train_pro_and_save(const std::string& symbol,
 {
     std::lock_guard<std::mutex> lock(train_mutex);
 
-    // --- 1) Базовый TF (15) или указанный interval
+    // --- 1) Базовый TF
     arma::mat raw15;
     if (!load_raw_ohlcv(symbol, interval, raw15))
         throw std::runtime_error("Failed to load OHLCV");
 
-    // --- 2) Опциональные HTF (60/240/1440) — безопасная подгрузка
+    // --- 2) Опциональные HTF (60/240/1440)
     arma::mat raw60, raw240, raw1440;
     const arma::mat *p60   = nullptr;
     const arma::mat *p240  = nullptr;
     const arma::mat *p1440 = nullptr;
 
-    if (try_load_raw(symbol, "60", raw60))     p60   = &raw60;
-    if (try_load_raw(symbol, "240", raw240))   p240  = &raw240;
+    if (try_load_raw(symbol, "60",   raw60))   p60   = &raw60;
+    if (try_load_raw(symbol, "240",  raw240))  p240  = &raw240;
     if (try_load_raw(symbol, "1440", raw1440)) p1440 = &raw1440;
 
     std::cout << "[TRAIN] shapes: 15=" << raw15.n_rows
@@ -63,18 +62,19 @@ json run_train_pro_and_save(const std::string& symbol,
               << " 1440=" << (p1440 ? raw1440.n_rows : 0)
               << "  (cols15=" << raw15.n_cols << ")\n";
 
-    // --- 3) Тренировка (HTF передаём указателями; внутри могут не использоваться — это ок)
+    // --- 3) Тренировка
     json trainer = trainPPO_pro(raw15, p60, p240, p1440, episodes, tp, sl, ma_len, use_antimanip);
 
-    // --- 4) Сохранение модели на диск
+    // --- 4) Сохранение модели на диск (включая policy.norm, если есть)
     const std::string model_path = "cache/models/" + symbol + "_" + interval + "_ppo_pro.json";
-    std::ofstream(model_path) << trainer.dump(2);
+    {
+        std::ofstream f(model_path);
+        f << trainer.dump(2);
+    }
 
     // --- 5) Обновляем атомики для health/metrics (thr, ma, feat_dim, current_model)
-    // best_thr
     const double best_thr = trainer.value("best_thr", 0.5);
 
-    // feat_dim: сначала пытаемся из policy.feat_dim, иначе из metrics.feat_cols
     int feat_dim = 0;
     try {
         if (trainer.contains("policy") &&
@@ -83,7 +83,6 @@ json run_train_pro_and_save(const std::string& symbol,
             feat_dim = trainer["policy"]["feat_dim"].get<int>();
         }
     } catch (...) {}
-
     if (feat_dim <= 0) {
         try {
             if (trainer.contains("metrics") &&
@@ -99,7 +98,7 @@ json run_train_pro_and_save(const std::string& symbol,
     if (feat_dim > 0) set_model_feat_dim(feat_dim);
     set_current_model(trainer);
 
-    // --- 6) Лог в stdout для верификации
+    // --- 6) Лог в stdout
     try {
         const auto& m = trainer.at("metrics");
         std::cout << "[TRAIN] rows="       << m.value("N_rows", 0)
@@ -118,7 +117,7 @@ json run_train_pro_and_save(const std::string& symbol,
         std::cout << "[TRAIN] metrics missing (feat_dim=" << feat_dim << ")\n";
     }
 
-    // --- 7) Стабилизированный ответ клиенту
+    // --- 7) Стабилизированный ответ
     return make_train_reply(trainer, tp, sl, ma_len, model_path);
 }
 

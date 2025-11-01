@@ -94,7 +94,7 @@ static double simulate_reward_v1(const vec& fut_ret,const vec& proba,double thr,
     return R;
 }
 
-// знак «тренда» из фич: берем колонку 0 (ema_fast - ema_slow) и усредняем
+// знак «тренда» из фич
 static int trend_sign_from_features(const mat& F, uword start_row, uword end_row){
     if (F.n_rows==0 || F.n_cols==0) return 0;
     if (start_row>=F.n_rows) start_row = F.n_rows-1;
@@ -175,7 +175,7 @@ json trainPPO_pro(const arma::mat& raw15,
         mat Xva = Xs.rows(split, M-1);  vec yva = ys.rows(split, M-1);
         vec fr_va = fut_s.rows(split, M-1);
 
-        // 4) Z-score нормализация (по колонкам трейна)
+        // 4) Z-score нормализация (по колонкам трейна) — СОХРАНЯЕМ μ/σ
         vec mu = arma::mean(Xtr, 0).t();
         vec sd = arma::stddev(Xtr, 0, 0).t();
         for(uword j=0;j<D;++j){
@@ -204,7 +204,6 @@ json trainPPO_pro(const arma::mat& raw15,
         // 8) Anti-manip (за флагом)
         double manip_ratio = 0.0;
         if(env_enabled("ETAI_ENABLE_ANTI_MANIP")){
-            // серии
             std::vector<double> Vopen(N), Vhigh(N), Vlow(N), Vclose(N);
             for(uword i=0;i<N;++i){ Vopen[i]=open(i); Vhigh[i]=high(i); Vlow[i]=low(i); Vclose[i]=close(i); }
 
@@ -212,7 +211,6 @@ json trainPPO_pro(const arma::mat& raw15,
             auto res = rolling_resistance(Vhigh,20);
             auto fbf = false_break_flags(Vopen, Vhigh, Vlow, Vclose, sup, res, /*tol*/5e-4);
 
-            // считаем только на валидации по индексам разметки
             uword a = std::min<uword>(split, (uword)idx.size());
             uword bnd = (idx.size()==0) ? 0 : (uword)idx.size();
             uword cnt=0, den=0;
@@ -240,14 +238,12 @@ json trainPPO_pro(const arma::mat& raw15,
         double risk     = dd_max;
         double reward_v2= profit - lam*risk - mu_m*manip_ratio + a_sh*sharpe - fee;
 
-        // 10) Мягкий MTF-контекст (под флагом), даёт множитель wctx_htf ∈ [0.90..1.05]
+        // 10) Мягкий MTF-контекст (под флагом)
         double wctx_htf = 1.0;
         int htf_agree60 = 0, htf_agree240 = 0;
         if (env_enabled("ETAI_MTF_ENABLE")){
-            // считаем «знак тренда» 15m на валидационной части
             uword i0 = idx[(split>0? split:0)];
             uword i1 = idx[M-1];
-            int s15 = trend_sign_from_features(F, i0, i1);
 
             auto sign_from_raw = [&](const arma::mat* raw)->int{
                 if(!raw || raw->n_rows<10 || raw->n_cols<6) return 0;
@@ -256,28 +252,31 @@ json trainPPO_pro(const arma::mat& raw15,
                 return trend_sign_from_features(Fh, (uword)0, Fh.n_rows>20? (uword)(Fh.n_rows-1): (uword)(Fh.n_rows-1));
             };
 
+            int s15 = trend_sign_from_features(F, i0, i1);
             int s60   = sign_from_raw(raw60);
             int s240  = sign_from_raw(raw240);
 
-            // согласие: +1 если совпали знаки, -1 если разные, 0 если нули
             auto agree = [](int a,int b)->int{ if(a==0||b==0) return 0; return (a==b)? +1 : -1; };
             htf_agree60  = agree(s15, s60);
             htf_agree240 = agree(s15, s240);
 
-            // небольшие веса: 60m ±2%, 240m ±3%
             wctx_htf = 1.0 + 0.02*htf_agree60 + 0.03*htf_agree240;
             wctx_htf = clampd(wctx_htf, 0.90, 1.05);
         }
-
         double reward_wctx = reward_v2 * wctx_htf;
 
-        // 11) Политика + метрики
+        // 11) Политика + метрики (ДОБАВЛЯЕМ НОРМИРОВКУ)
         json policy;
         policy["W"]            = std::vector<double>(W.begin(), W.end());
         policy["b"]            = { b };
         policy["feat_dim"]     = (int)W.n_rows;
         policy["feat_version"] = FEAT_VERSION;
         policy["note"]         = "logreg_v2_reward";
+
+        // norm: сохраняем mu/sd по трейну (как массивы double такой же длины, что и feat_dim)
+        policy["norm"] = json::object();
+        policy["norm"]["mu"] = std::vector<double>(mu.begin(), mu.end());
+        policy["norm"]["sd"] = std::vector<double>(sd.begin(), sd.end());
 
         json metrics;
         metrics["val_accuracy"]   = acc;
@@ -301,7 +300,6 @@ json trainPPO_pro(const arma::mat& raw15,
         metrics["val_reward_v2"]  = reward_v2;
         metrics["val_manip_ratio"]= manip_ratio;
 
-        // MTF контекстная телеметрия
         metrics["wctx_htf"]       = wctx_htf;
         metrics["val_reward_wctx"]= reward_wctx;
         metrics["htf_agree60"]    = htf_agree60;
@@ -312,7 +310,7 @@ json trainPPO_pro(const arma::mat& raw15,
         etai::set_reward_sharpe(sharpe);
         etai::set_reward_winrate(winrate);
         etai::set_reward_drawdown(dd_max);
-        etai::set_reward_wctx(reward_wctx); // должен существовать (мы его уже вводили)
+        etai::set_reward_wctx(reward_wctx);
 
         json out2;
         out2["ok"]            = true;
