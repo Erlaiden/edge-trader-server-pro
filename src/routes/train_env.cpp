@@ -207,7 +207,7 @@ static inline void register_train_env_routes(httplib::Server& svr) {
             std::vector<double> closes(Fm.n_rows);
             for (size_t i = 0; i < Fm.n_rows; ++i) closes[i] = raw(i,4);
 
-            // 4) HTF-контекст (фиксируем на запуск эпизода)
+            // 4) HTF-контекст (фикс на старт эпизода)
             auto mtf_one_sign = [&](const char* tf_name)->int{
                 arma::mat raw_tf;
                 if (!etai::load_raw_ohlcv(symbol, tf_name, raw_tf)) return 0;
@@ -232,7 +232,7 @@ static inline void register_train_env_routes(httplib::Server& svr) {
             etai::EnvTrading env;
             env.set_dataset(feats, closes, cfg);
 
-            // 6) Политики
+            // 6) Базовая политика
             std::function<int(const std::vector<double>&)> base_policy;
             if (policy=="model") {
                 base_policy = [mp](const std::vector<double>& st)->int { return mp(st); };
@@ -249,26 +249,21 @@ static inline void register_train_env_routes(httplib::Server& svr) {
                 };
             }
 
-            // 7) МЯГКИЙ КОНТЕКСТ-ГЕЙТИНГ (soft, по умолчанию выключен; включает ETAI_ENABLE_CTX_GATE=1)
-            // идея: НЕ блокируем ранние входы; режем только когда оба HTF против и локальная энергия низкая.
+            // 7) Soft контекст-гейтинг (из B4), может быть выключен
             const bool use_gate = feature_on("ETAI_ENABLE_CTX_GATE");
             const std::string gate_mode = env_str("ETAI_CTX_GATE_MODE","soft"); // soft|aggr
             const double e_lo_soft  = clampd(env_double("ETAI_CTX_E_LO", 0.20), 0.0, 1.0);
             const double e_lo_aggr  = clampd(env_double("ETAI_CTX_E_LO_AGGR", 0.35), 0.0, 1.0);
-            // индексы фич: energy=7 (см. features.cpp)
             const int IDX_ENERGY = 7;
 
             struct GateStats { int checked=0, skipped=0; int allowed=0; } gstat;
 
             auto gated_policy = [&](const std::vector<double>& st)->int {
                 int a = base_policy(st); // -1/0/+1
-                if (!use_gate || st.size()<=IDX_ENERGY) { gstat.allowed++; return a; }
+                if (!use_gate || (int)st.size()<=IDX_ENERGY) { gstat.allowed++; return a; }
 
-                double energy = st[IDX_ENERGY]; // ожидается ~[-1..1] или [0..1] в нашей нормировке
-                // нормируем безопасно в [0..1]
-                double e01 = energy;
-                if (!std::isfinite(e01)) e01 = 0.0;
-                if (e01 < 0.0) e01 = -e01; // модуль энергии: низкая амплитуда -> 0
+                double energy = st[IDX_ENERGY];
+                double e01 = std::isfinite(energy) ? std::fabs(energy) : 0.0;
 
                 gstat.checked++;
 
@@ -276,36 +271,60 @@ static inline void register_train_env_routes(httplib::Server& svr) {
                 bool any_against  = (agree240 == -1 || agree1440 == -1);
 
                 if (gate_mode=="aggr") {
-                    // агрессивный: при ЛЮБОМ несогласии и низкой энергии — HOLD
                     if (any_against && e01 < e_lo_aggr) { gstat.skipped++; return 0; }
                 } else {
-                    // мягкий: ТОЛЬКО если оба против и энергия низкая — HOLD
                     if (both_against && e01 < e_lo_soft) { gstat.skipped++; return 0; }
                 }
                 gstat.allowed++;
                 return a;
             };
 
-            // 8) Запуск эпизода
+            // 8) Прогон эпизода
             etai::EpisodeRunner runner;
             auto traj = runner.run_fixed(env, gated_policy, std::min<int>(steps, (int)Fm.n_rows-1));
 
-            // 9) Метрики по pnl
+            // 9) PnL базовый
             arma::vec pnl(traj.rewards.size());
             for (size_t i = 0; i < traj.rewards.size(); ++i) pnl(i) = traj.rewards[i];
 
-            double sharpe  = local_sharpe(pnl, 1e-12);
-            double dd_max  = local_max_drawdown(pnl);
-            double winrate = local_winrate(pnl);
+            // 10) B5: Штраф/бонус по HTF (не блокируем, только масштабируем PnL) — под флагом
+            double mult_240  = clampd(env_double("ETAI_PEN_240",   0.90), 0.5, 1.0);
+            double mult_1440 = clampd(env_double("ETAI_PEN_1440",  0.85), 0.5, 1.0);
+            double mult_both = clampd(env_double("ETAI_PEN_BOTH",  0.75), 0.3, 1.0);
+            double bonus_both= clampd(env_double("ETAI_BONUS_BOTH",1.05), 1.0, 1.2);
+
+            double ctx_mult = 1.0;
+            if (feature_on("ETAI_CTX_GATE_PENALTY")) {
+                const bool a240neg   = (agree240  == -1);
+                const bool a1440neg  = (agree1440 == -1);
+                const bool a240pos   = (agree240  == +1);
+                const bool a1440pos  = (agree1440 == +1);
+
+                if (a240neg && a1440neg)         ctx_mult = mult_both;     // оба против
+                else if (a240neg && !a1440pos)   ctx_mult = mult_240;      // 240 против (1440 нейтральный)
+                else if (a1440neg && !a240pos)   ctx_mult = mult_1440;     // 1440 против (240 нейтральный)
+                else if (a240pos && a1440pos)    ctx_mult = bonus_both;    // оба согласны
+                else                              ctx_mult = 1.0;           // смешанный/нет сигнала — без изменений
+            }
+
+            arma::vec pnl_adj = pnl * ctx_mult;
+
+            // 11) Метрики по скорректированному pnl
+            double sharpe   = local_sharpe(pnl_adj, 1e-12);
+            double dd_max   = local_max_drawdown(pnl_adj);
+            double winrate  = local_winrate(pnl_adj);
 
             double pos_sum = 0.0, neg_sum = 0.0;
-            for (double r : traj.rewards) {
+            for (arma::uword i = 0; i < pnl_adj.n_elem; ++i) {
+                double r = pnl_adj(i);
                 if (r > 0) pos_sum += r;
                 else if (r < 0) neg_sum += r;
             }
             double pf = (pos_sum > 0 && neg_sum < 0) ? (pos_sum / std::abs(neg_sum)) : 0.0;
 
-            // 10) MTF-блок в ответе
+            double equity_final = 1.0 + arma::accu(pnl_adj);
+
+            // 12) MTF-блок
             json htf = json::object();
             htf["15"]   = {{"ok",true}, {"sign",sign15}};
             htf["60"]   = {{"ok",true}, {"sign",sign60}};
@@ -315,7 +334,7 @@ static inline void register_train_env_routes(httplib::Server& svr) {
             htf["agree240"]  = agree240;
             htf["agree1440"] = agree1440;
 
-            // 11) Ответ
+            // 13) Ответ
             json out;
             out["ok"] = true;
             out["env"] = "v1";
@@ -329,26 +348,32 @@ static inline void register_train_env_routes(httplib::Server& svr) {
                 {"thr",   (policy=="model" ? mp.thr : 0.5)},
                 {"feat_dim", (int)Fm.n_cols}
             };
-            out["equity_final"] = traj.equity_final;
+            out["equity_final"] = equity_final;
             out["max_dd"] = dd_max;
             out["max_dd_env"] = traj.max_dd;
             out["winrate"] = winrate;
             out["pf"] = pf;
             out["sharpe"] = sharpe;
-            out["wins"] = traj.wins;
+            out["wins"] = traj.wins;   // счетчики из базовой среды (число сделок не меняем)
             out["losses"] = traj.losses;
             out["feat_adapted"] = adapted;
             out["htf"] = htf;
 
-            // отчёт по гейтеру
             if (use_gate) {
                 out["gate"] = {
                     {"mode", gate_mode},
                     {"checked", gstat.checked},
                     {"skipped", gstat.skipped},
-                    {"allowed", gstat.allowed},
-                    {"e_lo_soft", e_lo_soft},
-                    {"e_lo_aggr", e_lo_aggr}
+                    {"allowed", gstat.allowed}
+                };
+            }
+            if (feature_on("ETAI_CTX_GATE_PENALTY")) {
+                out["penalty"] = {
+                    {"ctx_mult", ctx_mult},
+                    {"pen_240",  mult_240},
+                    {"pen_1440", mult_1440},
+                    {"pen_both", mult_both},
+                    {"bonus_both", bonus_both}
                 };
             }
 
