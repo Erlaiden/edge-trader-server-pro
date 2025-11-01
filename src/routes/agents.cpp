@@ -1,4 +1,4 @@
-#include "agents.h"
+#include "../agents.h"
 #include "json.hpp"
 #include "../utils_data.h"
 #include <httplib.h>
@@ -13,8 +13,7 @@
 using json = nlohmann::json;
 
 namespace {
-
-// Уникальные имена хелперов, чтобы не конфликтовать с другими TU.
+// Уникальные хелперы (чтобы не конфликтовать с другими TU)
 inline std::string ag_qs_str(const httplib::Request& req, const char* k, const char* defv){
     return req.has_param(k) ? req.get_param_value(k) : std::string(defv);
 }
@@ -23,7 +22,7 @@ inline double ag_qs_num(const httplib::Request& req, const char* k, double defv)
     try { return std::stod(req.get_param_value(k)); } catch (...) { return defv; }
 }
 
-// Состояние агента в памяти (v1).
+// Простое состояние агента (v1)
 struct AgentState {
     std::atomic<bool> running{false};
     std::string symbol{"BTCUSDT"};
@@ -36,7 +35,6 @@ inline void json_reply(httplib::Response& res, const json& j, int code=200){
     res.status = code;
     res.set_content(j.dump(2), "application/json");
 }
-
 } // namespace
 
 namespace etai {
@@ -55,7 +53,7 @@ nlohmann::json get_agent_public(){
 void setup_agents_routes(httplib::Server& svr) {
     const bool agent_enabled = std::getenv("ETAI_AGENT_ENABLE") != nullptr;
 
-    // ===== Decision preview =====
+    // Decision preview
     svr.Get("/api/agents/decision", [agent_enabled](const httplib::Request& req, httplib::Response& res) {
         json r;
         if (!agent_enabled) {
@@ -68,7 +66,7 @@ void setup_agents_routes(httplib::Server& svr) {
         const std::string interval = ag_qs_str(req, "interval", "15");
         const double      thr      = ag_qs_num(req, "thr", 0.5);
 
-        arma::mat X; arma::mat y;
+        arma::mat X, y;
         if (!etai::load_cached_xy(symbol, interval, X, y) || X.n_rows == 0) {
             r["ok"] = false;
             r["error"] = "Failed to load cached XY or empty features";
@@ -76,7 +74,6 @@ void setup_agents_routes(httplib::Server& svr) {
         }
 
         arma::rowvec feat = X.row(X.n_rows - 1);
-
         etai::AgentLayer layer;
         etai::AgentSummary summary = layer.decide_all(feat, thr);
 
@@ -90,11 +87,10 @@ void setup_agents_routes(httplib::Server& svr) {
             ags[kv.first] = {{"signal", kv.second.signal}, {"confidence", kv.second.confidence}};
         }
         r["agents"] = ags;
-
         return json_reply(res, r);
     });
 
-    // ===== run/stop/status (v1) с валидацией данных =====
+    // run/stop/status (v1) с валидацией данных
     svr.Get("/api/agents/run", [agent_enabled](const httplib::Request& req, httplib::Response& res){
         json r;
         if (!agent_enabled) {
@@ -107,15 +103,13 @@ void setup_agents_routes(httplib::Server& svr) {
         const std::string interval = ag_qs_str(req, "interval", "15");
         const std::string mode     = ag_qs_str(req, "mode", "live");
 
-        // Health по данным
         json dh = etai::data_health_report(symbol, interval);
         const bool data_ok = dh.value("ok", false);
 
-        // Кэш фич X/y
-        arma::mat X, y;
+        arma::mat X, Y;
         bool xy_ok = false;
         if (data_ok) {
-            xy_ok = etai::load_cached_xy(symbol, interval, X, y) && X.n_rows > 0;
+            xy_ok = etai::load_cached_xy(symbol, interval, X, Y) && X.n_rows > 0;
         }
 
         if (!data_ok || !xy_ok) {
@@ -148,7 +142,6 @@ void setup_agents_routes(httplib::Server& svr) {
             {"raw_cols",   dh["raw"].value("cols", 0)}
         };
         r["features"] = { {"rows", (unsigned)X.n_rows}, {"cols", (unsigned)X.n_cols} };
-
         return json_reply(res, r);
     });
 
@@ -178,5 +171,4 @@ void setup_agents_routes(httplib::Server& svr) {
         return json_reply(res, r);
     });
 }
-
 } // namespace etai
