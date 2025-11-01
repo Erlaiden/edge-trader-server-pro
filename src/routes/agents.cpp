@@ -9,11 +9,14 @@
 // Подтягиваем реализацию AgentLayer в этот TU.
 #include "../agents/agent_layer.cpp"
 
+// Публичный интерфейс статуса
+#include "../agents_pub.h"
+
 using json = nlohmann::json;
 
 namespace {
 
-// ВНИМАНИЕ: уникальные имена, чтобы не конфликтовать с train_env.cpp
+// Уникальные имена (не конфликтуют с другими TU).
 inline std::string ag_qs_str(const httplib::Request& req, const char* k, const char* defv){
     return req.has_param(k) ? req.get_param_value(k) : std::string(defv);
 }
@@ -39,6 +42,17 @@ inline void json_reply(httplib::Response& res, const json& j, int code=200){
 } // namespace
 
 namespace etai {
+
+// Публичный «снимок» статуса для других модулей (health_ai и т.п.)
+AgentPublic get_agent_public(){
+    auto& S = agent_state();
+    AgentPublic p;
+    p.running  = S.running.load();
+    p.symbol   = S.symbol;
+    p.interval = S.interval;
+    p.mode     = S.mode;
+    return p;
+}
 
 void setup_agents_routes(httplib::Server& svr) {
     const bool agent_enabled = std::getenv("ETAI_AGENT_ENABLE") != nullptr;

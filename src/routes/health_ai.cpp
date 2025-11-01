@@ -4,6 +4,7 @@
 #include "server_accessors.h"   // etai::{get/set_model_thr,get/set_model_ma_len,get/set_current_model}
 #include "utils_data.h"         // etai::get_data_health()
 #include "utils_model.h"        // safe_read_json_file(), make_model()
+#include "../agents_pub.h"      // etai::get_agent_public()
 #include <cmath>
 #include <algorithm>
 #include <string>
@@ -33,9 +34,17 @@ void register_health_ai(httplib::Server& srv){
             if (!(ma_raw > 0))           etai::set_model_ma_len(ma);
             if (!disk.is_object())       etai::set_current_model(json::object());
 
-            // 4) ответ (числа строго как numbers, не null)
+            // 4) агент: публичный статус (symbol, running, mode)
+            etai::AgentPublic ap = etai::get_agent_public();
+
+            // 5) ответ
             json out = json::object();
             out["ok"]            = true;
+            out["symbol"]        = ap.symbol; // для UI «текущий символ»
+            out["agents"]        = {
+                {"running", ap.running},
+                {"mode",    ap.mode}
+            };
             out["model"]         = make_model(thr, ma, disk);
             out["model_thr"]     = j_number(thr);
             out["model_ma_len"]  = j_integer(ma);
