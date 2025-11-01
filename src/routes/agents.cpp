@@ -5,27 +5,24 @@
 #include <atomic>
 #include <cstdlib>
 #include <string>
+#include <armadillo>
 
-// Подтягиваем реализацию AgentLayer в этот TU.
+// Подтягиваем реализацию AgentLayer в этот TU, чтобы не трогать CMake.
 #include "../agents/agent_layer.cpp"
-
-// Публичный интерфейс статуса
-#include "../agents_pub.h"
 
 using json = nlohmann::json;
 
 namespace {
 
-// Уникальные имена (не конфликтуют с другими TU).
-inline std::string ag_qs_str(const httplib::Request& req, const char* k, const char* defv){
+inline std::string qs_str(const httplib::Request& req, const char* k, const char* defv){
     return req.has_param(k) ? req.get_param_value(k) : std::string(defv);
 }
-inline double ag_qs_num(const httplib::Request& req, const char* k, double defv){
+inline double qs_num(const httplib::Request& req, const char* k, double defv){
     if (!req.has_param(k)) return defv;
     try { return std::stod(req.get_param_value(k)); } catch (...) { return defv; }
 }
 
-// Простое состояние агента для v1.
+// Простое состояние агента в памяти.
 struct AgentState {
     std::atomic<bool> running{false};
     std::string symbol{"BTCUSDT"};
@@ -43,17 +40,6 @@ inline void json_reply(httplib::Response& res, const json& j, int code=200){
 
 namespace etai {
 
-// Публичный «снимок» статуса для других модулей (health_ai и т.п.)
-AgentPublic get_agent_public(){
-    auto& S = agent_state();
-    AgentPublic p;
-    p.running  = S.running.load();
-    p.symbol   = S.symbol;
-    p.interval = S.interval;
-    p.mode     = S.mode;
-    return p;
-}
-
 void setup_agents_routes(httplib::Server& svr) {
     const bool agent_enabled = std::getenv("ETAI_AGENT_ENABLE") != nullptr;
 
@@ -66,11 +52,11 @@ void setup_agents_routes(httplib::Server& svr) {
             return json_reply(res, r);
         }
 
-        const std::string symbol   = ag_qs_str(req, "symbol", "BTCUSDT");
-        const std::string interval = ag_qs_str(req, "interval", "15");
-        const double thr           = ag_qs_num(req, "thr", 0.5);
+        const std::string symbol   = qs_str(req, "symbol", "BTCUSDT");
+        const std::string interval = qs_str(req, "interval", "15");
+        const double thr           = qs_num(req, "thr", 0.5);
 
-        arma::mat X; arma::vec y;
+        arma::mat X; arma::mat y;
         if (!etai::load_cached_xy(symbol, interval, X, y) || X.n_rows == 0) {
             r["ok"] = false;
             r["error"] = "Failed to load cached XY or empty features";
@@ -96,7 +82,7 @@ void setup_agents_routes(httplib::Server& svr) {
         return json_reply(res, r);
     });
 
-    // ===== run/stop/status для UI v1 =====
+    // ===== New: run/stop/status (v1 wiring + проверка данных) =====
     svr.Get("/api/agents/run", [agent_enabled](const httplib::Request& req, httplib::Response& res){
         json r;
         if (!agent_enabled) {
@@ -105,19 +91,60 @@ void setup_agents_routes(httplib::Server& svr) {
             return json_reply(res, r);
         }
 
+        const std::string symbol   = qs_str(req, "symbol", "BTCUSDT");
+        const std::string interval = qs_str(req, "interval", "15");
+        const std::string mode     = qs_str(req, "mode", "live");
+
+        // 1) Health по данным (clean/raw наличие, строки/колонки)
+        json dh = etai::data_health_report(symbol, interval);
+        const bool data_ok = dh.value("ok", false);
+
+        // 2) Пытаемся подготовить/прочитать кэш фич (X/y) — чтобы сразу понять, что всё подхватится
+        arma::mat X, y;
+        bool xy_ok = false;
+        if (data_ok) {
+            xy_ok = etai::load_cached_xy(symbol, interval, X, y) && X.n_rows > 0;
+        }
+
+        if (!data_ok || !xy_ok) {
+            // Ничего не запускаем — отдаём подробный отчёт, что именно не так.
+            r["ok"] = false;
+            r["error"] = "Data not ready for the requested symbol/interval";
+            r["symbol"] = symbol;
+            r["interval"] = interval;
+            r["agents"] = { {"running", false}, {"mode", "idle"} };
+            r["data_health"] = dh;                 // показывает paths/rows/cols/exists
+            r["xy_ready"]    = xy_ok;
+            return json_reply(res, r, 409);        // 409 Conflict — требуются подготовительные шаги
+        }
+
+        // 3) Всё готово — сохраняем состояние и запускаем
         auto& S = agent_state();
-        S.symbol   = ag_qs_str(req, "symbol", "BTCUSDT");
-        S.interval = ag_qs_str(req, "interval", "15");
-        S.mode     = ag_qs_str(req, "mode", "live");
+        S.symbol   = symbol;
+        S.interval = interval;
+        S.mode     = mode;
         S.running  = true;
 
-        r = {
+        r["ok"]       = true;
+        r["running"]  = true;
+        r["symbol"]   = S.symbol;
+        r["interval"] = S.interval;
+        r["mode"]     = S.mode;
+
+        // Короткая сводка по данным
+        r["data_health"] = {
             {"ok", true},
-            {"running", S.running.load()},
-            {"symbol", S.symbol},
-            {"interval", S.interval},
-            {"mode", S.mode}
+            {"clean_rows", dh["clean"].value("rows", 0)},
+            {"clean_cols", dh["clean"].value("cols", 0)},
+            {"raw_rows",   dh["raw"].value("rows", 0)},
+            {"raw_cols",   dh["raw"].value("cols", 0)}
         };
+        // Оценка размерности фич по факту X
+        r["features"] = {
+            {"rows", (unsigned)X.n_rows},
+            {"cols", (unsigned)X.n_cols}
+        };
+
         return json_reply(res, r);
     });
 
