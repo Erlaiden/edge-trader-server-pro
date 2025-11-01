@@ -14,7 +14,7 @@ ALLOW_ANY_HOST="${ALLOW_ANY_HOST:-0}"
 
 log(){ printf '[%s] %s\n' "$(date -u +%H:%M:%S)" "$*"; }
 
-# Санитайзер наследованных шаблонов
+# Санитайзер устаревших шаблонов
 if [[ "$ARCHIVE_URL_TMPL" == *"{INTERVAL}"* ]] || [[ "$ARCHIVE_URL_TMPL" == *"{YYYY}-{MM}.csv.gz"* ]]; then
   log "WARN: legacy template detected; overriding to default"
   ARCHIVE_URL_TMPL="$DEFAULT_TMPL"
@@ -27,8 +27,8 @@ fi
 # === PATHS ===
 PUB_DIR="public/bybit/kline_for_metatrader4/${SYMBOL}"
 CACHE_DIR="cache"
-RAW_TMPL="${CACHE_DIR}/${SYMBOL}_%s.csv"         # epoch ms,6 cols
-CLEAN_TMPL="${CACHE_DIR}/clean/${SYMBOL}_%s.csv" # epoch ms,6 cols
+RAW_TMPL="${CACHE_DIR}/${SYMBOL}_%s.csv"         # epoch_ms,6 cols
+CLEAN_TMPL="${CACHE_DIR}/clean/${SYMBOL}_%s.csv" # epoch_ms,6 cols
 mkdir -p "${PUB_DIR}" "${CACHE_DIR}/clean"
 
 # === DATE UTILS ===
@@ -96,38 +96,53 @@ fetch_month(){
   fi
 }
 
-# === NORMALIZATION: MT4 "YYYY.MM.DD HH:MM[:SS]" → epoch_ms ===
+# === NORMALIZATION: более терпимый парсер ===
 normalize_to_epoch(){
   python3 - <<'PY'
 import sys, re, datetime
 utc=datetime.timezone.utc
-ts_re = re.compile(r'^\d{4}\.\d{2}\.\d{2}\s+\d{2}:\d{2}(:\d{2})?$')
-for ln in sys.stdin:
-    ln=ln.strip().replace('\r','')
-    if not ln: continue
-    parts=ln.split(',')
-    if len(parts) < 6: 
-        # бывают заголовки "time,open,high,low,close,volume" — пропускаем
-        continue
-    head = parts[0].lstrip('\ufeff')  # на всякий случай уберём BOM
-    # уже epoch?
-    if head.isdigit():
-        print(','.join(parts[:6])); continue
-    # заголовки — мимо
-    if head.lower().startswith(('time','datetime')):
-        continue
-    # MT4 формат
-    if ts_re.match(head):
-        # с секундами или без
-        fmt = "%Y.%m.%d %H:%M:%S" if len(head.split()[-1].split(':'))==3 else "%Y.%m.%d %H:%M"
+
+# Разделитель: запятая / таб / точка с запятой
+splitter = re.compile(r'[,\t;]+')
+
+# Поддерживаем несколько форматов времени (без/с секундами, разные разделители даты)
+fmts = [
+  "%Y.%m.%d %H:%M:%S", "%Y.%m.%d %H:%M",
+  "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M",
+  "%Y/%m/%d %H:%M:%S", "%Y/%m/%d %H:%M",
+]
+def to_epoch_ms(s):
+    s = s.strip().lstrip('\ufeff').strip('"').strip("'")
+    if s.isdigit():
+        return int(s)
+    for fmt in fmts:
         try:
-            dt = datetime.datetime.strptime(head, fmt).replace(tzinfo=utc)
-            ts = int(dt.timestamp()*1000)
-            o,h,l,c,v = parts[1:6]
-            print(f"{ts},{o},{h},{l},{c},{v}")
+            return int(datetime.datetime.strptime(s, fmt).replace(tzinfo=utc).timestamp()*1000)
         except Exception:
-            # не валидная строка — пропустим
             pass
+    return None
+
+for ln in sys.stdin:
+    ln = ln.strip().replace('\r','')
+    if not ln: continue
+    parts = [p.strip().strip('"').strip("'") for p in splitter.split(ln)]
+    if len(parts) < 6:
+        # заголовки вида "time,open,..." или пустышки — пропускаем
+        continue
+    head = parts[0].lower()
+    if head.startswith('time') or head.startswith('datetime'):
+        continue
+    ts = to_epoch_ms(parts[0])
+    if ts is None or ts <= 0:
+        continue
+    try:
+        o,h,l,c,v = parts[1:6]
+        # Бывают «—» или пустые строки — фильтруем
+        if any(x in ("", "-", "null", "NaN") for x in (o,h,l,c,v)): 
+            continue
+        print(f"{ts},{float(o)},{float(h)},{float(l)},{float(c)},{float(v)}")
+    except Exception:
+        continue
 PY
 }
 
@@ -149,12 +164,17 @@ inflate_concat_to_raw(){
   if [[ -s "$tmp_concat" ]]; then
     normalize_to_epoch < "$tmp_concat" > "$tmp_norm" || true
   fi
+
+  # DEBUG: если пусто — сохраним первые 20 строк конкатенации
+  if [[ ! -s "$tmp_norm" && -s "$tmp_concat" ]]; then
+    head -n 20 "$tmp_concat" > "/tmp/mt4_debug_${tf}.txt" || true
+    log "DEBUG dump: /tmp/mt4_debug_${tf}.txt"
+  fi
   rm -f "$tmp_concat"
 
   local raw_src; raw_src="$(printf "$RAW_TMPL" "$src_tf")"
   local raw_tf;  raw_tf="$(printf "$RAW_TMPL" "$tf")"
 
-  # Если нормализация пустая — явно обнулим целевой RAW-источник, чтобы не мешал мусор
   if [[ ! -s "$tmp_norm" ]]; then
     log "FAIL: normalization produced 0 rows for tf=${tf} (src=${src_tf}) — clearing stale RAW"
     : > "$raw_src"
@@ -166,13 +186,13 @@ inflate_concat_to_raw(){
   fi
   rm -f "$tmp_norm"
 
-  # Если tf==src_tf — скопируем (без same-file)
+  # Если tf==src_tf — копируем (избегая same-file)
   if [[ "$tf" == "$src_tf" ]]; then
     if [[ "$raw_src" != "$raw_tf" ]]; then cp -f "$raw_src" "$raw_tf"; fi
     return 0
   fi
 
-  # Агрегация в 240/1440 (биннинг по UTC)
+  # Агрегация 240/1440 по UTC биннам
   if [[ "$tf" == "240" || "$tf" == "1440" ]]; then
     if [[ ! -s "$raw_src" ]]; then : > "$raw_tf"; return 0; fi
     awk -F',' -v W="$tf" '
@@ -213,7 +233,7 @@ done
 for tf in $INTERVALS; do inflate_concat_to_raw "$tf" || true; done
 for tf in $INTERVALS; do make_clean "$tf" || true; done
 
-# 3) Быстрые сэмплы — должны быть epoch ms в первом столбце
+# 3) Быстрые сэмплы
 for tf in $INTERVALS; do
   f_raw="$(printf "$RAW_TMPL" "$tf")"
   f_clean="$(printf "$CLEAN_TMPL" "$tf")"
