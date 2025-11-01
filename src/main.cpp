@@ -17,6 +17,9 @@
 #include "routes/backfill.inc.cpp" // static inline register_backfill_routes(...)
 #include "routes/train_env.cpp"    // новый роут: /api/train_env (за фичефлагом)
 
+// Новый файл с установкой модели
+#include "routes/model_set.cpp"
+
 int main(int argc, char** argv) {
     int port = 3000;
     if (argc > 1) port = std::atoi(argv[1]);
@@ -37,6 +40,8 @@ int main(int argc, char** argv) {
     register_health_ai(svr);
     register_train_routes(svr);
     register_model_routes(svr);
+    // Регистрация нового роута установки модели
+    register_model_set_routes(svr);
     register_infer_routes(svr);
     etai::register_metrics_routes(svr); // <-- квалификация namespace
     register_backfill_routes(svr);
@@ -45,8 +50,8 @@ int main(int argc, char** argv) {
 
     std::cout << "[EdgeTrader] server started on port " << port
               << " (thr=" << etai::get_model_thr()
-              << ", ma=" << etai::get_model_ma_len()
-              << ", feat=" << etai::get_model_feat_dim() << ")\n";
+              << ", ma="  << etai::get_model_ma_len()
+              << ", feat="<< etai::get_model_feat_dim() << ")\n";
 
     svr.listen("0.0.0.0", port);
     return 0;
