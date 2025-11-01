@@ -14,7 +14,6 @@
   #error "C++17 filesystem is required"
 #endif
 
-// Агенты — опционально (для SYMBOL/INTERVAL)
 #if __has_include("../agents.h")
   #include "../agents.h"
   #define ETAI_HAS_AGENTS 1
@@ -52,7 +51,6 @@ static std::optional<json> read_json_file(const fs::path& p) {
     } catch (...) { return std::nullopt; }
 }
 
-// самый свежий *.json в cache/models/
 static std::optional<fs::path> latest_model_on_disk() {
     try {
         const fs::path dir = fs::path("cache") / "models";
@@ -107,7 +105,6 @@ static void fill_from_json(json& dst, const json& j, const fs::path& p) {
 }
 
 static std::optional<fs::path> expected_model_path(const std::string& symbol, const std::string& interval) {
-    // формируем cache/models/<SYMBOL>_<INTERVAL>_ppo_pro.json
     fs::path p = fs::path("cache") / "models" / (symbol + "_" + interval + "_ppo_pro.json");
     if (fs::exists(p) && fs::is_regular_file(p)) return p;
     return std::nullopt;
@@ -127,7 +124,7 @@ void register_health_ai(httplib::Server& svr) {
             out["data_ok"] = false;
         }
 
-        // Получим предполагаемый SYMBOL/INTERVAL для точного пути
+        // Агентские дефолты
         std::string sym = "BTCUSDT";
         std::string ivl = "15";
         #if ETAI_HAS_AGENTS
@@ -142,13 +139,12 @@ void register_health_ai(httplib::Server& svr) {
         json ms = null_model_short();
         try { json m = etai::get_current_model(); fill_from_ram(ms, m); } catch (...) {}
 
-        // (a) если RAM пустой — пробуем точный ожидаемый файл
+        // (a) точный путь
         bool need_disk = (!ms.contains("tp") || ms["tp"].is_null()
                        || !ms.contains("sl") || ms["sl"].is_null()
                        || !ms.contains("ma_len") || ms["ma_len"].is_null()
                        || !ms.contains("best_thr") || ms["best_thr"].is_null()
                        || !ms.contains("feat_dim") || ms["feat_dim"].is_null());
-
         if (need_disk) {
             try {
                 if (auto ep = expected_model_path(sym, ivl)) {
@@ -157,7 +153,7 @@ void register_health_ai(httplib::Server& svr) {
             } catch (...) {}
         }
 
-        // (b) если всё ещё пусто — берём самый свежий *.json
+        // (b) самый свежий
         need_disk = (!ms.contains("tp") || ms["tp"].is_null()
                   || !ms.contains("sl") || ms["sl"].is_null()
                   || !ms.contains("ma_len") || ms["ma_len"].is_null()
@@ -171,7 +167,7 @@ void register_health_ai(httplib::Server& svr) {
             } catch (...) {}
         }
 
-        // Аксессоры: thr, ma_len
+        // Атомики: thr, ma_len, feat_dim
         try {
             auto thr = etai::get_model_thr();
             out["model_thr"] = thr;
@@ -182,14 +178,17 @@ void register_health_ai(httplib::Server& svr) {
             out["model_ma_len"] = ml;
             if (!ms.contains("ma_len") || ms["ma_len"].is_null()) ms["ma_len"] = ml;
         } catch (...) {}
-
-        // feat_dim — читаем из атомика, затем дублируем в модель при отсутствии
         try {
             auto fd = etai::get_model_feat_dim();
             out["model_feat_dim"] = fd;
             if (!ms.contains("feat_dim") || ms["feat_dim"].is_null()) ms["feat_dim"] = fd;
-        } catch (...) {
-            out["model_feat_dim"] = nullptr;
+        } catch (...) { out["model_feat_dim"] = nullptr; }
+
+        // Финальные дефолты символа/интервала/пути
+        if (!ms.contains("symbol")   || ms["symbol"].is_null())   ms["symbol"]   = sym;
+        if (!ms.contains("interval") || ms["interval"].is_null()) ms["interval"] = ivl;
+        if (!ms.contains("model_path") || ms["model_path"].is_null()) {
+            if (auto ep = expected_model_path(sym, ivl)) ms["model_path"] = ep->string();
         }
 
         out["model"] = ms;
