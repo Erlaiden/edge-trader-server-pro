@@ -6,16 +6,27 @@ SYMBOL="${SYMBOL:-BTCUSDT}"
 MONTHS="${MONTHS:-6}"
 INTERVALS="${INTERVALS:-"15 60 240 1440"}"
 
-# Bybit MT4 archive:
-#   https://public.bybit.com/kline_for_metatrader4/{SYMBOL}/{YYYY}/{SYMBOL}_{SRC_TF}_{YYYY}-{MM}-01_{YYYY}-{MM_LAST}.csv.gz
+# Bybit MT4 archive naming (minute bars):
+# URL: https://public.bybit.com/kline_for_metatrader4/{SYMBOL}/{YYYY}/{SYMBOL}_{SRC_TF}_{YYYY}-{MM}-01_{YYYY}-{MM_LAST}.csv.gz
+# где SRC_TF ∈ {1,5,15,30,60}. Для 240 и 1440 мы агрегируем из 60.
 ARCHIVE_URL_TMPL="${ARCHIVE_URL_TMPL:-https://public.bybit.com/kline_for_metatrader4/{SYMBOL}/{YYYY}/{SYMBOL}_{SRC_TF}_{YYYY}-{MM}-01_{YYYY}-{MM_LAST}.csv.gz}"
 ALLOWED_HOST="${ALLOWED_HOST:-public.bybit.com}"
 ALLOW_ANY_HOST="${ALLOW_ANY_HOST:-0}"
 
+# Защита: если старый шаблон случайно висит в окружении (с {INTERVAL} или .../{YYYY}-{MM}.csv.gz), предупредим.
+if printf '%s' "$ARCHIVE_URL_TMPL" | grep -q '{INTERVAL}'; then
+  echo "[WARN] ARCHIVE_URL_TMPL содержит {INTERVAL} — это старый формат. Перекрываю на Bybit MT4." >&2
+  ARCHIVE_URL_TMPL="https://public.bybit.com/kline_for_metatrader4/{SYMBOL}/{YYYY}/{SYMBOL}_{SRC_TF}_{YYYY}-{MM}-01_{YYYY}-{MM_LAST}.csv.gz"
+fi
+if printf '%s' "$ARCHIVE_URL_TMPL" | grep -q '{YYYY}-{MM}\.csv\.gz'; then
+  echo "[WARN] ARCHIVE_URL_TMPL похож на помесячный плоский формат — перекрываю на Bybit MT4." >&2
+  ARCHIVE_URL_TMPL="https://public.bybit.com/kline_for_metatrader4/{SYMBOL}/{YYYY}/{SYMBOL}_{SRC_TF}_{YYYY}-{MM}-01_{YYYY}-{MM_LAST}.csv.gz"
+fi
+
 # === PATHS ===
 PUB_DIR="public/bybit/kline_for_metatrader4/${SYMBOL}"
 CACHE_DIR="cache"
-RAW="${CACHE_DIR}/${SYMBOL}_%s.csv"        # 7 cols
+RAW="${CACHE_DIR}/${SYMBOL}_%s.csv"         # 7 cols
 CLEAN="${CACHE_DIR}/clean/${SYMBOL}_%s.csv" # 6 cols
 
 mkdir -p "${PUB_DIR}" "${CACHE_DIR}/clean"
@@ -108,7 +119,6 @@ inflate_concat_to_raw(){
   local tmp; tmp="$(mktemp)"
   : > "$tmp"
 
-  # unpack all months we have
   if compgen -G "${PUB_DIR}/${src_tf}/*/*.csv.gz" > /dev/null; then
     find "${PUB_DIR}/${src_tf}" -type f -name '*.csv.gz' | sort | while read -r gz; do
       gzip -cd "$gz" >> "$tmp" || true
@@ -139,7 +149,8 @@ inflate_concat_to_raw(){
     local in="$(printf "$RAW" "$src_tf")"
     local out="$(printf "$RAW" "$tf")"
     local win_minutes="$tf"
-    awk -F',' -v W="$win_minutes" '
+    awk -f - "$in" > "$out" <<'AWK'
+      BEGIN{ FS=","; }
       function flush(){
         if(n>0){
           printf "%d,%.10f,%.10f,%.10f,%.10f,%.10f\n", T*60000, O,H,L,C,V;
@@ -155,7 +166,7 @@ inflate_concat_to_raw(){
         else { if(h>H)H=h; if(l<L)L=l; C=c; V+=v; n++; }
       }
       END{ flush(); }
-    ' "$in" > "$out"
+AWK
   fi
 }
 
@@ -179,7 +190,10 @@ for tf in $INTERVALS; do
   done
 done
 
+# Передаём окно W в awk для агрегации
+export W
 for tf in $INTERVALS; do
+  W="$tf"
   inflate_concat_to_raw "$tf" || true
 done
 
@@ -191,6 +205,6 @@ done
 for tf in $INTERVALS; do
   f_raw="$(printf "$RAW" "$tf")"
   f_clean="$(printf "$CLEAN" "$tf")"
-  [ -f "$f_raw"  ] && head -n1 "$f_raw"  | awk -v F="$f_raw"  -F',' '{printf("RAW   %s  cols=%d sample=%s\n",F,NF,$0)}'
-  [ -f "$f_clean"] && head -n1 "$f_clean"| awk -v F="$f_clean" -F',' '{printf("CLEAN %s  cols=%d sample=%s\n",F,NF,$0)}'
+  [ -f "$f_raw"  ]  && head -n1 "$f_raw"   | awk -v F="$f_raw"   -F',' '{printf("RAW   %s  cols=%d sample=%s\n",F,NF,$0)}'
+  [ -f "$f_clean" ] && head -n1 "$f_clean" | awk -v F="$f_clean" -F',' '{printf("CLEAN %s  cols=%d sample=%s\n",F,NF,$0)}'
 done
