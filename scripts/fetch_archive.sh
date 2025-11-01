@@ -14,7 +14,7 @@ ALLOW_ANY_HOST="${ALLOW_ANY_HOST:-0}"
 
 log(){ printf '[%s] %s\n' "$(date -u +%H:%M:%S)" "$*"; }
 
-# Санитайзер старых шаблонов
+# Санитайзер наследованных шаблонов
 if [[ "$ARCHIVE_URL_TMPL" == *"{INTERVAL}"* ]] || [[ "$ARCHIVE_URL_TMPL" == *"{YYYY}-{MM}.csv.gz"* ]]; then
   log "WARN: legacy template detected; overriding to default"
   ARCHIVE_URL_TMPL="$DEFAULT_TMPL"
@@ -44,7 +44,8 @@ i=int(sys.argv[1])
 now=datetime.datetime.now(datetime.UTC)
 y,m=now.year,now.month
 m-=i
-while m<=0: m+=12; y-=1
+while m<=0:
+    m+=12; y-=1
 print(y, f"{m:02d}")
 PY
 }
@@ -105,16 +106,19 @@ for ln in sys.stdin:
     ln=ln.strip().replace('\r','')
     if not ln: continue
     parts=ln.split(',')
-    if len(parts) < 6: continue
-    head = parts[0]
-    # already epoch?
+    if len(parts) < 6: 
+        # бывают заголовки "time,open,high,low,close,volume" — пропускаем
+        continue
+    head = parts[0].lstrip('\ufeff')  # на всякий случай уберём BOM
+    # уже epoch?
     if head.isdigit():
         print(','.join(parts[:6])); continue
-    # header line?
-    if head.lower().startswith('time') or head.lower().startswith('datetime'):
+    # заголовки — мимо
+    if head.lower().startswith(('time','datetime')):
         continue
-    # MT4 format
+    # MT4 формат
     if ts_re.match(head):
+        # с секундами или без
         fmt = "%Y.%m.%d %H:%M:%S" if len(head.split()[-1].split(':'))==3 else "%Y.%m.%d %H:%M"
         try:
             dt = datetime.datetime.strptime(head, fmt).replace(tzinfo=utc)
@@ -122,8 +126,8 @@ for ln in sys.stdin:
             o,h,l,c,v = parts[1:6]
             print(f"{ts},{o},{h},{l},{c},{v}")
         except Exception:
-            continue
-    # Unknown → skip silently
+            # не валидная строка — пропустим
+            pass
 PY
 }
 
@@ -148,9 +152,9 @@ inflate_concat_to_raw(){
   rm -f "$tmp_concat"
 
   local raw_src; raw_src="$(printf "$RAW_TMPL" "$src_tf")"
-  local raw_tf ; raw_tf ="$(printf "$RAW_TMPL" "$tf")"
+  local raw_tf;  raw_tf="$(printf "$RAW_TMPL" "$tf")"
 
-  # Если нормализация пустая — явно обнуляем целевой RAW, чтобы не висели старые строки.
+  # Если нормализация пустая — явно обнулим целевой RAW-источник, чтобы не мешал мусор
   if [[ ! -s "$tmp_norm" ]]; then
     log "FAIL: normalization produced 0 rows for tf=${tf} (src=${src_tf}) — clearing stale RAW"
     : > "$raw_src"
@@ -162,15 +166,14 @@ inflate_concat_to_raw(){
   fi
   rm -f "$tmp_norm"
 
-  # Если tf==src_tf — копируем в tf-файл (но без same-file)
+  # Если tf==src_tf — скопируем (без same-file)
   if [[ "$tf" == "$src_tf" ]]; then
     if [[ "$raw_src" != "$raw_tf" ]]; then cp -f "$raw_src" "$raw_tf"; fi
     return 0
   fi
 
-  # Агрегация в 240/1440 (W минут)
+  # Агрегация в 240/1440 (биннинг по UTC)
   if [[ "$tf" == "240" || "$tf" == "1440" ]]; then
-    # Если исходный raw пуст — создадим пустой агрегат
     if [[ ! -s "$raw_src" ]]; then : > "$raw_tf"; return 0; fi
     awk -F',' -v W="$tf" '
       BEGIN{ OFS=","; have=0; }
@@ -178,7 +181,6 @@ inflate_concat_to_raw(){
       {
         ts=$1+0; o=$2+0; h=$3+0; l=$4+0; c=$5+0; v=$6+0;
         if(ts<=0) next;
-        # floor to W-minute boundary in UTC
         bin_ms = int(ts/60000/W)*W*60000;
         if(!have){ T0=bin_ms; O=o; H=h; L=l; C=c; V=v; have=1; next; }
         if(bin_ms!=T0){ flush(); T0=bin_ms; O=o; H=h; L=l; C=c; V=v; have=1; }
@@ -211,7 +213,7 @@ done
 for tf in $INTERVALS; do inflate_concat_to_raw "$tf" || true; done
 for tf in $INTERVALS; do make_clean "$tf" || true; done
 
-# 3) Быстрые сэмплы — должны быть epoch ms (целые) в первом столбце
+# 3) Быстрые сэмплы — должны быть epoch ms в первом столбце
 for tf in $INTERVALS; do
   f_raw="$(printf "$RAW_TMPL" "$tf")"
   f_clean="$(printf "$CLEAN_TMPL" "$tf")"
