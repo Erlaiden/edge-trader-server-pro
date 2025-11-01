@@ -18,7 +18,7 @@ cd "$ROOT"
   systemctl status edge-trader-server --no-pager || true
   echo
   echo "== listening 3000 =="
-  ss -lntp | grep ':3000' || true
+  ss -lntp | grep -E '[: ]3000(\s|$)' || true
 } | tee "${OUTDIR}/service_port.txt"
 
 # ---------- 2) Билд и бинарь ----------
@@ -41,7 +41,8 @@ cd "$ROOT"
   curl -sS "http://127.0.0.1:3000/health" || true
   echo
   echo "== /metrics (key lines) =="
-  curl -sS "http://127.0.0.1:3000/metrics" | egrep -A1 'edge_model_feat_dim|edge_model_ma_len|edge_reward_|edge_sharpe|edge_drawdown' || true
+  curl -sS "http://127.0.0.1:3000/metrics" \
+   | egrep -A1 '(^edge_model_feat_dim |^edge_model_ma_len |^edge_reward_|^edge_sharpe|^edge_drawdown)' || true
 } | tee "${OUTDIR}/http_endpoints.txt"
 
 # ---------- 4) Модель и инварианты ----------
@@ -59,8 +60,10 @@ MODEL_JSON="$(ls -1 cache/models/*_ppo_pro.json 2>/dev/null | head -n1 || true)"
   fi
 } | tee "${OUTDIR}/model_check.txt"
 
-# Сравнение feat_dim из модели и из /metrics
-FEAT_DIM_METRICS="$(curl -sS "http://127.0.0.1:3000/metrics" | awk '/edge_model_feat_dim/ {print $2; exit}' || true)"
+# Достаём ровно число feat_dim из /metrics: строка должна начинаться с метрики
+FEAT_DIM_METRICS="$(curl -sS "http://127.0.0.1:3000/metrics" \
+  | awk '/^edge_model_feat_dim[[:space:]]+/ {print $2; exit}')"
+
 FEAT_DIM_MODEL="NA"
 if [ -n "${MODEL_JSON:-}" ] && [ -f "$MODEL_JSON" ]; then
   FEAT_DIM_MODEL="$(jq -r '.policy.feat_dim // "NA"' "$MODEL_JSON" 2>/dev/null || echo NA)"
@@ -69,7 +72,7 @@ fi
 {
   echo "feat_dim(metrics)=${FEAT_DIM_METRICS:-NA}"
   echo "feat_dim(model)=${FEAT_DIM_MODEL:-NA}"
-  if [ -n "${FEAT_DIM_METRICS:-}" ] && [ "${FEAT_DIM_MODEL:-}" != "NA" ] && [ "$FEAT_DIM_METRICS" = "$FEAT_DIM_MODEL" ]; then
+  if [[ "${FEAT_DIM_METRICS:-}" =~ ^[0-9]+$ ]] && [ "${FEAT_DIM_MODEL:-}" != "NA" ] && [ "$FEAT_DIM_METRICS" = "$FEAT_DIM_MODEL" ]; then
     ok "feat_dim invariant OK"
   else
     fail "feat_dim invariant MISMATCH"
@@ -105,13 +108,16 @@ fi
 } | tee "${OUTDIR}/api_smoke.txt"
 
 # ---------- 7) Логи systemd ----------
-sudo journalctl -u edge-trader-server -n 400 --no-pager | egrep -i '(EdgeTrader|TRAIN|PPO_PRO|warn:|error|feat_ver|feat=|wctx|Manip|policy|reload)' \
+journalctl -u edge-trader-server -n 400 --no-pager \
+  | egrep -i '(EdgeTrader|TRAIN|PPO_PRO|warn:|error|feat_ver|feat=|wctx|Manip|policy|reload)' \
   | tee "${OUTDIR}/journal_tail.txt" >/dev/null || true
 
 # ---------- 8) Сводка ----------
-echo "---- SUMMARY ----" | tee "${OUTDIR}/SUMMARY.txt"
-grep -E 'feat_dim|OK|FAIL' "${OUTDIR}/invariants.txt" | tee -a "${OUTDIR}/SUMMARY.txt" || true
-egrep -A1 'edge_model_feat_dim|edge_model_ma_len' "${OUTDIR}/http_endpoints.txt" | tee -a "${OUTDIR}/SUMMARY.txt" || true
-echo "Artifacts: ${OUTDIR}" | tee -a "${OUTDIR}/SUMMARY.txt"
+{
+  echo "---- SUMMARY ----"
+  grep -E 'feat_dim|OK|FAIL' "${OUTDIR}/invariants.txt" || true
+  egrep -A1 '(^edge_model_feat_dim |^edge_model_ma_len )' "${OUTDIR}/http_endpoints.txt" || true
+  echo "Artifacts: ${OUTDIR}"
+} | tee "${OUTDIR}/SUMMARY.txt"
 
 ok "Audit completed. See ${OUTDIR}"
