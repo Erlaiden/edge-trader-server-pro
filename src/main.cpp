@@ -15,6 +15,7 @@
 #include "routes/metrics.cpp"     // внутри namespace etai
 #include "routes/agents.cpp"
 #include "routes/backfill.inc.cpp" // static inline register_backfill_routes(...)
+#include "routes/symbol.cpp"
 
 int main(int argc, char** argv) {
     int port = 3000;
@@ -39,6 +40,7 @@ int main(int argc, char** argv) {
     register_infer_routes(svr);
     etai::register_metrics_routes(svr); // <-- квалификация namespace
     register_backfill_routes(svr);
+    register_symbol_routes(svr);
     etai::setup_agents_routes(svr);
 
     std::cout << "[EdgeTrader] server started on port " << port

@@ -39,10 +39,13 @@ static inline void register_backfill_routes(httplib::Server& srv){
     json health    = json::array();
 
     auto do_one = [&](const std::string& tf){
-      auto r = etai::backfill_last_months(symbol, tf, months);
+      auto stats = etai::backfill_last_months(symbol, tf, months);
+      auto r = stats.to_json();
       intervals.push_back({
         {"symbol",symbol},{"interval",tf},{"months",months},
-        {"ok", r.value("ok", false)}, {"rows", r.value("rows", 0)}
+        {"ok", r.value("ok", false)},
+        {"rows", r.value("rows", 0)},
+        {"skipped_rows", r.value("skipped_rows", 0)}
       });
       auto h = etai::data_health_report(symbol, tf);
       h["interval"] = tf; h["symbol"] = symbol;
