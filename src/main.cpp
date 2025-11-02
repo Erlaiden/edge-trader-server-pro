@@ -3,26 +3,24 @@
 #include <httplib.h>
 #include <armadillo>
 #include "json.hpp"
-
-#include "server_accessors.h"   // etai::init_model_atoms_from_disk, getters
+#include "server_accessors.h"
 
 // Подключаем роуты единым TU
 #include "routes/health.cpp"
 #include "routes/health_ai.cpp"
 #include "routes/train.cpp"
 #include "routes/model.cpp"
-#include "routes/infer.cpp"        // <-- добавлено
+#include "routes/infer.cpp"
 #include "routes/metrics.cpp"      // внутри namespace etai
 #include "routes/agents.cpp"
 #include "routes/backfill.inc.cpp" // static inline register_backfill_routes(...)
 #include "routes/train_env.cpp"    // новый роут: /api/train_env (за фичефлагом)
-
-// Новый файл с установкой модели
 #include "routes/model_set.cpp"
 #include "routes/symbol_queue.cpp"
-
-// Новый блок: выбор символа
 #include "routes/symbol.cpp"
+
+// Наш новый конвейер (этот файл ты только что создал)
+#include "routes/pipeline.cpp"
 
 int main(int argc, char** argv) {
     int port = 3000;
@@ -50,7 +48,10 @@ int main(int argc, char** argv) {
     register_backfill_routes(svr);
     etai::setup_agents_routes(svr);
     register_train_env_routes(svr);     // безопасная заглушка под ETAI_ENABLE_TRAIN_ENV
-    register_symbol_routes(svr);        // <-- новый набор маршрутов
+    register_symbol_routes(svr);
+
+    // Новый: конвейер подготовки и обучения
+    register_pipeline_routes(svr);
 
     std::cout << "[EdgeTrader] server started on port " << port
               << " (thr=" << etai::get_model_thr()
