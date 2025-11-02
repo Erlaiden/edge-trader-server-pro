@@ -33,7 +33,7 @@ inline std::string canonical_interval(std::string interval) {
     return std::isspace(c) || c=='\"' || c=='\'';
   }), interval.end());
   // допустимые формы → канон
-  if (interval == "15m"   || interval == "15")                   return "15";
+  if (interval == "15m"   || interval == "15")                    return "15";
   if (interval == "60m"   || interval == "1h"  || interval=="60") return "60";
   if (interval == "240m"  || interval == "4h"  || interval=="240")return "240";
   if (interval == "1440m" || interval == "1d"  || interval=="D" || interval=="1440") return "1440";
@@ -73,13 +73,17 @@ inline std::string make_query(const std::vector<std::pair<std::string,std::strin
 }
 
 // ===== TIMEFRAME (с поддержкой 1440) =====
-inline long long tf_ms(const std::string& interval) {
+inline int minutes_of(const std::string& interval){
   const std::string tf = canonical_interval(interval);
-  if (tf=="15")   return 15ll   * 60 * 1000;
-  if (tf=="60")   return 60ll   * 60 * 1000;
-  if (tf=="240")  return 240ll  * 60 * 1000;
-  if (tf=="1440") return 1440ll * 60 * 1000; // 1d
-  return 60ll * 60 * 1000; // default 1h
+  if (tf=="15")   return 15;
+  if (tf=="60")   return 60;
+  if (tf=="240")  return 240;
+  if (tf=="1440") return 1440;
+  return 60;
+}
+
+inline long long tf_ms(const std::string& interval) {
+  return (long long)minutes_of(interval) * 60LL * 1000LL;
 }
 
 // Bybit ожидает 'D' для дневки. Всё остальное — как есть.
@@ -116,7 +120,6 @@ inline std::optional<long long> parse_timestamp_token(std::string_view token) {
 }
 
 // ===== CSV CACHE =====
-// Возвращает число пропущенных строк
 inline size_t read_cache(const std::string& path, std::map<long long, std::string>& out) {
   std::ifstream f(path);
   if (!f.good()) return 0;
@@ -291,34 +294,56 @@ inline nlohmann::json backfill_last_months(const std::string& symbol,
   };
 }
 
-// ===== LOAD MATRIX (7 x N) =====
+// ===== LOAD MATRIX (нормализуем в 6×N: ts,open,high,low,close,volume) =====
 inline arma::mat load_cached_matrix(const std::string& symbol, const std::string& interval) {
   const auto path = cache_file(symbol, interval);
   std::ifstream f(path);
   if (!f.good()) return arma::mat();
 
   std::vector<double> buf;
-  buf.reserve(7 * 50000);
+  buf.reserve(6 * 100000);
+
   std::string line;
   size_t nrows = 0;
+  bool header_checked = false;
+
   while (std::getline(f, line)) {
     if (line.empty()) continue;
+
+    // пропускаем заголовок, если он случайно попал
+    if (!header_checked) {
+      header_checked = true;
+      // если первая ячейка не число — это точно заголовок
+      std::string first = line.substr(0, line.find(','));
+      bool digits = !first.empty() && std::all_of(first.begin(), first.end(), [](unsigned char c){ return std::isdigit(c); });
+      if (!digits) continue;
+    }
+
+    // парсим CSV
     std::stringstream ss(line);
     std::string cell;
-    size_t col = 0;
+    std::vector<double> row;
+    row.reserve(7);
     while (std::getline(ss, cell, ',')) {
-      buf.push_back(std::stod(cell));
-      ++col;
+      if (cell.empty()) { row.clear(); break; }
+      try { row.push_back(std::stod(cell)); }
+      catch (...) { row.clear(); break; }
     }
-    if (col == 7) ++nrows;
+    if (row.empty()) continue;
+
+    // ожидаем минимум 6 колонок: ts,o,h,l,c,vol; если 7 — игнорируем turnover
+    if (row.size() < 6) continue;
+    // только первые 6 полей
+    for (int i=0;i<6;++i) buf.push_back(row[i]);
+    ++nrows;
   }
+
   if (nrows == 0) return arma::mat();
 
-  arma::mat M(7, nrows);
+  arma::mat M(6, nrows);
   for (size_t i = 0; i < nrows; ++i)
-    for (size_t c = 0; c < 7; ++c)
-      M(c, i) = buf[i*7 + c];
-
+    for (size_t c = 0; c < 6; ++c)
+      M(c, i) = buf[i*6 + c];
   return M;
 }
 
