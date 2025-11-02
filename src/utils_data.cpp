@@ -1,4 +1,5 @@
 #include "utils_data.h"
+#include "utils.h"
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -16,17 +17,19 @@ static inline std::string upper(std::string s){
   std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c){ return std::toupper(c); });
   return s;
 }
+
 static inline std::string norm_interval(std::string s){
-  s.erase(std::remove_if(s.begin(), s.end(), [](unsigned char c){ return std::isspace(c) || c=='\"'; }), s.end());
-  return s;
+  auto canon = canonical_interval(s);
+  if (canon.empty()) {
+    return s;
+  }
+  return canon;
 }
 
 bool load_cached_xy(const std::string& symbol,
                     const std::string& interval,
                     arma::mat& X, arma::mat& y)
 {
-  // как было раньше: читаем/строим X,y и сохраняем на диск; не трогаем логику (заглушка под существующую реализацию)
-  // Если у тебя есть старая реализация ниже — можно вернуть её; тут — минимализм ради компоновки.
   try {
     const std::string xfile = "cache/xy/" + upper(symbol) + "_" + norm_interval(interval) + "_X.csv";
     const std::string yfile = "cache/xy/" + upper(symbol) + "_" + norm_interval(interval) + "_y.csv";
@@ -35,12 +38,9 @@ bool load_cached_xy(const std::string& symbol,
       y.load(yfile, arma::csv_ascii);
       return (X.n_rows>0 && X.n_cols>0 && y.n_rows==X.n_rows);
     }
-    // если кэша нет — строим из базового csv (через raw) и делаем простые фичи как в тренере,
-    // чтобы только получить feat_dim (продакшн-фичи всё равно строятся внутри тренера)
     arma::mat raw;
     if(!load_raw_ohlcv(symbol, interval, raw)) return false;
 
-    // простые заглушки фич (D=8 нулевых) — чтобы сохранить совместимость с policy.feat_dim
     arma::mat F(raw.n_rows, 8, arma::fill::zeros);
     arma::mat Y(raw.n_rows, 1, arma::fill::zeros);
 
@@ -104,11 +104,9 @@ bool load_raw_ohlcv(const std::string& symbol,
 
     if (M.n_rows < 300) {
       std::cerr << "[RAW] warn: rows=" << M.n_rows << " (<300) path=" << path << std::endl;
-      // продолжаем, как и оговаривали
     }
 
     if (!used_clean && path.find("/cache/") != std::string::npos) {
-      // если падаем на сырой csv с 7 колонками — мы уже обрезали до 6: залогируем мягкое предупреждение
       std::cerr << "[RAW] fallback used, trimmed to 6 cols from raw: " << path << std::endl;
     }
 
@@ -124,7 +122,6 @@ bool load_raw_ohlcv(const std::string& symbol,
 }
 
 static json one_health(const std::string& symbol, const std::string& interval){
-  bool used_clean=false;
   json r;
   const std::string s = upper(symbol);
   const std::string tf = norm_interval(interval);
@@ -143,7 +140,10 @@ static json one_health(const std::string& symbol, const std::string& interval){
           j["cols"] = cols;
         }
         std::uintmax_t rows = 0;
-        { std::ifstream fr(p); rows = std::count(std::istreambuf_iterator<char>(fr), {}, '\n'); }
+        {
+          std::ifstream fr(p);
+          rows = std::count(std::istreambuf_iterator<char>(fr), {}, '\n');
+        }
         j["rows"] = rows;
       }catch(...){}
     }
@@ -151,12 +151,12 @@ static json one_health(const std::string& symbol, const std::string& interval){
   };
 
   r["symbol"]   = symbol;
-  r["interval"] = interval;
+  r["interval"] = tf;
   r["clean"]    = probe(p_clean);
   r["raw"]      = probe(p_raw);
 
   const int ccols = r["clean"]["cols"].get<int>();
-  const int crows = r["clean"]["rows"].get<int>();
+  const std::uintmax_t crows = r["clean"]["rows"].get<std::uintmax_t>();
   const bool cex  = r["clean"]["exists"].get<bool>();
 
   bool ok = cex && ccols==6 && crows>=300;

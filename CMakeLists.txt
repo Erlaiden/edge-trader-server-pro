@@ -22,6 +22,7 @@ add_executable(edge_trader_server
     src/infer_policy.cpp
     src/train_logic.cpp
     src/server_accessors.cpp
+    src/routes/symbol_queue.cpp
     src/features/features.cpp
 
     # --- Agents ---
@@ -34,3 +35,13 @@ add_executable(edge_trader_server
 
 target_include_directories(edge_trader_server PRIVATE src)
 target_link_libraries(edge_trader_server PRIVATE armadillo OpenSSL::SSL OpenSSL::Crypto)
+
+
+enable_testing()
+add_executable(edge_tests
+    tests/test_utils.cpp
+    src/routes/symbol_queue.cpp
+)
+target_include_directories(edge_tests PRIVATE src)
+target_link_libraries(edge_tests PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+add_test(NAME edge_unit_tests COMMAND edge_tests)
