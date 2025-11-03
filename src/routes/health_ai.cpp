@@ -91,26 +91,13 @@ static void fill_from_ram(json& dst, const json& m) {
     if (m.contains("model_path") && m["model_path"].is_string())
         dst["model_path"]=m["model_path"];
 }
-
-// overwrite-версия: ядро модели всегда переезжает с диска, чтобы показывать «как в файле»
+// overwrite: ядро всегда из диска
 static void fill_from_json_overwrite_core(json& dst, const json& j, const fs::path& p) {
     dst["model_path"] = p.string();
-
-    auto overwrite = [&](const char* k){
-        if (j.contains(k)) dst[k]=j[k];
-    };
-    // ядро
-    overwrite("best_thr");
-    overwrite("ma_len");
-    overwrite("tp");
-    overwrite("sl");
-    overwrite("version");
-    overwrite("schema");
-    overwrite("mode");
-    overwrite("symbol");
-    overwrite("interval");
-
-    // feat_dim из policy
+    auto overwrite = [&](const char* k){ if (j.contains(k)) dst[k]=j[k]; };
+    overwrite("best_thr"); overwrite("ma_len"); overwrite("tp"); overwrite("sl");
+    overwrite("version"); overwrite("schema"); overwrite("mode");
+    overwrite("symbol"); overwrite("interval");
     try {
         if (j.contains("policy") && j["policy"].contains("feat_dim"))
             dst["feat_dim"] = j["policy"]["feat_dim"];
@@ -235,6 +222,10 @@ void register_health_ai(httplib::Server& svr) {
             }
         }
 
+        // === ЖЁСТКО: символ/интервал должны соответствовать контексту ===
+        if (!ctx.symbol.empty())   ms["symbol"] = ctx.symbol;
+        if (!ctx.interval.empty()) ms["interval"] = ctx.interval;
+
         // фоллбэк — latest disk
         bool need_disk = (!ms.contains("tp") || ms["tp"].is_null()
                        || !ms.contains("sl") || ms["sl"].is_null()
@@ -253,6 +244,9 @@ void register_health_ai(httplib::Server& svr) {
                     }
                 }
             }
+            // и снова подстрахуемся контекстом
+            if (!ctx.symbol.empty())   ms["symbol"] = ctx.symbol;
+            if (!ctx.interval.empty()) ms["interval"] = ctx.interval;
         }
 
         // атомики и согласование
