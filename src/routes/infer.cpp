@@ -15,6 +15,18 @@
 
 using json = nlohmann::json;
 
+// safe parse double with default
+static inline double qpd(const httplib::Request& req, const char* key, double defv) {
+    try {
+        std::string s = qp(req, key, nullptr);
+        if (s.empty()) return defv;
+        size_t pos = 0;
+        double v = std::stod(s, &pos);
+        if (pos == 0) return defv;
+        return v;
+    } catch (...) { return defv; }
+}
+
 // counters → summary
 static inline json make_agents_summary() {
     return json{
@@ -40,7 +52,6 @@ static inline void enrich_with_levels(json &out, const arma::mat& M15, double tp
 static inline double atr14_from_M(const arma::mat& M) {
     if (M.n_cols < 16 || M.n_rows < 5) return 0.0;
     size_t N = M.n_cols;
-    double atr = 0.0;
     double prevClose = (double)M.row(4)(N-16);
     double alpha = 1.0/14.0;
     double ema = 0.0;
@@ -64,7 +75,6 @@ static inline void htf_votes(const json& inf, int& up, int& down) {
     if (!inf.contains("htf") || !inf["htf"].is_object()) return;
     for (auto& kv : inf["htf"].items()) {
         const json& h = kv.value();
-        // по score: >0 ⇒ up, <0 ⇒ down
         double sc = h.value("score", 0.0);
         bool strong = h.value("strong", false);
         if (sc > 0) { if (strong) up+=2; else up+=1; }
@@ -123,8 +133,8 @@ void register_infer_routes(httplib::Server& srv) {
         }
 
         // Параметры flat-коридора
-        double k_atr = qp(req, "k_atr", 1.2);
-        double eps   = qp(req, "eps",   0.05);
+        double k_atr = qpd(req, "k_atr", 1.2);
+        double eps   = qpd(req, "eps",   0.05);
 
         // HTF список
         std::string htf = qp(req, "htf", "60,240,1440");
@@ -160,19 +170,16 @@ void register_infer_routes(httplib::Server& srv) {
         }
 
         // --- РЕЖИМЫ + УВЕРЕННОСТЬ ---
-        // Базовый порог
         double thr = best_thr > 0 ? best_thr : 0.5;
 
-        // Голоса HTF
         int upVotes=0, downVotes=0;
         htf_votes(inf, upVotes, downVotes);
         int netHTF = upVotes - downVotes;
 
-        std::string marketMode = "flat"; // по умолчанию
-        double confidence = 0.0;         // 0..100
+        std::string marketMode = "flat";
+        double confidence = 0.0;
 
-        // 1) тренд/коррекция на основе score и HTF
-        double excess = std::fabs(score15) - thr; // насколько выше порога
+        double excess = std::fabs(score15) - thr;
         if (excess >= 0.0) {
             if (score15 > 0) {
                 if (netHTF >= 2) { marketMode = "trendUp"; }
@@ -183,37 +190,26 @@ void register_infer_routes(httplib::Server& srv) {
                 else if (netHTF >= 2) { marketMode = "correction"; }
                 else { marketMode = "trendDown"; }
             }
-            // уверенность тренда: из excess и согласия HTF
-            double htfFactor = std::min(1.0, std::fabs((double)netHTF)/4.0); // 0..1
+            double htfFactor = std::min(1.0, std::fabs((double)netHTF)/4.0);
             confidence = std::min(100.0, 100.0 * (0.5*std::min(1.0, excess/(thr>0?thr:0.5)) + 0.5*htfFactor));
         } else {
-            // 2) flat: коридор по ATR
             double atr = atr14_from_M(M15);
             double band = k_atr * atr;
-            double upper = last_close + band;
-            double lower = last_close - band;
 
-            // расстояние цены до границы/середины неизвестно → используем score как прокси:
-            // если score15>0 => тянет вверх, <0 => вниз. Ставим сигналы у границ.
             if (score15 >= -thr*eps && score15 <= thr*eps) {
                 sig = "NEUTRAL";
             } else if (score15 > thr*eps) {
-                // верхняя зона → SHORT
                 sig = "SHORT";
             } else if (score15 < -thr*eps) {
-                // нижняя зона → LONG
                 sig = "LONG";
             }
             marketMode = "flat";
-            // уверенность flat: чем больше |score15| к thr, тем выше
             double flatRatio = std::min(1.0, std::fabs(score15)/(thr>0?thr:0.5));
             confidence = std::min(100.0, 70.0 * flatRatio);
-            // прокинем коридор для клиента при желании
             inf["flat_band"] = band;
             inf["flat_k_atr"] = k_atr;
         }
 
-        // --- Ответ ---
         json out{
             {"ok", inf.value("ok", false)},
             {"mode", "pro"},
@@ -236,9 +232,7 @@ void register_infer_routes(httplib::Server& srv) {
             {"confidence", confidence},
         };
 
-        enrich_with_levels(out, M15, tp, sl); // добавит last_close и tp/sl цены
-
-        // для обратной совместимости оставим price и threshold
+        enrich_with_levels(out, M15, tp, sl);
         out["price"] = out.value("last_close", 0.0);
         out["threshold"] = best_thr;
 
