@@ -70,6 +70,8 @@ json run_train_pro_and_save(const std::string& symbol,
     // Эти поля потом увидит /api/model → mobile app.
     try {
         trainer["tp"]     = tp;
+        trainer["symbol"]   = symbol;
+        trainer["interval"] = interval;
         trainer["sl"]     = sl;
         trainer["ma_len"] = ma_len;
     } catch (...) {
