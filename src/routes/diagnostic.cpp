@@ -45,13 +45,14 @@ void register_diagnostic_routes(httplib::Server& svr) {
         if (model.contains("policy") && model["policy"].contains("norm"))
             has_norm = model["policy"]["norm"].is_object();
         
-        out["model_ram"] = {
-            {"symbol", model_symbol.empty() ? nullptr : json(model_symbol)},
-            {"interval", model_interval.empty() ? nullptr : json(model_interval)},
-            {"best_thr", model_thr > 0 ? model_thr : nullptr},
-            {"feat_dim", model_feat_dim > 0 ? model_feat_dim : nullptr},
-            {"has_norm", has_norm}
-        };
+        json model_ram = json::object();
+        model_ram["symbol"] = model_symbol.empty() ? json(nullptr) : json(model_symbol);
+        model_ram["interval"] = model_interval.empty() ? json(nullptr) : json(model_interval);
+        model_ram["best_thr"] = (model_thr > 0) ? json(model_thr) : json(nullptr);
+        model_ram["feat_dim"] = (model_feat_dim > 0) ? json(model_feat_dim) : json(nullptr);
+        model_ram["has_norm"] = has_norm;
+        
+        out["model_ram"] = model_ram;
         
         // 2. Атомики
         out["atomics"] = {

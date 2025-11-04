@@ -18,6 +18,7 @@
 #include "routes/model_set.cpp"
 #include "routes/symbol_queue.cpp"
 #include "routes/symbol.cpp"
+#include "routes/diagnostic.cpp"
 #include "routes/robot.cpp"
 
 // Наш новый конвейер (этот файл ты только что создал)
@@ -54,6 +55,7 @@ int main(int argc, char** argv) {
     etai::setup_agents_routes(svr);
     register_train_env_routes(svr);     // безопасная заглушка под ETAI_ENABLE_TRAIN_ENV
     register_symbol_routes(svr);
+    register_diagnostic_routes(svr);
     register_robot_routes(svr);
 
     // Новый: конвейер подготовки и обучения
