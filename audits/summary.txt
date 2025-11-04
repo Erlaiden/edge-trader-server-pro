@@ -1,0 +1,4 @@
+todos_and_stubs: 26
+api_routes: 392
+clang_tidy size(bytes): 7663
+cppcheck.xml size(bytes): 151067

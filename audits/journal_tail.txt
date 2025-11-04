@@ -1,0 +1,200 @@
+Nov 03 05:40:08 edge-trader-ai systemd[1]: Stopped edge-trader-server.service - Edge Trader Server (C++ PRO-only).
+Nov 03 05:40:08 edge-trader-ai systemd[1]: edge-trader-server.service: Consumed 26.420s CPU time.
+Nov 03 05:40:08 edge-trader-ai systemd[1]: Started edge-trader-server.service - Edge Trader Server (C++ PRO-only).
+Nov 03 05:41:45 edge-trader-ai edge_trader_server[262534]: [EdgeTrader] server started on port 3000 (thr=0.3, ma=12, feat=32)
+Nov 03 05:41:45 edge-trader-ai edge_trader_server[262534]: [RAW] warn: rows=180 (<300) path=cache/clean/BTCUSDT_1440.csv
+Nov 03 05:41:45 edge-trader-ai edge_trader_server[262534]: [TRAIN] shapes: 15=17280 60=4320 240=1080 1440=180  (cols15=6)
+Nov 03 05:41:45 edge-trader-ai edge_trader_server[262534]: [TRAIN] PPO_PRO N=17280 D=32 M=637 val=128 thr=0.3 acc=0.921875 Sharpe=2.1955 DD=0.0074 WinR=0.921875 ManipR=0.09375 wctx_htf=0.95 feat_ver=10
+Nov 03 05:41:45 edge-trader-ai edge_trader_server[262534]: [TRAIN] rows=17280 M_labeled=637 best_thr=0.3 acc=0.921875 Rv1=0.912 profit=0.006625 sharpe=2.1955 winrate=0.921875 dd=0.0074 Rv2=1.07773 feat_dim=32 tp=0.008 sl=0.0032 ma=12
+Nov 03 05:53:20 edge-trader-ai systemd[1]: Stopping edge-trader-server.service - Edge Trader Server (C++ PRO-only)...
+Nov 03 05:53:20 edge-trader-ai systemd[1]: edge-trader-server.service: Deactivated successfully.
+Nov 03 05:53:20 edge-trader-ai systemd[1]: Stopped edge-trader-server.service - Edge Trader Server (C++ PRO-only).
+Nov 03 05:53:20 edge-trader-ai systemd[1]: edge-trader-server.service: Consumed 4.561s CPU time.
+Nov 03 05:53:20 edge-trader-ai systemd[1]: Started edge-trader-server.service - Edge Trader Server (C++ PRO-only).
+Nov 03 05:55:53 edge-trader-ai systemd[1]: Stopping edge-trader-server.service - Edge Trader Server (C++ PRO-only)...
+Nov 03 05:55:53 edge-trader-ai systemd[1]: edge-trader-server.service: Deactivated successfully.
+Nov 03 05:55:53 edge-trader-ai systemd[1]: Stopped edge-trader-server.service - Edge Trader Server (C++ PRO-only).
+Nov 03 05:55:53 edge-trader-ai systemd[1]: Started edge-trader-server.service - Edge Trader Server (C++ PRO-only).
+Nov 03 05:57:44 edge-trader-ai systemd[1]: Stopping edge-trader-server.service - Edge Trader Server (C++ PRO-only)...
+Nov 03 05:57:44 edge-trader-ai systemd[1]: edge-trader-server.service: Deactivated successfully.
+Nov 03 05:57:44 edge-trader-ai systemd[1]: Stopped edge-trader-server.service - Edge Trader Server (C++ PRO-only).
+Nov 03 05:57:44 edge-trader-ai systemd[1]: Started edge-trader-server.service - Edge Trader Server (C++ PRO-only).
+Nov 03 06:01:01 edge-trader-ai systemd[1]: Stopping edge-trader-server.service - Edge Trader Server (C++ PRO-only)...
+Nov 03 06:01:01 edge-trader-ai systemd[1]: edge-trader-server.service: Deactivated successfully.
+Nov 03 06:01:01 edge-trader-ai systemd[1]: Stopped edge-trader-server.service - Edge Trader Server (C++ PRO-only).
+Nov 03 06:01:01 edge-trader-ai systemd[1]: edge-trader-server.service: Consumed 1.260s CPU time.
+Nov 03 06:01:01 edge-trader-ai systemd[1]: Started edge-trader-server.service - Edge Trader Server (C++ PRO-only).
+Nov 03 06:01:48 edge-trader-ai edge_trader_server[263162]: [EdgeTrader] server started on port 3000 (thr=0.3, ma=12, feat=32)
+Nov 03 06:01:48 edge-trader-ai edge_trader_server[263162]: [RAW] warn: rows=180 (<300) path=cache/clean/JELLYJELLYUSDT_1440.csv
+Nov 03 06:01:48 edge-trader-ai edge_trader_server[263162]: [TRAIN] shapes: 15=17280 60=4320 240=1080 1440=180  (cols15=6)
+Nov 03 06:01:48 edge-trader-ai edge_trader_server[263162]: [TRAIN] PPO_PRO N=17280 D=32 M=7119 val=1424 thr=0.7 acc=0.613062 Sharpe=0.703277 DD=0.0333 WinR=0.662921 ManipR=0.105337 wctx_htf=1.05 feat_ver=10
+Nov 03 06:01:48 edge-trader-ai edge_trader_server[263162]: [TRAIN] rows=17280 M_labeled=7119 best_thr=0.7 acc=0.613062 Rv1=6.016 profit=0.00372472 sharpe=0.703277 winrate=0.662921 dd=0.0333 Rv2=0.300496 feat_dim=32 tp=0.008 sl=0.0032 ma=12
+Nov 03 06:03:39 edge-trader-ai systemd[1]: Stopping edge-trader-server.service - Edge Trader Server (C++ PRO-only)...
+Nov 03 06:03:39 edge-trader-ai systemd[1]: edge-trader-server.service: Deactivated successfully.
+Nov 03 06:03:39 edge-trader-ai systemd[1]: Stopped edge-trader-server.service - Edge Trader Server (C++ PRO-only).
+Nov 03 06:03:39 edge-trader-ai systemd[1]: edge-trader-server.service: Consumed 4.593s CPU time.
+Nov 03 06:03:39 edge-trader-ai systemd[1]: Started edge-trader-server.service - Edge Trader Server (C++ PRO-only).
+Nov 03 06:06:30 edge-trader-ai systemd[1]: Stopping edge-trader-server.service - Edge Trader Server (C++ PRO-only)...
+Nov 03 06:06:30 edge-trader-ai systemd[1]: edge-trader-server.service: Deactivated successfully.
+Nov 03 06:06:30 edge-trader-ai systemd[1]: Stopped edge-trader-server.service - Edge Trader Server (C++ PRO-only).
+Nov 03 06:06:30 edge-trader-ai systemd[1]: Started edge-trader-server.service - Edge Trader Server (C++ PRO-only).
+Nov 03 06:08:50 edge-trader-ai systemd[1]: Stopping edge-trader-server.service - Edge Trader Server (C++ PRO-only)...
+Nov 03 06:08:50 edge-trader-ai systemd[1]: edge-trader-server.service: Deactivated successfully.
+Nov 03 06:08:50 edge-trader-ai systemd[1]: Stopped edge-trader-server.service - Edge Trader Server (C++ PRO-only).
+Nov 03 06:08:50 edge-trader-ai systemd[1]: Started edge-trader-server.service - Edge Trader Server (C++ PRO-only).
+Nov 03 06:30:43 edge-trader-ai edge_trader_server[263608]: [EdgeTrader] server started on port 3000 (thr=0.3, ma=12, feat=32)
+Nov 03 06:30:43 edge-trader-ai edge_trader_server[263608]: [RAW] warn: rows=180 (<300) path=cache/clean/ZKUSDT_1440.csv
+Nov 03 06:30:43 edge-trader-ai edge_trader_server[263608]: [TRAIN] shapes: 15=17280 60=4320 240=1080 1440=180  (cols15=6)
+Nov 03 06:30:43 edge-trader-ai edge_trader_server[263608]: [TRAIN] PPO_PRO N=17280 D=32 M=5461 val=1093 thr=0.66 acc=0.752059 Sharpe=0.999754 DD=0.0221 WinR=0.758463 ManipR=0.10064 wctx_htf=0.99 feat_ver=10
+Nov 03 06:30:43 edge-trader-ai edge_trader_server[263608]: [TRAIN] rows=17280 M_labeled=5461 best_thr=0.66 acc=0.752059 Rv1=5.7872 profit=0.00479478 sharpe=0.999754 winrate=0.758463 dd=0.0221 Rv2=0.461944 feat_dim=32 tp=0.008 sl=0.0032 ma=12
+Nov 03 06:31:20 edge-trader-ai edge_trader_server[263608]: [RAW] warn: rows=180 (<300) path=cache/clean/ZKUSDT_1440.csv
+Nov 03 06:31:20 edge-trader-ai edge_trader_server[263608]: [TRAIN] shapes: 15=17280 60=4320 240=1080 1440=180  (cols15=6)
+Nov 03 06:31:20 edge-trader-ai edge_trader_server[263608]: [TRAIN] PPO_PRO N=17280 D=32 M=5461 val=1093 thr=0.66 acc=0.752059 Sharpe=0.999754 DD=0.0221 WinR=0.758463 ManipR=0.10064 wctx_htf=0.99 feat_ver=10
+Nov 03 06:31:20 edge-trader-ai edge_trader_server[263608]: [TRAIN] rows=17280 M_labeled=5461 best_thr=0.66 acc=0.752059 Rv1=5.7872 profit=0.00479478 sharpe=0.999754 winrate=0.758463 dd=0.0221 Rv2=0.461944 feat_dim=32 tp=0.008 sl=0.0032 ma=12
+Nov 03 06:39:59 edge-trader-ai edge_trader_server[263608]: [RAW] warn: rows=180 (<300) path=cache/clean/ZKUSDT_1440.csv
+Nov 03 06:39:59 edge-trader-ai edge_trader_server[263608]: [TRAIN] shapes: 15=17280 60=4320 240=1080 1440=180  (cols15=6)
+Nov 03 06:39:59 edge-trader-ai edge_trader_server[263608]: [TRAIN] PPO_PRO N=17280 D=32 M=5461 val=1093 thr=0.66 acc=0.752059 Sharpe=0.999754 DD=0.0221 WinR=0.758463 ManipR=0.10064 wctx_htf=0.99 feat_ver=10
+Nov 03 06:39:59 edge-trader-ai edge_trader_server[263608]: [TRAIN] rows=17280 M_labeled=5461 best_thr=0.66 acc=0.752059 Rv1=5.7872 profit=0.00479478 sharpe=0.999754 winrate=0.758463 dd=0.0221 Rv2=0.461944 feat_dim=32 tp=0.008 sl=0.0032 ma=12
+Nov 03 06:43:57 edge-trader-ai edge_trader_server[263608]: [RAW] warn: rows=180 (<300) path=cache/clean/ZKUSDT_1440.csv
+Nov 03 06:43:57 edge-trader-ai edge_trader_server[263608]: [TRAIN] shapes: 15=17280 60=4320 240=1080 1440=180  (cols15=6)
+Nov 03 06:43:57 edge-trader-ai edge_trader_server[263608]: [TRAIN] PPO_PRO N=17280 D=32 M=5461 val=1093 thr=0.66 acc=0.752059 Sharpe=0.999754 DD=0.0221 WinR=0.758463 ManipR=0.10064 wctx_htf=0.99 feat_ver=10
+Nov 03 06:43:57 edge-trader-ai edge_trader_server[263608]: [TRAIN] rows=17280 M_labeled=5461 best_thr=0.66 acc=0.752059 Rv1=5.7872 profit=0.00479478 sharpe=0.999754 winrate=0.758463 dd=0.0221 Rv2=0.461944 feat_dim=32 tp=0.008 sl=0.0032 ma=12
+Nov 03 06:51:37 edge-trader-ai edge_trader_server[263608]: [RAW] warn: rows=180 (<300) path=cache/clean/ZKUSDT_1440.csv
+Nov 03 06:51:37 edge-trader-ai edge_trader_server[263608]: [TRAIN] shapes: 15=17280 60=4320 240=1080 1440=180  (cols15=6)
+Nov 03 06:51:37 edge-trader-ai edge_trader_server[263608]: [TRAIN] PPO_PRO N=17280 D=32 M=5461 val=1093 thr=0.66 acc=0.752059 Sharpe=0.999754 DD=0.0221 WinR=0.758463 ManipR=0.10064 wctx_htf=0.99 feat_ver=10
+Nov 03 06:51:37 edge-trader-ai edge_trader_server[263608]: [TRAIN] rows=17280 M_labeled=5461 best_thr=0.66 acc=0.752059 Rv1=5.7872 profit=0.00479478 sharpe=0.999754 winrate=0.758463 dd=0.0221 Rv2=0.461944 feat_dim=32 tp=0.008 sl=0.0032 ma=12
+Nov 03 06:54:21 edge-trader-ai edge_trader_server[263608]: [RAW] warn: rows=180 (<300) path=cache/clean/ZKUSDT_1440.csv
+Nov 03 06:54:21 edge-trader-ai edge_trader_server[263608]: [TRAIN] shapes: 15=17280 60=4320 240=1080 1440=180  (cols15=6)
+Nov 03 06:54:21 edge-trader-ai edge_trader_server[263608]: [TRAIN] PPO_PRO N=17280 D=32 M=5461 val=1093 thr=0.66 acc=0.752059 Sharpe=0.999754 DD=0.0221 WinR=0.758463 ManipR=0.10064 wctx_htf=0.99 feat_ver=10
+Nov 03 06:54:21 edge-trader-ai edge_trader_server[263608]: [TRAIN] rows=17280 M_labeled=5461 best_thr=0.66 acc=0.752059 Rv1=5.7872 profit=0.00479478 sharpe=0.999754 winrate=0.758463 dd=0.0221 Rv2=0.461944 feat_dim=32 tp=0.008 sl=0.0032 ma=12
+Nov 03 07:07:10 edge-trader-ai edge_trader_server[263608]: [RAW] warn: rows=180 (<300) path=cache/clean/ZKUSDT_1440.csv
+Nov 03 07:07:10 edge-trader-ai edge_trader_server[263608]: [TRAIN] shapes: 15=17280 60=4320 240=1080 1440=180  (cols15=6)
+Nov 03 07:07:10 edge-trader-ai edge_trader_server[263608]: [TRAIN] PPO_PRO N=17280 D=32 M=5463 val=1093 thr=0.66 acc=0.752973 Sharpe=1.00319 DD=0.0221 WinR=0.759378 ManipR=0.10064 wctx_htf=0.99 feat_ver=10
+Nov 03 07:07:10 edge-trader-ai edge_trader_server[263608]: [TRAIN] rows=17280 M_labeled=5463 best_thr=0.66 acc=0.752973 Rv1=5.7984 profit=0.00480503 sharpe=1.00319 winrate=0.759378 dd=0.0221 Rv2=0.463671 feat_dim=32 tp=0.008 sl=0.0032 ma=12
+Nov 03 07:22:10 edge-trader-ai edge_trader_server[263608]: [RAW] warn: rows=180 (<300) path=cache/clean/ZKUSDT_1440.csv
+Nov 03 07:22:10 edge-trader-ai edge_trader_server[263608]: [TRAIN] shapes: 15=17280 60=4320 240=1080 1440=180  (cols15=6)
+Nov 03 07:22:10 edge-trader-ai edge_trader_server[263608]: [TRAIN] PPO_PRO N=17280 D=32 M=5463 val=1093 thr=0.66 acc=0.752973 Sharpe=1.00319 DD=0.0221 WinR=0.759378 ManipR=0.10064 wctx_htf=0.99 feat_ver=10
+Nov 03 07:22:10 edge-trader-ai edge_trader_server[263608]: [TRAIN] rows=17280 M_labeled=5463 best_thr=0.66 acc=0.752973 Rv1=5.7984 profit=0.00480503 sharpe=1.00319 winrate=0.759378 dd=0.0221 Rv2=0.463671 feat_dim=32 tp=0.008 sl=0.0032 ma=12
+Nov 03 07:30:28 edge-trader-ai edge_trader_server[263608]: [RAW] warn: rows=180 (<300) path=cache/clean/ZKUSDT_1440.csv
+Nov 03 07:30:28 edge-trader-ai edge_trader_server[263608]: [TRAIN] shapes: 15=17280 60=4320 240=1080 1440=180  (cols15=6)
+Nov 03 07:30:28 edge-trader-ai edge_trader_server[263608]: [TRAIN] PPO_PRO N=17280 D=32 M=5462 val=1093 thr=0.66 acc=0.752973 Sharpe=1.00319 DD=0.0221 WinR=0.759378 ManipR=0.10064 wctx_htf=0.99 feat_ver=10
+Nov 03 07:30:28 edge-trader-ai edge_trader_server[263608]: [TRAIN] rows=17280 M_labeled=5462 best_thr=0.66 acc=0.752973 Rv1=5.7984 profit=0.00480503 sharpe=1.00319 winrate=0.759378 dd=0.0221 Rv2=0.463671 feat_dim=32 tp=0.008 sl=0.0032 ma=12
+Nov 03 07:37:27 edge-trader-ai edge_trader_server[263608]: [RAW] warn: rows=180 (<300) path=cache/clean/ZKUSDT_1440.csv
+Nov 03 07:37:27 edge-trader-ai edge_trader_server[263608]: [TRAIN] shapes: 15=17280 60=4320 240=1080 1440=180  (cols15=6)
+Nov 03 07:37:27 edge-trader-ai edge_trader_server[263608]: [TRAIN] PPO_PRO N=17280 D=32 M=5463 val=1093 thr=0.66 acc=0.752973 Sharpe=1.00319 DD=0.0221 WinR=0.759378 ManipR=0.10064 wctx_htf=0.99 feat_ver=10
+Nov 03 07:37:27 edge-trader-ai edge_trader_server[263608]: [TRAIN] rows=17280 M_labeled=5463 best_thr=0.66 acc=0.752973 Rv1=5.7984 profit=0.00480503 sharpe=1.00319 winrate=0.759378 dd=0.0221 Rv2=0.463671 feat_dim=32 tp=0.008 sl=0.0032 ma=12
+Nov 03 07:41:47 edge-trader-ai edge_trader_server[263608]: [RAW] warn: rows=180 (<300) path=cache/clean/BTCUSDT_1440.csv
+Nov 03 07:41:47 edge-trader-ai edge_trader_server[263608]: [TRAIN] shapes: 15=17280 60=4320 240=1080 1440=180  (cols15=6)
+Nov 03 07:41:47 edge-trader-ai edge_trader_server[263608]: [TRAIN] PPO_PRO N=17280 D=32 M=638 val=128 thr=0.3 acc=0.921875 Sharpe=2.1955 DD=0.0074 WinR=0.921875 ManipR=0.0859375 wctx_htf=0.95 feat_ver=10
+Nov 03 07:41:47 edge-trader-ai edge_trader_server[263608]: [TRAIN] rows=17280 M_labeled=638 best_thr=0.3 acc=0.921875 Rv1=0.912 profit=0.006625 sharpe=2.1955 winrate=0.921875 dd=0.0074 Rv2=1.07929 feat_dim=32 tp=0.008 sl=0.0032 ma=12
+Nov 03 07:43:45 edge-trader-ai edge_trader_server[263608]: [RAW] warn: rows=180 (<300) path=cache/clean/ZKUSDT_1440.csv
+Nov 03 07:43:45 edge-trader-ai edge_trader_server[263608]: [TRAIN] shapes: 15=17280 60=4320 240=1080 1440=180  (cols15=6)
+Nov 03 07:43:45 edge-trader-ai edge_trader_server[263608]: [TRAIN] PPO_PRO N=17280 D=32 M=5463 val=1093 thr=0.66 acc=0.752973 Sharpe=1.00319 DD=0.0221 WinR=0.759378 ManipR=0.10064 wctx_htf=0.99 feat_ver=10
+Nov 03 07:43:45 edge-trader-ai edge_trader_server[263608]: [TRAIN] rows=17280 M_labeled=5463 best_thr=0.66 acc=0.752973 Rv1=5.7984 profit=0.00480503 sharpe=1.00319 winrate=0.759378 dd=0.0221 Rv2=0.463671 feat_dim=32 tp=0.008 sl=0.0032 ma=12
+Nov 03 07:48:59 edge-trader-ai edge_trader_server[263608]: [RAW] warn: rows=180 (<300) path=cache/clean/ZKUSDT_1440.csv
+Nov 03 07:48:59 edge-trader-ai edge_trader_server[263608]: [TRAIN] shapes: 15=17280 60=4320 240=1080 1440=180  (cols15=6)
+Nov 03 07:48:59 edge-trader-ai edge_trader_server[263608]: [TRAIN] PPO_PRO N=17280 D=32 M=5464 val=1093 thr=0.66 acc=0.752973 Sharpe=1.00319 DD=0.0221 WinR=0.759378 ManipR=0.101555 wctx_htf=0.99 feat_ver=10
+Nov 03 07:48:59 edge-trader-ai edge_trader_server[263608]: [TRAIN] rows=17280 M_labeled=5464 best_thr=0.66 acc=0.752973 Rv1=5.7984 profit=0.00480503 sharpe=1.00319 winrate=0.759378 dd=0.0221 Rv2=0.463488 feat_dim=32 tp=0.008 sl=0.0032 ma=12
+Nov 03 07:56:24 edge-trader-ai edge_trader_server[263608]: [RAW] warn: rows=180 (<300) path=cache/clean/ZKUSDT_1440.csv
+Nov 03 07:56:24 edge-trader-ai edge_trader_server[263608]: [TRAIN] shapes: 15=17280 60=4320 240=1080 1440=180  (cols15=6)
+Nov 03 07:56:24 edge-trader-ai edge_trader_server[263608]: [TRAIN] PPO_PRO N=17280 D=32 M=5463 val=1093 thr=0.66 acc=0.752973 Sharpe=1.00319 DD=0.0221 WinR=0.759378 ManipR=0.10064 wctx_htf=0.99 feat_ver=10
+Nov 03 07:56:24 edge-trader-ai edge_trader_server[263608]: [TRAIN] rows=17280 M_labeled=5463 best_thr=0.66 acc=0.752973 Rv1=5.7984 profit=0.00480503 sharpe=1.00319 winrate=0.759378 dd=0.0221 Rv2=0.463671 feat_dim=32 tp=0.008 sl=0.0032 ma=12
+Nov 03 08:00:30 edge-trader-ai edge_trader_server[263608]: [RAW] warn: rows=180 (<300) path=cache/clean/ZKUSDT_1440.csv
+Nov 03 08:00:30 edge-trader-ai edge_trader_server[263608]: [TRAIN] shapes: 15=17280 60=4320 240=1080 1440=180  (cols15=6)
+Nov 03 08:00:30 edge-trader-ai edge_trader_server[263608]: [TRAIN] PPO_PRO N=17280 D=32 M=5464 val=1093 thr=0.66 acc=0.752973 Sharpe=1.00319 DD=0.0221 WinR=0.759378 ManipR=0.101555 wctx_htf=0.99 feat_ver=10
+Nov 03 08:00:30 edge-trader-ai edge_trader_server[263608]: [TRAIN] rows=17280 M_labeled=5464 best_thr=0.66 acc=0.752973 Rv1=5.7984 profit=0.00480503 sharpe=1.00319 winrate=0.759378 dd=0.0221 Rv2=0.463488 feat_dim=32 tp=0.008 sl=0.0032 ma=12
+Nov 03 08:04:27 edge-trader-ai edge_trader_server[263608]: [RAW] warn: rows=180 (<300) path=cache/clean/ZKUSDT_1440.csv
+Nov 03 08:04:27 edge-trader-ai edge_trader_server[263608]: [TRAIN] shapes: 15=17280 60=4320 240=1080 1440=180  (cols15=6)
+Nov 03 08:04:27 edge-trader-ai edge_trader_server[263608]: [TRAIN] PPO_PRO N=17280 D=32 M=5465 val=1093 thr=0.66 acc=0.752973 Sharpe=1.00319 DD=0.0221 WinR=0.759378 ManipR=0.101555 wctx_htf=0.99 feat_ver=10
+Nov 03 08:04:27 edge-trader-ai edge_trader_server[263608]: [TRAIN] rows=17280 M_labeled=5465 best_thr=0.66 acc=0.752973 Rv1=5.7984 profit=0.00480503 sharpe=1.00319 winrate=0.759378 dd=0.0221 Rv2=0.463488 feat_dim=32 tp=0.008 sl=0.0032 ma=12
+Nov 03 08:43:13 edge-trader-ai edge_trader_server[263608]: [RAW] warn: rows=180 (<300) path=cache/clean/ZKUSDT_1440.csv
+Nov 03 08:43:13 edge-trader-ai edge_trader_server[263608]: [TRAIN] shapes: 15=17280 60=4320 240=1080 1440=180  (cols15=6)
+Nov 03 08:43:13 edge-trader-ai edge_trader_server[263608]: [TRAIN] PPO_PRO N=17280 D=32 M=5465 val=1093 thr=0.66 acc=0.752973 Sharpe=1.00319 DD=0.0221 WinR=0.759378 ManipR=0.101555 wctx_htf=0.99 feat_ver=10
+Nov 03 08:43:13 edge-trader-ai edge_trader_server[263608]: [TRAIN] rows=17280 M_labeled=5465 best_thr=0.66 acc=0.752973 Rv1=5.7984 profit=0.00480503 sharpe=1.00319 winrate=0.759378 dd=0.0221 Rv2=0.463488 feat_dim=32 tp=0.008 sl=0.0032 ma=12
+Nov 03 09:41:59 edge-trader-ai edge_trader_server[263608]: [RAW] warn: rows=180 (<300) path=cache/clean/BTCUSDT_1440.csv
+Nov 03 09:41:59 edge-trader-ai edge_trader_server[263608]: [TRAIN] shapes: 15=17280 60=4320 240=1080 1440=180  (cols15=6)
+Nov 03 09:41:59 edge-trader-ai edge_trader_server[263608]: [TRAIN] PPO_PRO N=17280 D=32 M=640 val=128 thr=0.3 acc=0.921875 Sharpe=2.1955 DD=0.0074 WinR=0.921875 ManipR=0.09375 wctx_htf=0.95 feat_ver=10
+Nov 03 09:41:59 edge-trader-ai edge_trader_server[263608]: [TRAIN] rows=17280 M_labeled=640 best_thr=0.3 acc=0.921875 Rv1=0.912 profit=0.006625 sharpe=2.1955 winrate=0.921875 dd=0.0074 Rv2=1.07773 feat_dim=32 tp=0.008 sl=0.0032 ma=12
+Nov 03 10:02:16 edge-trader-ai edge_trader_server[263608]: [RAW] warn: rows=180 (<300) path=cache/clean/ZKUSDT_1440.csv
+Nov 03 10:02:16 edge-trader-ai edge_trader_server[263608]: [TRAIN] shapes: 15=17280 60=4320 240=1080 1440=180  (cols15=6)
+Nov 03 10:02:16 edge-trader-ai edge_trader_server[263608]: [TRAIN] PPO_PRO N=17280 D=32 M=5469 val=1094 thr=0.66 acc=0.752285 Sharpe=1.00058 DD=0.0221 WinR=0.758684 ManipR=0.103291 wctx_htf=0.99 feat_ver=10
+Nov 03 10:02:16 edge-trader-ai edge_trader_server[263608]: [TRAIN] rows=17280 M_labeled=5469 best_thr=0.66 acc=0.752285 Rv1=5.7952 profit=0.00479726 sharpe=1.00058 winrate=0.758684 dd=0.0221 Rv2=0.46183 feat_dim=32 tp=0.008 sl=0.0032 ma=12
+Nov 03 10:29:10 edge-trader-ai systemd[1]: Stopping edge-trader-server.service - Edge Trader Server (C++ PRO-only)...
+Nov 03 10:29:10 edge-trader-ai systemd[1]: edge-trader-server.service: Deactivated successfully.
+Nov 03 10:29:10 edge-trader-ai systemd[1]: Stopped edge-trader-server.service - Edge Trader Server (C++ PRO-only).
+Nov 03 10:29:10 edge-trader-ai systemd[1]: edge-trader-server.service: Consumed 1min 27.268s CPU time, 107.2M memory peak, 0B memory swap peak.
+Nov 03 10:29:10 edge-trader-ai systemd[1]: Started edge-trader-server.service - Edge Trader Server (C++ PRO-only).
+Nov 03 11:42:00 edge-trader-ai edge_trader_server[270643]: [EdgeTrader] server started on port 3000 (thr=0.3, ma=12, feat=32)
+Nov 03 11:42:00 edge-trader-ai edge_trader_server[270643]: [RAW] warn: rows=180 (<300) path=cache/clean/BTCUSDT_1440.csv
+Nov 03 11:42:00 edge-trader-ai edge_trader_server[270643]: [TRAIN] shapes: 15=17280 60=4320 240=1080 1440=180  (cols15=6)
+Nov 03 11:42:00 edge-trader-ai edge_trader_server[270643]: [TRAIN] PPO_PRO N=17280 D=32 M=640 val=128 thr=0.3 acc=0.921875 Sharpe=2.1955 DD=0.0074 WinR=0.921875 ManipR=0.09375 wctx_htf=0.95 feat_ver=10
+Nov 03 11:42:00 edge-trader-ai edge_trader_server[270643]: [TRAIN] rows=17280 M_labeled=640 best_thr=0.3 acc=0.921875 Rv1=0.912 profit=0.006625 sharpe=2.1955 winrate=0.921875 dd=0.0074 Rv2=1.07773 feat_dim=32 tp=0.008 sl=0.0032 ma=12
+Nov 03 13:42:03 edge-trader-ai edge_trader_server[270643]: [RAW] warn: rows=180 (<300) path=cache/clean/BTCUSDT_1440.csv
+Nov 03 13:42:03 edge-trader-ai edge_trader_server[270643]: [TRAIN] shapes: 15=17280 60=4320 240=1080 1440=180  (cols15=6)
+Nov 03 13:42:03 edge-trader-ai edge_trader_server[270643]: [TRAIN] PPO_PRO N=17280 D=32 M=641 val=129 thr=0.3 acc=0.922481 Sharpe=2.20566 DD=0.0074 WinR=0.922481 ManipR=0.0930233 wctx_htf=0.95 feat_ver=10
+Nov 03 13:42:03 edge-trader-ai edge_trader_server[270643]: [TRAIN] rows=17280 M_labeled=641 best_thr=0.3 acc=0.922481 Rv1=0.92 profit=0.00663178 sharpe=2.20566 winrate=0.922481 dd=0.0074 Rv2=1.08296 feat_dim=32 tp=0.008 sl=0.0032 ma=12
+Nov 03 13:57:31 edge-trader-ai edge_trader_server[270643]: [RAW] warn: rows=180 (<300) path=cache/clean/ZKUSDT_1440.csv
+Nov 03 13:57:31 edge-trader-ai edge_trader_server[270643]: [TRAIN] shapes: 15=17280 60=4320 240=1080 1440=180  (cols15=6)
+Nov 03 13:57:31 edge-trader-ai edge_trader_server[270643]: [TRAIN] PPO_PRO N=17280 D=32 M=5476 val=1096 thr=0.68 acc=0.75365 Sharpe=1.00567 DD=0.0221 WinR=0.760036 ManipR=0.105839 wctx_htf=1.01 feat_ver=10
+Nov 03 13:57:31 edge-trader-ai edge_trader_server[270643]: [TRAIN] rows=17280 M_labeled=5476 best_thr=0.68 acc=0.75365 Rv1=5.8224 profit=0.00481241 sharpe=1.00567 winrate=0.760036 dd=0.0221 Rv2=0.463881 feat_dim=32 tp=0.008 sl=0.0032 ma=12
+Nov 03 14:10:22 edge-trader-ai systemd[1]: Stopping edge-trader-server.service - Edge Trader Server (C++ PRO-only)...
+Nov 03 14:10:22 edge-trader-ai systemd[1]: edge-trader-server.service: Deactivated successfully.
+Nov 03 14:10:22 edge-trader-ai systemd[1]: Stopped edge-trader-server.service - Edge Trader Server (C++ PRO-only).
+Nov 03 14:10:22 edge-trader-ai systemd[1]: edge-trader-server.service: Consumed 17.098s CPU time.
+Nov 03 14:10:22 edge-trader-ai systemd[1]: Started edge-trader-server.service - Edge Trader Server (C++ PRO-only).
+Nov 03 15:42:05 edge-trader-ai edge_trader_server[274161]: [EdgeTrader] server started on port 3000 (thr=0.3, ma=12, feat=32)
+Nov 03 15:42:05 edge-trader-ai edge_trader_server[274161]: [RAW] warn: rows=180 (<300) path=cache/clean/BTCUSDT_1440.csv
+Nov 03 15:42:05 edge-trader-ai edge_trader_server[274161]: [TRAIN] shapes: 15=17280 60=4320 240=1080 1440=180  (cols15=6)
+Nov 03 15:42:05 edge-trader-ai edge_trader_server[274161]: [TRAIN] PPO_PRO N=17280 D=32 M=642 val=129 thr=0.3 acc=0.922481 Sharpe=2.20566 DD=0.0074 WinR=0.922481 ManipR=0.0852713 wctx_htf=0.95 feat_ver=10
+Nov 03 15:42:05 edge-trader-ai edge_trader_server[274161]: [TRAIN] rows=17280 M_labeled=642 best_thr=0.3 acc=0.922481 Rv1=0.92 profit=0.00663178 sharpe=2.20566 winrate=0.922481 dd=0.0074 Rv2=1.08451 feat_dim=32 tp=0.008 sl=0.0032 ma=12
+Nov 03 17:42:09 edge-trader-ai edge_trader_server[274161]: [RAW] warn: rows=180 (<300) path=cache/clean/BTCUSDT_1440.csv
+Nov 03 17:42:09 edge-trader-ai edge_trader_server[274161]: [TRAIN] shapes: 15=17280 60=4320 240=1080 1440=180  (cols15=6)
+Nov 03 17:42:09 edge-trader-ai edge_trader_server[274161]: [TRAIN] PPO_PRO N=17280 D=32 M=642 val=129 thr=0.3 acc=0.922481 Sharpe=2.20566 DD=0.0074 WinR=0.922481 ManipR=0.0852713 wctx_htf=0.95 feat_ver=10
+Nov 03 17:42:09 edge-trader-ai edge_trader_server[274161]: [TRAIN] rows=17280 M_labeled=642 best_thr=0.3 acc=0.922481 Rv1=0.92 profit=0.00663178 sharpe=2.20566 winrate=0.922481 dd=0.0074 Rv2=1.08451 feat_dim=32 tp=0.008 sl=0.0032 ma=12
+Nov 03 18:43:20 edge-trader-ai systemd[1]: Stopping edge-trader-server.service - Edge Trader Server (C++ PRO-only)...
+Nov 03 18:43:20 edge-trader-ai systemd[1]: edge-trader-server.service: Deactivated successfully.
+Nov 03 18:43:20 edge-trader-ai systemd[1]: Stopped edge-trader-server.service - Edge Trader Server (C++ PRO-only).
+Nov 03 18:43:20 edge-trader-ai systemd[1]: edge-trader-server.service: Consumed 11.396s CPU time, 72.0M memory peak, 0B memory swap peak.
+Nov 03 18:43:20 edge-trader-ai systemd[1]: Started edge-trader-server.service - Edge Trader Server (C++ PRO-only).
+Nov 03 18:47:38 edge-trader-ai systemd[1]: Stopping edge-trader-server.service - Edge Trader Server (C++ PRO-only)...
+Nov 03 18:47:38 edge-trader-ai systemd[1]: edge-trader-server.service: Deactivated successfully.
+Nov 03 18:47:38 edge-trader-ai systemd[1]: Stopped edge-trader-server.service - Edge Trader Server (C++ PRO-only).
+Nov 03 18:47:38 edge-trader-ai systemd[1]: Started edge-trader-server.service - Edge Trader Server (C++ PRO-only).
+Nov 03 18:48:53 edge-trader-ai systemd[1]: Stopping edge-trader-server.service - Edge Trader Server (C++ PRO-only)...
+Nov 03 18:48:53 edge-trader-ai systemd[1]: edge-trader-server.service: Deactivated successfully.
+Nov 03 18:48:53 edge-trader-ai systemd[1]: Stopped edge-trader-server.service - Edge Trader Server (C++ PRO-only).
+Nov 03 18:48:53 edge-trader-ai systemd[1]: Started edge-trader-server.service - Edge Trader Server (C++ PRO-only).
+Nov 03 19:42:33 edge-trader-ai edge_trader_server[278728]: [EdgeTrader] server started on port 3000 (thr=0.3, ma=12, feat=32)
+Nov 03 19:42:33 edge-trader-ai edge_trader_server[278728]: [RAW] warn: rows=180 (<300) path=cache/clean/BTCUSDT_1440.csv
+Nov 03 19:42:33 edge-trader-ai edge_trader_server[278728]: [TRAIN] shapes: 15=17280 60=4320 240=1080 1440=180  (cols15=6)
+Nov 03 19:42:33 edge-trader-ai edge_trader_server[278728]: [TRAIN] PPO_PRO N=17280 D=32 M=642 val=129 thr=0.3 acc=0.922481 Sharpe=2.20566 DD=0.0074 WinR=0.922481 ManipR=0.0852713 wctx_htf=0.95 feat_ver=10
+Nov 03 19:42:33 edge-trader-ai edge_trader_server[278728]: [TRAIN] rows=17280 M_labeled=642 best_thr=0.3 acc=0.922481 Rv1=0.92 profit=0.00663178 sharpe=2.20566 winrate=0.922481 dd=0.0074 Rv2=1.08451 feat_dim=32 tp=0.008 sl=0.0032 ma=12
+Nov 03 21:42:39 edge-trader-ai edge_trader_server[278728]: [RAW] warn: rows=180 (<300) path=cache/clean/BTCUSDT_1440.csv
+Nov 03 21:42:40 edge-trader-ai edge_trader_server[278728]: [TRAIN] shapes: 15=17280 60=4320 240=1080 1440=180  (cols15=6)
+Nov 03 21:42:40 edge-trader-ai edge_trader_server[278728]: [TRAIN] PPO_PRO N=17280 D=32 M=643 val=129 thr=0.3 acc=0.922481 Sharpe=2.20566 DD=0.0074 WinR=0.922481 ManipR=0.0775194 wctx_htf=0.95 feat_ver=10
+Nov 03 21:42:40 edge-trader-ai edge_trader_server[278728]: [TRAIN] rows=17280 M_labeled=643 best_thr=0.3 acc=0.922481 Rv1=0.92 profit=0.00663178 sharpe=2.20566 winrate=0.922481 dd=0.0074 Rv2=1.08606 feat_dim=32 tp=0.008 sl=0.0032 ma=12
+Nov 03 23:42:50 edge-trader-ai edge_trader_server[278728]: [RAW] warn: rows=180 (<300) path=cache/clean/BTCUSDT_1440.csv
+Nov 03 23:42:50 edge-trader-ai edge_trader_server[278728]: [TRAIN] shapes: 15=17280 60=4320 240=1080 1440=180  (cols15=6)
+Nov 03 23:42:50 edge-trader-ai edge_trader_server[278728]: [TRAIN] PPO_PRO N=17280 D=32 M=645 val=129 thr=0.3 acc=0.922481 Sharpe=2.20566 DD=0.0074 WinR=0.922481 ManipR=0.0697674 wctx_htf=0.95 feat_ver=10
+Nov 03 23:42:50 edge-trader-ai edge_trader_server[278728]: [TRAIN] rows=17280 M_labeled=645 best_thr=0.3 acc=0.922481 Rv1=0.92 profit=0.00663178 sharpe=2.20566 winrate=0.922481 dd=0.0074 Rv2=1.08761 feat_dim=32 tp=0.008 sl=0.0032 ma=12
+Nov 04 01:42:54 edge-trader-ai edge_trader_server[278728]: [RAW] warn: rows=180 (<300) path=cache/clean/BTCUSDT_1440.csv
+Nov 04 01:42:54 edge-trader-ai edge_trader_server[278728]: [TRAIN] shapes: 15=17280 60=4320 240=1080 1440=180  (cols15=6)
+Nov 04 01:42:54 edge-trader-ai edge_trader_server[278728]: [TRAIN] PPO_PRO N=17280 D=32 M=646 val=130 thr=0.3 acc=0.915385 Sharpe=2.09398 DD=0.0074 WinR=0.915385 ManipR=0.0692308 wctx_htf=0.95 feat_ver=10
+Nov 04 01:42:54 edge-trader-ai edge_trader_server[278728]: [TRAIN] rows=17280 M_labeled=646 best_thr=0.3 acc=0.915385 Rv1=0.9168 profit=0.00655231 sharpe=2.09398 winrate=0.915385 dd=0.0074 Rv2=1.0318 feat_dim=32 tp=0.008 sl=0.0032 ma=12
+Nov 04 03:05:44 edge-trader-ai edge_trader_server[278728]: [RAW] warn: rows=180 (<300) path=cache/clean/BTCUSDT_1440.csv
+Nov 04 03:05:44 edge-trader-ai edge_trader_server[278728]: [TRAIN] shapes: 15=17280 60=4320 240=1080 1440=180  (cols15=6)
+Nov 04 03:05:44 edge-trader-ai edge_trader_server[278728]: [TRAIN] PPO_PRO N=17280 D=32 M=2623 val=525 thr=0.62 acc=0.704762 Sharpe=0.504348 DD=0.0111 WinR=0.708571 ManipR=0.0761905 wctx_htf=0.95 feat_ver=10
+Nov 04 03:05:44 edge-trader-ai edge_trader_server[278728]: [TRAIN] rows=17280 M_labeled=2623 best_thr=0.62 acc=0.704762 Rv1=0.8406 profit=0.00110114 sharpe=0.504348 winrate=0.708571 dd=0.0111 Rv2=0.226437 feat_dim=32 tp=0.003 sl=0.0018 ma=12
+Nov 04 03:43:00 edge-trader-ai edge_trader_server[278728]: [RAW] warn: rows=180 (<300) path=cache/clean/BTCUSDT_1440.csv
+Nov 04 03:43:00 edge-trader-ai edge_trader_server[278728]: [TRAIN] shapes: 15=17280 60=4320 240=1080 1440=180  (cols15=6)
+Nov 04 03:43:00 edge-trader-ai edge_trader_server[278728]: [TRAIN] PPO_PRO N=17280 D=32 M=646 val=130 thr=0.3 acc=0.915385 Sharpe=2.09398 DD=0.0074 WinR=0.915385 ManipR=0.0692308 wctx_htf=0.95 feat_ver=10
+Nov 04 03:43:00 edge-trader-ai edge_trader_server[278728]: [TRAIN] rows=17280 M_labeled=646 best_thr=0.3 acc=0.915385 Rv1=0.9168 profit=0.00655231 sharpe=2.09398 winrate=0.915385 dd=0.0074 Rv2=1.0318 feat_dim=32 tp=0.008 sl=0.0032 ma=12
+Nov 04 05:43:10 edge-trader-ai edge_trader_server[278728]: [RAW] warn: rows=180 (<300) path=cache/clean/BTCUSDT_1440.csv
+Nov 04 05:43:10 edge-trader-ai edge_trader_server[278728]: [TRAIN] shapes: 15=17280 60=4320 240=1080 1440=180  (cols15=6)
+Nov 04 05:43:10 edge-trader-ai edge_trader_server[278728]: [TRAIN] PPO_PRO N=17280 D=32 M=648 val=130 thr=0.3 acc=0.915385 Sharpe=2.09398 DD=0.0074 WinR=0.915385 ManipR=0.0692308 wctx_htf=0.95 feat_ver=10
+Nov 04 05:43:10 edge-trader-ai edge_trader_server[278728]: [TRAIN] rows=17280 M_labeled=648 best_thr=0.3 acc=0.915385 Rv1=0.9168 profit=0.00655231 sharpe=2.09398 winrate=0.915385 dd=0.0074 Rv2=1.0318 feat_dim=32 tp=0.008 sl=0.0032 ma=12
+Nov 04 06:01:52 edge-trader-ai systemd[1]: Stopping edge-trader-server.service - Edge Trader Server (C++ PRO-only)...
+Nov 04 06:01:52 edge-trader-ai systemd[1]: edge-trader-server.service: Deactivated successfully.
+Nov 04 06:01:52 edge-trader-ai systemd[1]: Stopped edge-trader-server.service - Edge Trader Server (C++ PRO-only).
+Nov 04 06:01:52 edge-trader-ai systemd[1]: edge-trader-server.service: Consumed 32.518s CPU time, 4.1M memory peak, 0B memory swap peak.
+Nov 04 06:01:52 edge-trader-ai systemd[1]: Started edge-trader-server.service - Edge Trader Server (C++ PRO-only).

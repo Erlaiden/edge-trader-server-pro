@@ -59,7 +59,7 @@ void setup_agents_routes(httplib::Server& svr) {
         if (!agent_enabled) {
             r["ok"] = false;
             r["error"] = "Agent layer disabled (set ETAI_AGENT_ENABLE=1)";
-            return json_reply(res, r);
+            return json_reply(res, r, 403);
         }
 
         const std::string symbol   = ag_qs_str(req, "symbol", "BTCUSDT");
@@ -96,7 +96,7 @@ void setup_agents_routes(httplib::Server& svr) {
         if (!agent_enabled) {
             r["ok"] = false;
             r["error"] = "Agent layer disabled (set ETAI_AGENT_ENABLE=1)";
-            return json_reply(res, r);
+            return json_reply(res, r, 403);
         }
 
         const std::string symbol   = ag_qs_str(req, "symbol", "BTCUSDT");

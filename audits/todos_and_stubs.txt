@@ -1,0 +1,26 @@
+tools/audit.sh:33:# 1. TODO/FIXME/заглушки
+tools/audit.sh:34:search_code 'TODO|FIXME|WIP|STUB|NOT_IMPLEMENTED|UNIMPLEMENTED|NotImplemented|assert\s*\(\s*false\s*\)|abort\s*\(|std::logic_error|#error|pragma message' \
+tools/audit.sh:38:search_code '501|NotImplemented|NOT_IMPLEMENTED|/api/' > audits/http_routes_and_501.txt || true
+src/httplib.h:20:#pragma message(                                                               \
+src/httplib.h:36:#error                                                                         \
+src/httplib.h:203:#error Sorry, Visual Studio versions prior to 2015 are not supported
+src/httplib.h:354:#error Please use OpenSSL or a current version of BoringSSL
+src/httplib.h:358:#error Sorry, OpenSSL versions prior to 3.0.0 are not supported
+src/httplib.h:567:  NotImplemented_501 = 501,
+src/httplib.h:2197:  case StatusCode::NotImplemented_501: return "Not Implemented";
+src/httplib.h:4328:  // TODO: 'Accept-Encoding' has br, not br;q=0
+src/httplib.h:4334:  // TODO: 'Accept-Encoding' has gzip, not gzip;q=0
+src/httplib.h:4340:  // TODO: 'Accept-Encoding' has zstd, not zstd;q=0
+src/httplib.h:8838:      // TODO: refactoring
+src/httplib.h:8952:    // TODO this requires a not-entirely-obvious chain of calls to be correct
+src/httplib.h:9198:    // TODO: Brotli support
+src/httplib.h:9404:    // TODO: Brotli support
+audits/symbols_defined.txt:1741:000000000014e800 V typeinfo for std::logic_error@GLIBCXX_3.4
+src/routes/health_ai.cpp:16:  #error "C++17 filesystem is required"
+src/json.hpp:2388:            #error "unsupported Clang version - see https://github.com/nlohmann/json#supported-compilers"
+src/json.hpp:2392:            #error "unsupported GCC version - see https://github.com/nlohmann/json#supported-compilers"
+src/json.hpp:2546:    #define JSON_THROW(exception) std::abort()
+src/json.hpp:11699:            get();  // TODO(niels): may we ignore N here?
+src/json.hpp:21348:          m_data(std::move(other.m_data)) // cppcheck-suppress[accessForwarded] TODO check
+src/json.hpp:21350:        , start_position(other.start_position) // cppcheck-suppress[accessForwarded] TODO check
+src/json.hpp:21351:        , end_position(other.end_position) // cppcheck-suppress[accessForwarded] TODO check

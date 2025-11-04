@@ -1,0 +1,18 @@
+2025-11-04T06:28:10Z
+clang-tidy: usage: run-clang-tidy [-h] [-allow-enabling-alpha-checkers]
+                      [-clang-tidy-binary PATH]
+                      [-clang-apply-replacements-binary PATH] [-checks CHECKS]
+                      [-config CONFIG | -config-file CONFIG_FILE]
+                      [-header-filter HEADER_FILTER]
+                      [-line-filter LINE_FILTER]
+                      [-export-fixes file_or_directory] [-j J] [-fix]
+                      [-format] [-style STYLE] [-use-color [USE_COLOR]]
+                      [-p BUILD_PATH] [-extra-arg EXTRA_ARG]
+                      [-extra-arg-before EXTRA_ARG_BEFORE] [-quiet]
+                      [-load PLUGINS] [-warnings-as-errors WARNINGS_AS_ERRORS]
+                      [files ...]
+run-clang-tidy: error: unrecognized arguments: -version
+Ubuntu LLVM version 18.1.3
+  Optimized build.
+cppcheck: Cppcheck 2.13.0
+ripgrep: ripgrep 14.1.0

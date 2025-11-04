@@ -182,7 +182,7 @@ void register_train_env_routes(httplib::Server& svr){
         json out; out["ok"]=false; out["env"]="v1";
         if(!env_enabled("ETAI_ENABLE_TRAIN_ENV")){
             out["error"]="not_enabled";
-            res.set_content(out.dump(2),"application/json");
+            res.status = 403; res.set_content(out.dump(2),"application/json");
             return;
         }
         std::string symbol   = qs_str(req,"symbol","BTCUSDT");

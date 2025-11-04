@@ -1,0 +1,3 @@
+Internal ctest changing into directory: /opt/edge-trader-server/build
+Test project /opt/edge-trader-server/build
+No tests were found!!!

@@ -1,0 +1,412 @@
+tools/audit.sh:17:    rg -No -g '!build' '/api/[A-Za-z0-9_/\-]+' | sort -u
+tools/audit.sh:19:    grep -Rho --exclude-dir=build -E '/api/[A-Za-z0-9_/\-]+' . | sort -u
+tools/audit.sh:34:search_code 'TODO|FIXME|WIP|STUB|NOT_IMPLEMENTED|UNIMPLEMENTED|NotImplemented|assert\s*\(\s*false\s*\)|abort\s*\(|std::logic_error|#error|pragma message' \
+tools/audit.sh:38:search_code '501|NotImplemented|NOT_IMPLEMENTED|/api/' > audits/http_routes_and_501.txt || true
+audit_pro_cv_full.sh:101:echo "----- Проверка, что порт 3000 отвечает (/api/health) -----"
+audit_pro_cv_full.sh:102:curl -sS --max-time 5 http://127.0.0.1:3000/api/health | jq . || echo "!! /api/health не отвечает"
+audit_pro_cv_full.sh:104:echo "----- /api/health/ai -----"
+audit_pro_cv_full.sh:105:curl -sS --max-time 5 http://127.0.0.1:3000/api/health/ai | jq . || echo "!! /api/health/ai не отвечает"
+audit_pro_cv_full.sh:107:echo "----- /api/model?symbol=BTCUSDT&interval=15 -----"
+audit_pro_cv_full.sh:108:curl -sS --max-time 5 "http://127.0.0.1:3000/api/model?symbol=BTCUSDT&interval=15" | jq . || echo "!! /api/model не отвечает"
+audit_pro_cv_full.sh:116:curl -sS --max-time 60 "http://127.0.0.1:3000/api/train?symbol=BTCUSDT&interval=15&episodes=8&tp=0.008&sl=0.0032&ma=12" \
+CODING_TASK.md:10:2. Ensure GET /api/symbol/task always returns non-null backfill for state in {done,failed}.
+CODING_TASK.md:16:5. Follow same code style and public API. Do not touch utils.h or /api/symbol/status.
+CODING_TASK.md:19:- POST /api/symbol/hydrate → 202 + task_id
+CODING_TASK.md:20:- GET /api/symbol/task?id=<id> → consistent states
+CODING_TASK.md:21:- /api/symbol/metrics updates properly
+routes/pipeline.cpp:48:    // POST /api/pipeline/prepare_train
+routes/pipeline.cpp:50:    svr.Post("/api/pipeline/prepare_train", [](const httplib::Request& req, httplib::Response& res) {
+routes/pipeline.cpp:96:            std::string path = "/api/backfill?symbol=" + symbol_norm +
+routes/pipeline.cpp:166:            p << "/api/train?symbol=" << symbol_norm
+routes/pipeline.cpp:205:            p << "/api/infer?symbol=" << symbol_norm
+docs/next_stage_v11.md:15:- [ ] HTF-контекст: мягкие веса согласия (60/240/1440) + внятный trace в ответе /api/infer.
+docs/ppo_pro_plus_env_v1.md:40:- Роут: /api/train_env?symbol=...&interval=15&episodes=50&fee=...  (отключено до интеграции)
+src/main.cpp:17:#include "routes/train_env.cpp"    // новый роут: /api/train_env (за фичефлагом)
+src/httplib.h:567:  NotImplemented_501 = 501,
+src/httplib.h:2197:  case StatusCode::NotImplemented_501: return "Not Implemented";
+src/httplib.h:3954:     * https://docs.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-wsasocketa
+src/server_utils.h:55:    return json{{"ok",false},{"error","no_cached_data"},{"hint","call /api/backfill first"}};
+src/infer_policy.h:7:// Single-TF inference with logistic policy (already used by /api/infer fallback)
+src/train_logic.cpp:70:    // Эти поля потом увидит /api/model → mobile app.
+README.md:4:- API: http://127.0.0.1:3000/api/*
+audits/todos_and_stubs.txt:2:tools/audit.sh:34:search_code 'TODO|FIXME|WIP|STUB|NOT_IMPLEMENTED|UNIMPLEMENTED|NotImplemented|assert\s*\(\s*false\s*\)|abort\s*\(|std::logic_error|#error|pragma message' \
+audits/todos_and_stubs.txt:3:tools/audit.sh:38:search_code '501|NotImplemented|NOT_IMPLEMENTED|/api/' > audits/http_routes_and_501.txt || true
+audits/todos_and_stubs.txt:9:src/httplib.h:567:  NotImplemented_501 = 501,
+audits/todos_and_stubs.txt:10:src/httplib.h:2197:  case StatusCode::NotImplemented_501: return "Not Implemented";
+scripts/env_sweep.sh:30:  if curl -sS "${BASE_URL}/api/health" >/dev/null 2>&1; then
+scripts/env_sweep.sh:45:      URL="${BASE_URL}/api/train_env?steps=${STEPS}&policy=model&fee=${FEE}&tp=${TP}&sl=${SL}&thr=${THR}"
+scripts/env_grid.sh:21:              curl -sS "${BASE}/api/train_env?steps=${STEPS}&policy=${pol}&fee=${fee}&tp=${TP}&sl=${SL}")
+scripts/train_full.sh:26:curl -sS "http://127.0.0.1:3000/api/train?symbol=BTCUSDT&interval=15&episodes=80&tp=${TP}&sl=${SL}&ma=${MA}" \
+scripts/check_norm_infer.sh:3:J1="$(curl -sS "http://127.0.0.1:3000/api/train?symbol=BTCUSDT&interval=15&episodes=1&tp=0.003&sl=0.0018&ma=12&flat=1")"
+scripts/check_norm_infer.sh:9:J2="$(curl -sS "http://127.0.0.1:3000/api/infer?symbol=BTCUSDT&interval=15")"
+scripts/smoke.sh:11:curl -sS "$BASE/api/health/ai" | jq -S '.model | {best_thr,ma_len,schema,mode,feat:.policy.feat_dim}' > "$h"
+scripts/smoke.sh:12:curl -sS "$BASE/api/model?symbol=$SYM&interval=$INT" | jq -S '.model | {best_thr,ma_len,schema,mode,feat:.policy.feat_dim}' > "$m"
+scripts/smoke.sh:13:curl -sS "$BASE/api/model/read?symbol=$SYM&interval=$INT" | jq -S '.model | {best_thr,ma_len,schema,mode,feat:.policy.feat_dim}' > "$r"
+scripts/smoke_all.sh:15:curl -sS "$BASE/api/health/ai" | jq '{ok, model_thr, model_ma_len}'
+scripts/smoke_all.sh:18:curl -sS "$BASE/api/agents/run?type=breakout&symbol=BTCUSDT&interval=15&thr=0.4" \
+scripts/audit_prox_v1.sh:98:  curl -sS "http://127.0.0.1:3000/api/train?symbol=BTCUSDT&interval=15&episodes=8&tp=0.003&sl=0.0018&ma=12" | jq || true
+scripts/audit_prox_v1.sh:101:  curl -sS "http://127.0.0.1:3000/api/infer?symbol=BTCUSDT&interval=15" | jq || true
+scripts/audit_prox_v1.sh:104:  curl -sS "http://127.0.0.1:3000/api/infer?symbol=BTCUSDT&interval=15&htf=60,240,1440" | jq || true
+scripts/audit_prox_v1.sh:107:  curl -sS "http://127.0.0.1:3000/api/agents/decision?symbol=BTCUSDT&interval=15&thr=0.5" | jq || true
+scripts/env_eval.sh:24:  if curl -sS "${BASE_URL}/api/health" >/dev/null 2>&1; then
+scripts/env_eval.sh:36:  local url="${BASE_URL}/api/train_env?steps=${STEPS}&policy=${policy}&fee=${FEE}&tp=${TP}&sl=${SL}"
+src/routes/train_env.cpp:181:    svr.Get("/api/train_env",[](const httplib::Request& req, httplib::Response& res){
+scripts/preflight_health.sh:14:echo "[3/4] /api/health/ai"
+scripts/preflight_health.sh:15:HAI_JSON="$(curl -sS "$BASE/api/health/ai")"
+scripts/plan_fix.sh:10:echo "→ после сборки сверить вывод curl /api/train и логи"
+scripts/plan_fix.sh:24:echo "→ записать в логи при каждом вызове /api/train"
+scripts/plan_fix.sh:36:curl -fsS 127.0.0.1:3000/api/health | jq .ok
+scripts/plan_fix.sh:37:curl -fsS 127.0.0.1:3000/api/health/ai | jq .data_ok
+scripts/plan_fix.sh:40:curl -fsS "127.0.0.1:3000/api/train?symbol=BTCUSDT&interval=15&episodes=3&tp=0.003&sl=0.0018&ma=12" \
+scripts/plan_fix.sh:48:echo "[C1] Заглушка /api/robot/start|stop|status — после стабилизации"
+src/routes/pipeline.cpp:46:    // POST /api/pipeline/prepare_train
+src/routes/pipeline.cpp:48:    svr.Post("/api/pipeline/prepare_train", [](const httplib::Request& req, httplib::Response& res) {
+src/routes/pipeline.cpp:70:        // 1) Backfill всех ТФ через локальный /api/backfill
+src/routes/pipeline.cpp:73:            std::string path = "/api/backfill?symbol="+sym+"&months="+std::to_string(months)+"&which=15,60,240,1440";
+src/routes/pipeline.cpp:112:            std::ostringstream p; p << "/api/train?symbol="<<sym<<"&interval="<<interval<<"&episodes="<<episodes
+src/routes/pipeline.cpp:125:            std::ostringstream p; p << "/api/infer?symbol="<<sym<<"&interval="<<interval<<"&htf=60,240,1440";
+src/json.hpp:2779:@sa https://json.nlohmann.me/api/macros/nlohmann_define_type_intrusive/
+src/json.hpp:2791:@sa https://json.nlohmann.me/api/macros/nlohmann_define_type_intrusive/
+src/json.hpp:2803:@sa https://json.nlohmann.me/api/macros/nlohmann_define_type_intrusive/
+src/json.hpp:2813:@sa https://json.nlohmann.me/api/macros/nlohmann_define_type_non_intrusive/
+src/json.hpp:2825:@sa https://json.nlohmann.me/api/macros/nlohmann_define_type_non_intrusive/
+src/json.hpp:2837:@sa https://json.nlohmann.me/api/macros/nlohmann_define_type_non_intrusive/
+src/json.hpp:2847:@sa https://json.nlohmann.me/api/macros/nlohmann_define_derived_type/
+src/json.hpp:2859:@sa https://json.nlohmann.me/api/macros/nlohmann_define_derived_type/
+src/json.hpp:2871:@sa https://json.nlohmann.me/api/macros/nlohmann_define_derived_type/
+src/json.hpp:2881:@sa https://json.nlohmann.me/api/macros/nlohmann_define_derived_type/
+src/json.hpp:2893:@sa https://json.nlohmann.me/api/macros/nlohmann_define_derived_type/
+src/json.hpp:2905:@sa https://json.nlohmann.me/api/macros/nlohmann_define_derived_type/
+src/json.hpp:3531:    /// @sa https://json.nlohmann.me/api/basic_json/
+src/json.hpp:3547:    /// @sa https://json.nlohmann.me/api/json_pointer/
+src/json.hpp:3553:    @sa https://json.nlohmann.me/api/json/
+src/json.hpp:3558:    /// @sa https://json.nlohmann.me/api/ordered_map/
+src/json.hpp:3563:    /// @sa https://json.nlohmann.me/api/ordered_json/
+src/json.hpp:4554:/// @sa https://json.nlohmann.me/api/basic_json/exception/
+src/json.hpp:4670:/// @sa https://json.nlohmann.me/api/basic_json/parse_error/
+src/json.hpp:4723:/// @sa https://json.nlohmann.me/api/basic_json/invalid_iterator/
+src/json.hpp:4741:/// @sa https://json.nlohmann.me/api/basic_json/type_error/
+src/json.hpp:4758:/// @sa https://json.nlohmann.me/api/basic_json/out_of_range/
+src/json.hpp:4775:/// @sa https://json.nlohmann.me/api/basic_json/other_error/
+src/json.hpp:6194:/// @sa https://json.nlohmann.me/api/adl_serializer/
+src/json.hpp:6199:    /// @sa https://json.nlohmann.me/api/adl_serializer/from_json/
+src/json.hpp:6209:    /// @sa https://json.nlohmann.me/api/adl_serializer/from_json/
+src/json.hpp:6219:    /// @sa https://json.nlohmann.me/api/adl_serializer/to_json/
+src/json.hpp:6252:/// @sa https://json.nlohmann.me/api/byte_container_with_subtype/
+src/json.hpp:6260:    /// @sa https://json.nlohmann.me/api/byte_container_with_subtype/byte_container_with_subtype/
+src/json.hpp:6265:    /// @sa https://json.nlohmann.me/api/byte_container_with_subtype/byte_container_with_subtype/
+src/json.hpp:6270:    /// @sa https://json.nlohmann.me/api/byte_container_with_subtype/byte_container_with_subtype/
+src/json.hpp:6275:    /// @sa https://json.nlohmann.me/api/byte_container_with_subtype/byte_container_with_subtype/
+src/json.hpp:6282:    /// @sa https://json.nlohmann.me/api/byte_container_with_subtype/byte_container_with_subtype/
+src/json.hpp:6301:    /// @sa https://json.nlohmann.me/api/byte_container_with_subtype/set_subtype/
+src/json.hpp:6309:    /// @sa https://json.nlohmann.me/api/byte_container_with_subtype/subtype/
+src/json.hpp:6316:    /// @sa https://json.nlohmann.me/api/byte_container_with_subtype/has_subtype/
+src/json.hpp:6323:    /// @sa https://json.nlohmann.me/api/byte_container_with_subtype/clear_subtype/
+src/json.hpp:14629:/// @sa https://json.nlohmann.me/api/json_pointer/
+src/json.hpp:14657:    /// @sa https://json.nlohmann.me/api/json_pointer/json_pointer/
+src/json.hpp:14663:    /// @sa https://json.nlohmann.me/api/json_pointer/to_string/
+src/json.hpp:14675:    /// @sa https://json.nlohmann.me/api/json_pointer/operator_string/
+src/json.hpp:14684:    /// @sa https://json.nlohmann.me/api/basic_json/operator_ltlt/
+src/json.hpp:14693:    /// @sa https://json.nlohmann.me/api/json_pointer/operator_slasheq/
+src/json.hpp:14703:    /// @sa https://json.nlohmann.me/api/json_pointer/operator_slasheq/
+src/json.hpp:14711:    /// @sa https://json.nlohmann.me/api/json_pointer/operator_slasheq/
+src/json.hpp:14718:    /// @sa https://json.nlohmann.me/api/json_pointer/operator_slash/
+src/json.hpp:14726:    /// @sa https://json.nlohmann.me/api/json_pointer/operator_slash/
+src/json.hpp:14733:    /// @sa https://json.nlohmann.me/api/json_pointer/operator_slash/
+src/json.hpp:14740:    /// @sa https://json.nlohmann.me/api/json_pointer/parent_pointer/
+src/json.hpp:14754:    /// @sa https://json.nlohmann.me/api/json_pointer/pop_back/
+src/json.hpp:14766:    /// @sa https://json.nlohmann.me/api/json_pointer/back/
+src/json.hpp:14778:    /// @sa https://json.nlohmann.me/api/json_pointer/push_back/
+src/json.hpp:14785:    /// @sa https://json.nlohmann.me/api/json_pointer/push_back/
+src/json.hpp:14792:    /// @sa https://json.nlohmann.me/api/json_pointer/empty/
+src/json.hpp:15448:    /// @sa https://json.nlohmann.me/api/json_pointer/operator_eq/
+src/json.hpp:15456:    /// @sa https://json.nlohmann.me/api/json_pointer/operator_eq/
+src/json.hpp:15471:    /// @sa https://json.nlohmann.me/api/json_pointer/operator_eq/
+src/json.hpp:15478:    /// @sa https://json.nlohmann.me/api/json_pointer/operator_eq/
+src/json.hpp:15485:    /// @sa https://json.nlohmann.me/api/json_pointer/operator_eq/
+src/json.hpp:15492:    /// @sa https://json.nlohmann.me/api/json_pointer/operator_ne/
+src/json.hpp:15499:    /// @sa https://json.nlohmann.me/api/json_pointer/operator_ne/
+src/json.hpp:15506:    /// @sa https://json.nlohmann.me/api/json_pointer/operator_ne/
+src/json.hpp:20362:    /// @sa https://json.nlohmann.me/api/basic_json/get_allocator/
+src/json.hpp:20369:    /// @sa https://json.nlohmann.me/api/basic_json/meta/
+src/json.hpp:20445:    /// @sa https://json.nlohmann.me/api/basic_json/default_object_comparator_t/
+src/json.hpp:20455:    /// @sa https://json.nlohmann.me/api/basic_json/object_t/
+src/json.hpp:20463:    /// @sa https://json.nlohmann.me/api/basic_json/array_t/
+src/json.hpp:20467:    /// @sa https://json.nlohmann.me/api/basic_json/string_t/
+src/json.hpp:20471:    /// @sa https://json.nlohmann.me/api/basic_json/boolean_t/
+src/json.hpp:20475:    /// @sa https://json.nlohmann.me/api/basic_json/number_integer_t/
+src/json.hpp:20479:    /// @sa https://json.nlohmann.me/api/basic_json/number_unsigned_t/
+src/json.hpp:20483:    /// @sa https://json.nlohmann.me/api/basic_json/number_float_t/
+src/json.hpp:20487:    /// @sa https://json.nlohmann.me/api/basic_json/binary_t/
+src/json.hpp:20491:    /// @sa https://json.nlohmann.me/api/basic_json/object_comparator_t/
+src/json.hpp:20920:    /// @sa https://json.nlohmann.me/api/basic_json/parse_event_t/
+src/json.hpp:20924:    /// @sa https://json.nlohmann.me/api/basic_json/parser_callback_t/
+src/json.hpp:20937:    /// @sa https://json.nlohmann.me/api/basic_json/basic_json/
+src/json.hpp:20945:    /// @sa https://json.nlohmann.me/api/basic_json/basic_json/
+src/json.hpp:20953:    /// @sa https://json.nlohmann.me/api/basic_json/basic_json/
+src/json.hpp:20968:    /// @sa https://json.nlohmann.me/api/basic_json/basic_json/
+src/json.hpp:21029:    /// @sa https://json.nlohmann.me/api/basic_json/basic_json/
+src/json.hpp:21087:    /// @sa https://json.nlohmann.me/api/basic_json/binary/
+src/json.hpp:21098:    /// @sa https://json.nlohmann.me/api/basic_json/binary/
+src/json.hpp:21109:    /// @sa https://json.nlohmann.me/api/basic_json/binary/
+src/json.hpp:21120:    /// @sa https://json.nlohmann.me/api/basic_json/binary/
+src/json.hpp:21131:    /// @sa https://json.nlohmann.me/api/basic_json/array/
+src/json.hpp:21139:    /// @sa https://json.nlohmann.me/api/basic_json/object/
+src/json.hpp:21147:    /// @sa https://json.nlohmann.me/api/basic_json/basic_json/
+src/json.hpp:21156:    /// @sa https://json.nlohmann.me/api/basic_json/basic_json/
+src/json.hpp:21272:    /// @sa https://json.nlohmann.me/api/basic_json/basic_json/
+src/json.hpp:21345:    /// @sa https://json.nlohmann.me/api/basic_json/basic_json/
+src/json.hpp:21371:    /// @sa https://json.nlohmann.me/api/basic_json/operator=/
+src/json.hpp:21400:    /// @sa https://json.nlohmann.me/api/basic_json/~basic_json/
+src/json.hpp:21418:    /// @sa https://json.nlohmann.me/api/basic_json/dump/
+src/json.hpp:21440:    /// @sa https://json.nlohmann.me/api/basic_json/type/
+src/json.hpp:21447:    /// @sa https://json.nlohmann.me/api/basic_json/is_primitive/
+src/json.hpp:21454:    /// @sa https://json.nlohmann.me/api/basic_json/is_structured/
+src/json.hpp:21461:    /// @sa https://json.nlohmann.me/api/basic_json/is_null/
+src/json.hpp:21468:    /// @sa https://json.nlohmann.me/api/basic_json/is_boolean/
+src/json.hpp:21475:    /// @sa https://json.nlohmann.me/api/basic_json/is_number/
+src/json.hpp:21482:    /// @sa https://json.nlohmann.me/api/basic_json/is_number_integer/
+src/json.hpp:21489:    /// @sa https://json.nlohmann.me/api/basic_json/is_number_unsigned/
+src/json.hpp:21496:    /// @sa https://json.nlohmann.me/api/basic_json/is_number_float/
+src/json.hpp:21503:    /// @sa https://json.nlohmann.me/api/basic_json/is_object/
+src/json.hpp:21510:    /// @sa https://json.nlohmann.me/api/basic_json/is_array/
+src/json.hpp:21517:    /// @sa https://json.nlohmann.me/api/basic_json/is_string/
+src/json.hpp:21524:    /// @sa https://json.nlohmann.me/api/basic_json/is_binary/
+src/json.hpp:21531:    /// @sa https://json.nlohmann.me/api/basic_json/is_discarded/
+src/json.hpp:21538:    /// @sa https://json.nlohmann.me/api/basic_json/operator_value_t/
+src/json.hpp:21689:    /// @sa https://json.nlohmann.me/api/basic_json/get_ptr/
+src/json.hpp:21699:    /// @sa https://json.nlohmann.me/api/basic_json/get_ptr/
+src/json.hpp:21939:    /// @sa https://json.nlohmann.me/api/basic_json/get_to/
+src/json.hpp:21978:    /// @sa https://json.nlohmann.me/api/basic_json/get_ref/
+src/json.hpp:21988:    /// @sa https://json.nlohmann.me/api/basic_json/get_ref/
+src/json.hpp:22050:    /// @sa https://json.nlohmann.me/api/basic_json/get_binary/
+src/json.hpp:22062:    /// @sa https://json.nlohmann.me/api/basic_json/get_binary/
+src/json.hpp:22084:    /// @sa https://json.nlohmann.me/api/basic_json/at/
+src/json.hpp:22107:    /// @sa https://json.nlohmann.me/api/basic_json/at/
+src/json.hpp:22130:    /// @sa https://json.nlohmann.me/api/basic_json/at/
+src/json.hpp:22148:    /// @sa https://json.nlohmann.me/api/basic_json/at/
+src/json.hpp:22168:    /// @sa https://json.nlohmann.me/api/basic_json/at/
+src/json.hpp:22186:    /// @sa https://json.nlohmann.me/api/basic_json/at/
+src/json.hpp:22206:    /// @sa https://json.nlohmann.me/api/basic_json/operator%5B%5D/
+src/json.hpp:22252:    /// @sa https://json.nlohmann.me/api/basic_json/operator%5B%5D/
+src/json.hpp:22265:    /// @sa https://json.nlohmann.me/api/basic_json/operator%5B%5D/
+src/json.hpp:22287:    /// @sa https://json.nlohmann.me/api/basic_json/operator%5B%5D/
+src/json.hpp:22316:    /// @sa https://json.nlohmann.me/api/basic_json/operator%5B%5D/
+src/json.hpp:22340:    /// @sa https://json.nlohmann.me/api/basic_json/operator%5B%5D/
+src/json.hpp:22368:    /// @sa https://json.nlohmann.me/api/basic_json/value/
+src/json.hpp:22392:    /// @sa https://json.nlohmann.me/api/basic_json/value/
+src/json.hpp:22417:    /// @sa https://json.nlohmann.me/api/basic_json/value/
+src/json.hpp:22443:    /// @sa https://json.nlohmann.me/api/basic_json/value/
+src/json.hpp:22470:    /// @sa https://json.nlohmann.me/api/basic_json/value/
+src/json.hpp:22495:    /// @sa https://json.nlohmann.me/api/basic_json/value/
+src/json.hpp:22542:    /// @sa https://json.nlohmann.me/api/basic_json/front/
+src/json.hpp:22549:    /// @sa https://json.nlohmann.me/api/basic_json/front/
+src/json.hpp:22556:    /// @sa https://json.nlohmann.me/api/basic_json/back/
+src/json.hpp:22565:    /// @sa https://json.nlohmann.me/api/basic_json/back/
+src/json.hpp:22574:    /// @sa https://json.nlohmann.me/api/basic_json/erase/
+src/json.hpp:22644:    /// @sa https://json.nlohmann.me/api/basic_json/erase/
+src/json.hpp:22752:    /// @sa https://json.nlohmann.me/api/basic_json/erase/
+src/json.hpp:22761:    /// @sa https://json.nlohmann.me/api/basic_json/erase/
+src/json.hpp:22770:    /// @sa https://json.nlohmann.me/api/basic_json/erase/
+src/json.hpp:22799:    /// @sa https://json.nlohmann.me/api/basic_json/find/
+src/json.hpp:22813:    /// @sa https://json.nlohmann.me/api/basic_json/find/
+src/json.hpp:22827:    /// @sa https://json.nlohmann.me/api/basic_json/find/
+src/json.hpp:22843:    /// @sa https://json.nlohmann.me/api/basic_json/find/
+src/json.hpp:22859:    /// @sa https://json.nlohmann.me/api/basic_json/count/
+src/json.hpp:22867:    /// @sa https://json.nlohmann.me/api/basic_json/count/
+src/json.hpp:22877:    /// @sa https://json.nlohmann.me/api/basic_json/contains/
+src/json.hpp:22884:    /// @sa https://json.nlohmann.me/api/basic_json/contains/
+src/json.hpp:22893:    /// @sa https://json.nlohmann.me/api/basic_json/contains/
+src/json.hpp:22916:    /// @sa https://json.nlohmann.me/api/basic_json/begin/
+src/json.hpp:22925:    /// @sa https://json.nlohmann.me/api/basic_json/begin/
+src/json.hpp:22932:    /// @sa https://json.nlohmann.me/api/basic_json/cbegin/
+src/json.hpp:22941:    /// @sa https://json.nlohmann.me/api/basic_json/end/
+src/json.hpp:22950:    /// @sa https://json.nlohmann.me/api/basic_json/end/
+src/json.hpp:22957:    /// @sa https://json.nlohmann.me/api/basic_json/cend/
+src/json.hpp:22966:    /// @sa https://json.nlohmann.me/api/basic_json/rbegin/
+src/json.hpp:22973:    /// @sa https://json.nlohmann.me/api/basic_json/rbegin/
+src/json.hpp:22980:    /// @sa https://json.nlohmann.me/api/basic_json/rend/
+src/json.hpp:22987:    /// @sa https://json.nlohmann.me/api/basic_json/rend/
+src/json.hpp:22994:    /// @sa https://json.nlohmann.me/api/basic_json/crbegin/
+src/json.hpp:23001:    /// @sa https://json.nlohmann.me/api/basic_json/crend/
+src/json.hpp:23009:    /// @sa https://json.nlohmann.me/api/basic_json/items/
+src/json.hpp:23020:    /// @sa https://json.nlohmann.me/api/basic_json/items/
+src/json.hpp:23031:    /// @sa https://json.nlohmann.me/api/basic_json/items/
+src/json.hpp:23038:    /// @sa https://json.nlohmann.me/api/basic_json/items/
+src/json.hpp:23054:    /// @sa https://json.nlohmann.me/api/basic_json/empty/
+src/json.hpp:23093:    /// @sa https://json.nlohmann.me/api/basic_json/size/
+src/json.hpp:23132:    /// @sa https://json.nlohmann.me/api/basic_json/max_size/
+src/json.hpp:23175:    /// @sa https://json.nlohmann.me/api/basic_json/clear/
+src/json.hpp:23236:    /// @sa https://json.nlohmann.me/api/basic_json/push_back/
+src/json.hpp:23261:    /// @sa https://json.nlohmann.me/api/basic_json/operator+=/
+src/json.hpp:23269:    /// @sa https://json.nlohmann.me/api/basic_json/push_back/
+src/json.hpp:23293:    /// @sa https://json.nlohmann.me/api/basic_json/operator+=/
+src/json.hpp:23301:    /// @sa https://json.nlohmann.me/api/basic_json/push_back/
+src/json.hpp:23324:    /// @sa https://json.nlohmann.me/api/basic_json/operator+=/
+src/json.hpp:23332:    /// @sa https://json.nlohmann.me/api/basic_json/push_back/
+src/json.hpp:23348:    /// @sa https://json.nlohmann.me/api/basic_json/operator+=/
+src/json.hpp:23356:    /// @sa https://json.nlohmann.me/api/basic_json/emplace_back/
+src/json.hpp:23381:    /// @sa https://json.nlohmann.me/api/basic_json/emplace/
+src/json.hpp:23433:    /// @sa https://json.nlohmann.me/api/basic_json/insert/
+src/json.hpp:23453:    /// @sa https://json.nlohmann.me/api/basic_json/insert/
+src/json.hpp:23460:    /// @sa https://json.nlohmann.me/api/basic_json/insert/
+src/json.hpp:23480:    /// @sa https://json.nlohmann.me/api/basic_json/insert/
+src/json.hpp:23511:    /// @sa https://json.nlohmann.me/api/basic_json/insert/
+src/json.hpp:23531:    /// @sa https://json.nlohmann.me/api/basic_json/insert/
+src/json.hpp:23557:    /// @sa https://json.nlohmann.me/api/basic_json/update/
+src/json.hpp:23564:    /// @sa https://json.nlohmann.me/api/basic_json/update/
+src/json.hpp:23611:    /// @sa https://json.nlohmann.me/api/basic_json/swap/
+src/json.hpp:23628:    /// @sa https://json.nlohmann.me/api/basic_json/swap/
+src/json.hpp:23640:    /// @sa https://json.nlohmann.me/api/basic_json/swap/
+src/json.hpp:23656:    /// @sa https://json.nlohmann.me/api/basic_json/swap/
+src/json.hpp:23672:    /// @sa https://json.nlohmann.me/api/basic_json/swap/
+src/json.hpp:23688:    /// @sa https://json.nlohmann.me/api/basic_json/swap/
+src/json.hpp:23704:    /// @sa https://json.nlohmann.me/api/basic_json/swap/
+src/json.hpp:23831:    /// @sa https://json.nlohmann.me/api/basic_json/operator_eq/
+src/json.hpp:23846:    /// @sa https://json.nlohmann.me/api/basic_json/operator_eq/
+src/json.hpp:23855:    /// @sa https://json.nlohmann.me/api/basic_json/operator_ne/
+src/json.hpp:23866:    /// @sa https://json.nlohmann.me/api/basic_json/operator_spaceship/
+src/json.hpp:23879:    /// @sa https://json.nlohmann.me/api/basic_json/operator_spaceship/
+src/json.hpp:23892:    /// @sa https://json.nlohmann.me/api/basic_json/operator_le/
+src/json.hpp:23904:    /// @sa https://json.nlohmann.me/api/basic_json/operator_le/
+src/json.hpp:23913:    /// @sa https://json.nlohmann.me/api/basic_json/operator_ge/
+src/json.hpp:23925:    /// @sa https://json.nlohmann.me/api/basic_json/operator_ge/
+src/json.hpp:23935:    /// @sa https://json.nlohmann.me/api/basic_json/operator_eq/
+src/json.hpp:23949:    /// @sa https://json.nlohmann.me/api/basic_json/operator_eq/
+src/json.hpp:23958:    /// @sa https://json.nlohmann.me/api/basic_json/operator_eq/
+src/json.hpp:23967:    /// @sa https://json.nlohmann.me/api/basic_json/operator_ne/
+src/json.hpp:23978:    /// @sa https://json.nlohmann.me/api/basic_json/operator_ne/
+src/json.hpp:23987:    /// @sa https://json.nlohmann.me/api/basic_json/operator_ne/
+src/json.hpp:23996:    /// @sa https://json.nlohmann.me/api/basic_json/operator_lt/
+src/json.hpp:24006:    /// @sa https://json.nlohmann.me/api/basic_json/operator_lt/
+src/json.hpp:24015:    /// @sa https://json.nlohmann.me/api/basic_json/operator_lt/
+src/json.hpp:24024:    /// @sa https://json.nlohmann.me/api/basic_json/operator_le/
+src/json.hpp:24035:    /// @sa https://json.nlohmann.me/api/basic_json/operator_le/
+src/json.hpp:24044:    /// @sa https://json.nlohmann.me/api/basic_json/operator_le/
+src/json.hpp:24053:    /// @sa https://json.nlohmann.me/api/basic_json/operator_gt/
+src/json.hpp:24065:    /// @sa https://json.nlohmann.me/api/basic_json/operator_gt/
+src/json.hpp:24074:    /// @sa https://json.nlohmann.me/api/basic_json/operator_gt/
+src/json.hpp:24083:    /// @sa https://json.nlohmann.me/api/basic_json/operator_ge/
+src/json.hpp:24094:    /// @sa https://json.nlohmann.me/api/basic_json/operator_ge/
+src/json.hpp:24103:    /// @sa https://json.nlohmann.me/api/basic_json/operator_ge/
+src/json.hpp:24124:    /// @sa https://json.nlohmann.me/api/basic_json/operator_ltlt/
+src/json.hpp:24141:    /// @sa https://json.nlohmann.me/api/basic_json/operator_ltlt/
+src/json.hpp:24162:    /// @sa https://json.nlohmann.me/api/basic_json/parse/
+src/json.hpp:24177:    /// @sa https://json.nlohmann.me/api/basic_json/parse/
+src/json.hpp:24206:    /// @sa https://json.nlohmann.me/api/basic_json/accept/
+src/json.hpp:24216:    /// @sa https://json.nlohmann.me/api/basic_json/accept/
+src/json.hpp:24235:    /// @sa https://json.nlohmann.me/api/basic_json/sax_parse/
+src/json.hpp:24267:    /// @sa https://json.nlohmann.me/api/basic_json/sax_parse/
+src/json.hpp:24299:    /// @sa https://json.nlohmann.me/api/basic_json/sax_parse/
+src/json.hpp:24337:    /// @sa https://json.nlohmann.me/api/basic_json/operator_gtgt/
+src/json.hpp:24349:    /// @sa https://json.nlohmann.me/api/basic_json/operator_gtgt/
+src/json.hpp:24363:    /// @sa https://json.nlohmann.me/api/basic_json/type_name/
+src/json.hpp:24461:    /// @sa https://json.nlohmann.me/api/basic_json/to_cbor/
+src/json.hpp:24470:    /// @sa https://json.nlohmann.me/api/basic_json/to_cbor/
+src/json.hpp:24477:    /// @sa https://json.nlohmann.me/api/basic_json/to_cbor/
+src/json.hpp:24484:    /// @sa https://json.nlohmann.me/api/basic_json/to_msgpack/
+src/json.hpp:24493:    /// @sa https://json.nlohmann.me/api/basic_json/to_msgpack/
+src/json.hpp:24500:    /// @sa https://json.nlohmann.me/api/basic_json/to_msgpack/
+src/json.hpp:24507:    /// @sa https://json.nlohmann.me/api/basic_json/to_ubjson/
+src/json.hpp:24518:    /// @sa https://json.nlohmann.me/api/basic_json/to_ubjson/
+src/json.hpp:24526:    /// @sa https://json.nlohmann.me/api/basic_json/to_ubjson/
+src/json.hpp:24534:    /// @sa https://json.nlohmann.me/api/basic_json/to_bjdata/
+src/json.hpp:24546:    /// @sa https://json.nlohmann.me/api/basic_json/to_bjdata/
+src/json.hpp:24555:    /// @sa https://json.nlohmann.me/api/basic_json/to_bjdata/
+src/json.hpp:24564:    /// @sa https://json.nlohmann.me/api/basic_json/to_bson/
+src/json.hpp:24573:    /// @sa https://json.nlohmann.me/api/basic_json/to_bson/
+src/json.hpp:24580:    /// @sa https://json.nlohmann.me/api/basic_json/to_bson/
+src/json.hpp:24587:    /// @sa https://json.nlohmann.me/api/basic_json/from_cbor/
+src/json.hpp:24603:    /// @sa https://json.nlohmann.me/api/basic_json/from_cbor/
+src/json.hpp:24645:    /// @sa https://json.nlohmann.me/api/basic_json/from_msgpack/
+src/json.hpp:24660:    /// @sa https://json.nlohmann.me/api/basic_json/from_msgpack/
+src/json.hpp:24699:    /// @sa https://json.nlohmann.me/api/basic_json/from_ubjson/
+src/json.hpp:24714:    /// @sa https://json.nlohmann.me/api/basic_json/from_ubjson/
+src/json.hpp:24753:    /// @sa https://json.nlohmann.me/api/basic_json/from_bjdata/
+src/json.hpp:24768:    /// @sa https://json.nlohmann.me/api/basic_json/from_bjdata/
+src/json.hpp:24783:    /// @sa https://json.nlohmann.me/api/basic_json/from_bson/
+src/json.hpp:24798:    /// @sa https://json.nlohmann.me/api/basic_json/from_bson/
+src/json.hpp:24845:    /// @sa https://json.nlohmann.me/api/basic_json/operator%5B%5D/
+src/json.hpp:24859:    /// @sa https://json.nlohmann.me/api/basic_json/operator%5B%5D/
+src/json.hpp:24873:    /// @sa https://json.nlohmann.me/api/basic_json/at/
+src/json.hpp:24887:    /// @sa https://json.nlohmann.me/api/basic_json/at/
+src/json.hpp:24901:    /// @sa https://json.nlohmann.me/api/basic_json/flatten/
+src/json.hpp:24910:    /// @sa https://json.nlohmann.me/api/basic_json/unflatten/
+src/json.hpp:24926:    /// @sa https://json.nlohmann.me/api/basic_json/patch/
+src/json.hpp:25179:                        JSON_THROW(other_error::create(501, detail::concat("unsuccessful: ", val.dump()), &val));
+src/json.hpp:25197:    /// @sa https://json.nlohmann.me/api/basic_json/patch/
+src/json.hpp:25206:    /// @sa https://json.nlohmann.me/api/basic_json/diff/
+src/json.hpp:25349:    /// @sa https://json.nlohmann.me/api/basic_json/merge_patch/
+src/json.hpp:25380:/// @sa https://json.nlohmann.me/api/basic_json/to_string/
+src/json.hpp:25393:/// @sa https://json.nlohmann.me/api/basic_json/operator_literal_json/
+src/json.hpp:25415:/// @sa https://json.nlohmann.me/api/basic_json/operator_literal_json_pointer/
+src/json.hpp:25446:/// @sa https://json.nlohmann.me/api/basic_json/std_hash/
+src/json.hpp:25479:/// @sa https://json.nlohmann.me/api/basic_json/std_swap/
+src/routes/agents.h:5:// Регистрирует маршрут /api/agents/decision.
+scripts/debug_train_json.sh:3:curl -sS "127.0.0.1:3000/api/train?symbol=BTCUSDT&interval=15&episodes=3&tp=0.003&sl=0.0018&ma=12" -o /tmp/res.json
+src/routes/model_set.cpp:53:    // POST /api/model/set
+src/routes/model_set.cpp:63:    svr.Post("/api/model/set", [](const httplib::Request& req, httplib::Response& res) {
+scripts/audit_train_end_to_end.sh:28:log "Ping /api/health"
+scripts/audit_train_end_to_end.sh:29:curl -sS "127.0.0.1:${PORT}/api/health" || true
+scripts/audit_train_end_to_end.sh:31:log "Ping /api/health/ai (ok,data_ok)"
+scripts/audit_train_end_to_end.sh:32:curl -sS "127.0.0.1:${PORT}/api/health/ai" | jq '{ok, data_ok:(.data.ok)}' || true
+scripts/audit_train_end_to_end.sh:34:log "Run /api/train (short)"
+scripts/audit_train_end_to_end.sh:36:curl -sS "127.0.0.1:${PORT}/api/train?symbol=${SYM}&interval=${INT}&episodes=${EP}&tp=${TP}&sl=${SL}&ma=${MA}" \
+src/routes/robot.cpp:38:    // POST /api/robot/keys { apiKey, apiSecret, testnet? }
+src/routes/robot.cpp:39:    srv.Post("/api/robot/keys", [&](const httplib::Request& req, httplib::Response& res){
+src/routes/robot.cpp:57:    // GET /api/robot/status
+src/routes/robot.cpp:58:    srv.Get("/api/robot/status", [&](const httplib::Request& req, httplib::Response& res){
+src/routes/robot.cpp:65:    // POST /api/robot/start { ... }
+src/routes/robot.cpp:66:    srv.Post("/api/robot/start", [&](const httplib::Request& req, httplib::Response& res){
+src/routes/robot.cpp:76:    // POST /api/robot/stop
+src/routes/robot.cpp:77:    srv.Post("/api/robot/stop", [&](const httplib::Request& req, httplib::Response& res){
+scripts/train_once.sh:29:  -sS "${BASE_URL}/api/train?symbol=BTCUSDT&interval=15&episodes=60&tp=0.008&sl=0.0032&ma=12" \
+scripts/train_once.sh:36:curl -sS --max-time 30 "${BASE_URL}/api/model?symbol=BTCUSDT&interval=15" >/dev/null || true
+scripts/train_once.sh:50:POST="$(curl -sS --max-time 30 "${BASE_URL}/api/infer?symbol=BTCUSDT&interval=15" \
+src/routes/train.cpp:78:    svr.Get("/api/train", [](const Request& req, Response& res) {
+scripts/agent_report.sh:25:JSON="$(curl -sS "http://${HOST}:${PORT}/api/train?symbol=${SYM}&interval=${INT}&episodes=${EPISODES}&tp=${TP}&sl=${SL}&ma=${MA}")"
+scripts/run_winrate_grid.sh:22:      J="$(curl -sS "http://127.0.0.1:3000/api/train?symbol=${SYMBOL}&interval=${INTERVAL}&episodes=${EPISODES}&tp=${tp}&sl=${sl}&ma=${ma}&flat=1")"
+scripts/test_agents.sh:17:if ! curl -sS "http://${BASE}/api/health" | jq -e '.ok==true' >/dev/null; then
+scripts/test_agents.sh:18:  echo "[FAIL] /api/health not ok" >&2
+scripts/test_agents.sh:28:    url="http://${BASE}/api/agents/test?type=${t}&thr=${thr}"
+scripts/smoke_trade_ready.sh:29:curl -sS "${BASE}/api/model" | jq . >/tmp/model.json || fail "model api"
+scripts/smoke_trade_ready.sh:37:curl -sS "${BASE}/api/infer?symbol=BTCUSDT&interval=15" | jq . >/tmp/infer.json || fail "infer api"
+scripts/smoke_trade_ready.sh:41:curl -sS "${BASE}/api/infer?symbol=BTCUSDT&interval=15&mtf=1" | jq . >/tmp/infer_mtf.json || fail "infer mtf api"
+scripts/smoke_trade_ready.sh:45:curl -sS "${BASE}/api/agents/run?symbol=BTCUSDT&interval=15" | jq . >/tmp/agents.json || fail "agents api"
+scripts/smoke_trade_ready.sh:49:curl -sS "${BASE}/api/train?symbol=BTCUSDT&interval=15&episodes=4&tp=0.003&sl=0.0018&ma=12" | jq . >/tmp/train.json || warn "train api"
+scripts/qa_eval.sh:6:curl -sS "http://127.0.0.1:3000/api/infer?symbol=BTCUSDT&interval=15" \
+scripts/qa_eval.sh:14:function envq(){ curl -sS "http://127.0.0.1:3001/api/train_env?steps=3000&policy=model&fee=0.0002&tp=0.0044&sl=0.0016&thr=$1&atr=$2" \
+scripts/qa_eval.sh:29:curl -sS "http://127.0.0.1:3001/api/train_env?steps=3000&policy=model&fee=0.0002&tp=0.0044&sl=0.0016&thr=0.36&atr=1&elo=0.20" \
+scripts/guard_routes.sh:5:# Разрешаем регистрацию /api/health/ai только в src/routes/health_ai.cpp
+scripts/guard_routes.sh:17:  if grep -q '"/api/health/ai"' "$f"; then
+scripts/guard_routes.sh:25:    echo "[VIOLATION] /api/health/ai registered in $f"
+scripts/guard_routes.sh:31:if ! grep -q '"/api/health/ai"' src/routes/health_ai.cpp; then
+src/routes/symbol.cpp:80:  srv.Get("/api/symbol/status", [](const httplib::Request& req, httplib::Response& res) {
+src/routes/symbol.cpp:109:  srv.Post("/api/symbol/hydrate", [](const httplib::Request& req, httplib::Response& res) {
+src/routes/symbol.cpp:140:  srv.Get("/api/symbol/task", [](const httplib::Request& req, httplib::Response& res) {
+src/routes/symbol.cpp:151:  srv.Get("/api/symbol/metrics", [](const httplib::Request&, httplib::Response& res) {
+src/routes/health.cpp:9:    // --- /api/health --- простая проверка живости
+src/routes/health.cpp:10:    srv.Get("/api/health", [](const httplib::Request&, httplib::Response& res) {
+src/routes/health.cpp:16:    // ВНИМАНИЕ: /api/health/ai регистрируется в routes/health_ai.cpp
+src/routes/agents.cpp:57:    svr.Get("/api/agents/decision", [agent_enabled](const httplib::Request& req, httplib::Response& res) {
+src/routes/agents.cpp:94:    svr.Get("/api/agents/run", [agent_enabled](const httplib::Request& req, httplib::Response& res){
+src/routes/agents.cpp:148:    svr.Get("/api/agents/stop", [](const httplib::Request&, httplib::Response& res){
+src/routes/agents.cpp:162:    svr.Get("/api/agents/status", [](const httplib::Request&, httplib::Response& res){
+src/routes/health.inc.cpp.disabled:20:  srv.Get("/api/health/ai", [](const httplib::Request& req, httplib::Response& res){
+src/routes/model.h:4:// Регистрирует /api/model/* роуты:
+src/routes/model.h:5:// - GET /api/model/status?symbol=BTCUSDT&interval=15  -> краткий статус (существует ли, meta)
+src/routes/model.h:6:// - GET /api/model/read?symbol=BTCUSDT&interval=15    -> полный JSON модели с диска
+src/routes/backfill.inc.cpp:14:// /api/backfill?symbol=BTCUSDT&months=1&which=15,60,240,1440
+src/routes/backfill.inc.cpp:16:  srv.Get("/api/backfill", [](const httplib::Request& req, httplib::Response& res){
+src/routes/infer.inc.cpp:5:  srv.Get("/api/infer", [](const httplib::Request& req, httplib::Response& res){
+src/routes/infer.inc.cpp:26:      json out{{"ok",false},{"error","no_cached_data"},{"hint","call /api/backfill first"}};
+src/routes/infer.inc.cpp:86:  srv.Get("/api/infer/batch", [](const httplib::Request& req, httplib::Response& res){
+src/routes/infer.inc.cpp:104:      json out{{"ok",false},{"error","no_cached_data"},{"hint","call /api/backfill first"}};
+src/routes/health_ai.cpp:158:    svr.Get("/api/health/ai", [](const httplib::Request&, httplib::Response& res) {
+src/routes/infer.cpp:87:    srv.Get("/api/infer/feat_cols", [&](const httplib::Request& req, httplib::Response& res){
+src/routes/infer.cpp:105:    // --- MAIN: /api/infer ---
+src/routes/infer.cpp:106:    srv.Get("/api/infer", [&](const httplib::Request& req, httplib::Response& res){
+src/routes/infer.cpp:130:            json out{{"ok",false},{"error","no_cached_data"},{"hint","call /api/backfill first"}};
+src/routes/model.cpp:30:    svr.Get("/api/model", [](const httplib::Request&, httplib::Response& res) {
+src/routes/model.cpp:55:    svr.Get("/api/model/reload", [](const httplib::Request& req, httplib::Response& res) {
+src/routes/model.inc.cpp:5:  srv.Get("/api/model", [](const httplib::Request& req, httplib::Response& res){

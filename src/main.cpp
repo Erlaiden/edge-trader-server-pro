@@ -22,6 +22,9 @@
 
 // Наш новый конвейер (этот файл ты только что создал)
 #include "routes/pipeline.cpp"
+#include "routes/compat_stubs.cpp"
+#include "routes/cors_and_errors.cpp"
+#include "routes/version_status.cpp"
 
 int main(int argc, char** argv) {
     int port = 3000;
@@ -37,6 +40,7 @@ int main(int argc, char** argv) {
 
     // 2) HTTP-сервер
     httplib::Server svr;
+    enable_cors_and_errors(svr);
 
     // 3) Регистрация роутов
     register_health_routes(svr);
@@ -54,6 +58,8 @@ int main(int argc, char** argv) {
 
     // Новый: конвейер подготовки и обучения
     register_pipeline_routes(svr);
+    register_compat_stubs(svr);
+    register_version_status_routes(svr);
 
     std::cout << "[EdgeTrader] server started on port " << port
               << " (thr=" << etai::get_model_thr()

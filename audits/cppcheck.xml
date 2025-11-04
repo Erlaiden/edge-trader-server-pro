@@ -1,0 +1,1155 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<results version="2">
+    <cppcheck version="2.13.0"/>
+    <errors>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;armadillo&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;armadillo&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/metrics.h" line="2" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cmath&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cmath&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/metrics.cpp" line="2" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;atomic&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;atomic&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/rewardv2_accessors.cpp" line="2" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cstdlib&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cstdlib&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/rewardv2_accessors.cpp" line="3" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cmath&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cmath&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/rewardv2_accessors.cpp" line="4" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;iostream&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;iostream&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/main.cpp" line="1" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cstdlib&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cstdlib&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/main.cpp" line="2" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;arpa/inet.h&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;arpa/inet.h&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/httplib.h" line="245" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;ifaddrs.h&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;ifaddrs.h&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/httplib.h" line="247" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;net/if.h&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;net/if.h&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/httplib.h" line="255" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;netdb.h&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;netdb.h&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/httplib.h" line="256" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;netinet/in.h&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;netinet/in.h&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/httplib.h" line="257" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;csignal&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;csignal&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/httplib.h" line="261" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;netinet/tcp.h&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;netinet/tcp.h&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/httplib.h" line="262" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;poll.h&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;poll.h&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/httplib.h" line="263" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;pthread.h&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;pthread.h&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/httplib.h" line="264" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;sys/mman.h&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;sys/mman.h&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/httplib.h" line="265" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;sys/socket.h&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;sys/socket.h&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/httplib.h" line="266" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;sys/un.h&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;sys/un.h&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/httplib.h" line="267" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;unistd.h&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;unistd.h&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/httplib.h" line="268" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;algorithm&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;algorithm&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/httplib.h" line="280" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;array&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;array&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/httplib.h" line="281" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;atomic&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;atomic&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/httplib.h" line="282" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cassert&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cassert&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/httplib.h" line="283" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cctype&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cctype&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/httplib.h" line="284" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;climits&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;climits&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/httplib.h" line="285" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;condition_variable&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;condition_variable&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/httplib.h" line="286" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cstring&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cstring&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/httplib.h" line="287" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;errno.h&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;errno.h&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/httplib.h" line="288" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;exception&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;exception&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/httplib.h" line="289" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;fcntl.h&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;fcntl.h&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/httplib.h" line="290" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;functional&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;functional&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/httplib.h" line="291" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;iomanip&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;iomanip&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/httplib.h" line="292" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;iostream&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;iostream&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/httplib.h" line="293" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;list&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;list&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/httplib.h" line="294" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;map&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;map&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/httplib.h" line="295" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;memory&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;memory&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/httplib.h" line="296" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;mutex&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;mutex&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/httplib.h" line="297" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;random&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;random&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/httplib.h" line="298" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;regex&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;regex&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/httplib.h" line="299" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;set&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;set&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/httplib.h" line="300" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;sstream&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;sstream&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/httplib.h" line="301" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;string&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;string&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/httplib.h" line="302" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;sys/stat.h&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;sys/stat.h&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/httplib.h" line="303" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;thread&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;thread&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/httplib.h" line="304" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;unordered_map&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;unordered_map&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/httplib.h" line="305" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;unordered_set&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;unordered_set&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/httplib.h" line="306" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;utility&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;utility&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/httplib.h" line="307" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;openssl/err.h&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;openssl/err.h&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/httplib.h" line="340" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;openssl/evp.h&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;openssl/evp.h&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/httplib.h" line="341" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;openssl/ssl.h&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;openssl/ssl.h&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/httplib.h" line="342" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;openssl/x509v3.h&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;openssl/x509v3.h&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/httplib.h" line="343" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;iostream&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;iostream&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/httplib.h" line="349" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;sstream&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;sstream&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/httplib.h" line="350" column="0"/>
+        </error>
+        <error id="preprocessorErrorDirective" severity="error" msg="#error Sorry, OpenSSL versions prior to 3.0.0 are not supported" verbose="#error Sorry, OpenSSL versions prior to 3.0.0 are not supported">
+            <location file="src/httplib.h" line="358" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;armadillo&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;armadillo&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/ppo_pro.h" line="2" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;algorithm&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;algorithm&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="21" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cstddef&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cstddef&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="22" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;functional&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;functional&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="23" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;initializer_list&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;initializer_list&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="24" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;iosfwd&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;iosfwd&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="26" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;iterator&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;iterator&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="28" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;memory&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;memory&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="29" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;string&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;string&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="30" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;utility&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;utility&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="31" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;vector&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;vector&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="32" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;utility&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;utility&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="45" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;algorithm&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;algorithm&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="171" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;array&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;array&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="172" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;forward_list&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;forward_list&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="173" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;iterator&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;iterator&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="174" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;map&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;map&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="175" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;string&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;string&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="176" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;tuple&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;tuple&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="177" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;type_traits&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;type_traits&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="178" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;unordered_map&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;unordered_map&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="179" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;utility&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;utility&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="180" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;valarray&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;valarray&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="181" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cstddef&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cstddef&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="194" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;exception&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;exception&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="195" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;stdexcept&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;stdexcept&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="199" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;string&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;string&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="200" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;vector&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;vector&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="201" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;array&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;array&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="214" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cstddef&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cstddef&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="215" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cstdint&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cstdint&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="216" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;string&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;string&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="217" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;utility&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;utility&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="230" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;type_traits&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;type_traits&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="242" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cstdlib&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cstdlib&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="2545" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cassert&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cassert&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="2574" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cstddef&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cstddef&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="3156" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;array&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;array&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="3199" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cstddef&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cstddef&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="3200" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;type_traits&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;type_traits&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="3201" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;utility&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;utility&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="3202" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;limits&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;limits&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="3372" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;string&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;string&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="3373" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;tuple&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;tuple&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="3374" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;type_traits&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;type_traits&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="3375" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;utility&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;utility&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="3376" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;iterator&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;iterator&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="3391" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cstdint&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cstdint&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="3504" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;map&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;map&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="3505" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;memory&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;memory&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="3506" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;string&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;string&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="3507" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;vector&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;vector&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="3508" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cstring&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cstring&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="4393" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;string&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;string&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="4394" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;utility&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;utility&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="4395" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;optional&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;optional&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="4867" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;optional&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;optional&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="5432" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;algorithm&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;algorithm&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="5435" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;iterator&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;iterator&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="5436" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;memory&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;memory&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="5437" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;string&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;string&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="5438" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;tuple&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;tuple&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="5439" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;type_traits&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;type_traits&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="5440" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;utility&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;utility&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="5441" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;valarray&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;valarray&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="5442" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;vector&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;vector&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="5443" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cstddef&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cstddef&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="5456" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;iterator&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;iterator&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="5457" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;tuple&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;tuple&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="5458" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;utility&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;utility&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="5459" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cstddef&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cstddef&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="5480" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;string&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;string&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="5481" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cstdint&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cstdint&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="6242" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;tuple&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;tuple&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="6243" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;utility&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;utility&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="6244" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cstdint&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cstdint&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="6354" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cstddef&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cstddef&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="6355" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;functional&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;functional&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="6356" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;algorithm&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;algorithm&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="6487" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;array&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;array&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="6488" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cmath&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cmath&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="6489" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cstddef&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cstddef&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="6490" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cstdint&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cstdint&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="6491" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cstdio&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cstdio&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="6492" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cstring&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cstring&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="6493" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;iterator&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;iterator&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="6494" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;limits&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;limits&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="6495" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;string&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;string&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="6496" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;utility&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;utility&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="6497" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;vector&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;vector&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="6498" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;array&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;array&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="6516" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cstddef&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cstddef&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="6517" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cstring&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cstring&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="6518" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;iterator&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;iterator&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="6519" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;memory&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;memory&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="6520" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;numeric&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;numeric&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="6521" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;streambuf&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;streambuf&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="6522" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;string&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;string&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="6523" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;type_traits&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;type_traits&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="6524" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;utility&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;utility&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="6525" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cstdio&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cstdio&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="6528" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;istream&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;istream&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="6529" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cstddef&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cstddef&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="7072" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;string&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;string&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="7073" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;type_traits&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;type_traits&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="7074" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;utility&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;utility&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="7075" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;vector&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;vector&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="7076" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;array&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;array&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="7091" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;clocale&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;clocale&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="7092" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cstddef&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cstddef&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="7093" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cstdio&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cstdio&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="7094" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cstdlib&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cstdlib&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="7095" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;initializer_list&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;initializer_list&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="7096" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;string&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;string&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="7097" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;utility&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;utility&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="7098" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;vector&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;vector&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="7099" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cstdint&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cstdint&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="9715" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;utility&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;utility&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="9716" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;string&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;string&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="9717" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cmath&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cmath&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="12936" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cstdint&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cstdint&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="12937" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;functional&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;functional&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="12938" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;string&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;string&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="12939" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;utility&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;utility&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="12940" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;vector&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;vector&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="12941" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cstddef&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cstddef&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="13495" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;limits&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;limits&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="13496" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;iterator&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;iterator&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="13654" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;type_traits&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;type_traits&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="13655" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cstddef&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cstddef&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="14425" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;iterator&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;iterator&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="14426" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;utility&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;utility&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="14427" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;type_traits&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;type_traits&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="14560" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;algorithm&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;algorithm&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="14602" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cctype&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cctype&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="14603" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cerrno&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cerrno&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="14604" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cstdlib&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cstdlib&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="14605" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;iosfwd&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;iosfwd&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="14607" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;limits&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;limits&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="14609" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;numeric&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;numeric&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="14610" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;string&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;string&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="14611" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;utility&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;utility&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="14612" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;vector&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;vector&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="14613" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;initializer_list&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;initializer_list&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="15597" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;utility&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;utility&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="15598" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;algorithm&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;algorithm&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="15691" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;array&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;array&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="15692" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;map&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;map&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="15693" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cmath&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cmath&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="15694" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cstdint&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cstdint&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="15695" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cstring&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cstring&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="15696" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;limits&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;limits&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="15697" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;string&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;string&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="15698" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;utility&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;utility&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="15699" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;vector&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;vector&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="15700" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;algorithm&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;algorithm&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="15717" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cstddef&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cstddef&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="15718" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;iterator&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;iterator&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="15719" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;memory&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;memory&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="15720" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;string&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;string&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="15721" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;vector&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;vector&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="15722" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;ios&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;ios&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="15725" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;ostream&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;ostream&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="15726" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;algorithm&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;algorithm&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="17711" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;array&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;array&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="17712" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;clocale&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;clocale&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="17713" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cmath&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cmath&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="17714" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cstddef&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cstddef&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="17715" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cstdint&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cstdint&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="17716" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cstdio&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cstdio&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="17717" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;limits&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;limits&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="17718" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;string&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;string&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="17719" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;iomanip&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;iomanip&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="17720" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;type_traits&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;type_traits&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="17721" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;utility&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;utility&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="17722" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;array&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;array&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="17736" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cmath&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cmath&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="17737" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cstdint&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cstdint&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="17738" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cstring&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cstring&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="17739" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;limits&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;limits&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="17740" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;type_traits&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;type_traits&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="17741" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;functional&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;functional&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="19831" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;initializer_list&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;initializer_list&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="19832" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;iterator&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;iterator&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="19833" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;memory&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;memory&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="19834" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;stdexcept&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;stdexcept&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="19835" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;type_traits&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;type_traits&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="19836" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;utility&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;utility&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="19837" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;vector&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;vector&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="19838" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;any&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;any&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="20186" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;string_view&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;string_view&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/json.hpp" line="20188" column="0"/>
+        </error>
+        <error id="missingInclude" severity="information" msg="Include file: &quot;features.h&quot; not found." verbose="Include file: &quot;features.h&quot; not found.">
+            <location file="src/ppo_pro.cpp" line="2" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;armadillo&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;armadillo&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/ppo_pro.cpp" line="4" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;vector&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;vector&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/ppo_pro.cpp" line="5" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cmath&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cmath&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/ppo_pro.cpp" line="6" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;stdexcept&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;stdexcept&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/ppo_pro.cpp" line="7" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;iostream&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;iostream&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/ppo_pro.cpp" line="8" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cstdlib&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cstdlib&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/ppo_pro.cpp" line="9" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;vector&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;vector&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/features/support_resistance.h" line="2" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;vector&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;vector&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/features/manip_detector.h" line="2" column="0"/>
+        </error>
+        <error id="syntaxError" severity="error" msg="syntax error" verbose="syntax error" file0="src/ppo_pro.cpp">
+            <location file="src/json.hpp" line="3542" column="49"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;armadillo&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;armadillo&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/ppo.h" line="3" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;armadillo&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;armadillo&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/ppo.cpp" line="2" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cmath&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cmath&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/ppo.cpp" line="3" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;algorithm&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;algorithm&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/ppo.cpp" line="4" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;random&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;random&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/ppo.cpp" line="5" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;ctime&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;ctime&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/ppo.cpp" line="6" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;vector&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;vector&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/ppo.cpp" line="7" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;utility&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;utility&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/ppo.cpp" line="8" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;armadillo&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;armadillo&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/optim/adam.h" line="2" column="0"/>
+        </error>
+        <error id="noExplicitConstructor" severity="style" msg="Struct &apos;Adam&apos; has a constructor with 1 argument that is not explicit." verbose="Struct &apos;Adam&apos; has a constructor with 1 argument that is not explicit. Such, so called &quot;Converting constructors&quot;, should in general be explicit for type safety reasons as that prevents unintended implicit conversions." cwe="398" file0="src/optim/adam.cpp">
+            <location file="src/optim/adam.h" line="16" column="5"/>
+            <symbol>Adam</symbol>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;string&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;string&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/utils_data.h" line="2" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;armadillo&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;armadillo&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/utils_data.h" line="3" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;filesystem&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;filesystem&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/utils_data.cpp" line="2" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;fstream&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;fstream&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/utils_data.cpp" line="3" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;sstream&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;sstream&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/utils_data.cpp" line="4" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;iostream&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;iostream&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/utils_data.cpp" line="5" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;vector&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;vector&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/utils_data.cpp" line="6" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;algorithm&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;algorithm&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/utils_data.cpp" line="7" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cctype&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cctype&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/utils_data.cpp" line="8" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;atomic&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;atomic&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/rt_metrics.h" line="2" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;string&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;string&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/rt_metrics.h" line="3" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;ctime&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;ctime&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/rt_metrics.cpp" line="2" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;armadillo&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;armadillo&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/infer_policy.h" line="2" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;armadillo&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;armadillo&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/features/features.h" line="2" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;armadillo&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;armadillo&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/infer_policy.cpp" line="4" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cmath&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cmath&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/infer_policy.cpp" line="5" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;vector&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;vector&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/infer_policy.cpp" line="6" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;algorithm&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;algorithm&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/infer_policy.cpp" line="7" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;string&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;string&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/train_logic.h" line="3" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cstdint&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cstdint&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/server_accessors.h" line="2" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;string&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;string&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/http_reply.h" line="3" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;armadillo&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;armadillo&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/train_logic.cpp" line="6" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;mutex&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;mutex&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/train_logic.cpp" line="7" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;iostream&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;iostream&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/train_logic.cpp" line="8" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;fstream&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;fstream&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/train_logic.cpp" line="9" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;atomic&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;atomic&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/server_accessors.cpp" line="3" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;limits&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;limits&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/server_accessors.cpp" line="4" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;fstream&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;fstream&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/server_accessors.cpp" line="5" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cmath&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cmath&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/server_accessors.cpp" line="6" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;vector&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;vector&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/context_detector.h" line="2" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;armadillo&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;armadillo&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/features/features.cpp" line="4" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cmath&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cmath&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/features/features.cpp" line="5" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;algorithm&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;algorithm&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/features/features.cpp" line="6" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;vector&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;vector&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/features/features.cpp" line="7" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cstdlib&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cstdlib&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/features/features.cpp" line="8" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;algorithm&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;algorithm&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/context_detector.cpp" line="2" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cmath&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cmath&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/context_detector.cpp" line="3" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;limits&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;limits&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/context_detector.cpp" line="4" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;vector&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;vector&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/features/money_flow.h" line="2" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cmath&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cmath&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/features/manip_detector.cpp" line="2" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;algorithm&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;algorithm&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/features/manip_detector.cpp" line="3" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;algorithm&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;algorithm&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/features/support_resistance.cpp" line="2" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cmath&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cmath&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/features/support_resistance.cpp" line="3" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;algorithm&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;algorithm&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/features/money_flow.cpp" line="2" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cmath&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cmath&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/features/money_flow.cpp" line="3" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;numeric&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;numeric&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/features/money_flow.cpp" line="4" column="0"/>
+        </error>
+        <error id="useStlAlgorithm" severity="style" msg="Consider using std::accumulate algorithm instead of a raw loop." verbose="Consider using std::accumulate algorithm instead of a raw loop." cwe="398" file0="src/features/money_flow.cpp">
+            <location file="src/features/money_flow.cpp" line="61" column="36"/>
+        </error>
+        <error id="useStlAlgorithm" severity="style" msg="Consider using std::transform algorithm instead of a raw loop." verbose="Consider using std::transform algorithm instead of a raw loop." cwe="398" file0="src/features/money_flow.cpp">
+            <location file="src/features/money_flow.cpp" line="63" column="32"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;armadillo&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;armadillo&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/agents/agent_long.cpp" line="1" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cmath&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cmath&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/agents/agent_long.cpp" line="2" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;memory&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;memory&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/agents/agent_long.cpp" line="3" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;armadillo&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;armadillo&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/agents/agent_base.h" line="2" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;string&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;string&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/agents/agent_base.h" line="3" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;memory&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;memory&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/agents/agent_base.h" line="4" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;memory&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;memory&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/agents/agents_factory.h" line="2" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;armadillo&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;armadillo&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/agents/agent_short.cpp" line="1" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cmath&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cmath&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/agents/agent_short.cpp" line="2" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;memory&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;memory&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/agents/agent_short.cpp" line="3" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;armadillo&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;armadillo&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/agents/agent_flat.cpp" line="1" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cmath&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cmath&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/agents/agent_flat.cpp" line="2" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;memory&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;memory&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/agents/agent_flat.cpp" line="3" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;armadillo&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;armadillo&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/agents/agent_correction.cpp" line="1" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cmath&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cmath&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/agents/agent_correction.cpp" line="2" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;memory&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;memory&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/agents/agent_correction.cpp" line="3" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;armadillo&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;armadillo&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/agents/agent_breakout.cpp" line="1" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;cmath&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;cmath&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/agents/agent_breakout.cpp" line="2" column="0"/>
+        </error>
+        <error id="missingIncludeSystem" severity="information" msg="Include file: &lt;memory&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results." verbose="Include file: &lt;memory&gt; not found. Please note: Cppcheck does not need standard library headers to get proper results.">
+            <location file="src/agents/agent_breakout.cpp" line="3" column="0"/>
+        </error>
+        <error id="unusedFunction" severity="style" msg="The function &apos;confidence&apos; is never used." verbose="The function &apos;confidence&apos; is never used." cwe="561">
+            <location file="src/agents/agent_base.h" line="22" column="0"/>
+            <symbol>confidence</symbol>
+        </error>
+        <error id="unusedFunction" severity="style" msg="The function &apos;reset&apos; is never used." verbose="The function &apos;reset&apos; is never used." cwe="561">
+            <location file="src/agents/agent_base.h" line="23" column="0"/>
+            <symbol>reset</symbol>
+        </error>
+        <error id="unusedFunction" severity="style" msg="The function &apos;make_agent_breakout&apos; is never used." verbose="The function &apos;make_agent_breakout&apos; is never used." cwe="561">
+            <location file="src/agents/agent_breakout.cpp" line="24" column="0"/>
+            <symbol>make_agent_breakout</symbol>
+        </error>
+        <error id="unusedFunction" severity="style" msg="The function &apos;make_agent_correction&apos; is never used." verbose="The function &apos;make_agent_correction&apos; is never used." cwe="561">
+            <location file="src/agents/agent_correction.cpp" line="23" column="0"/>
+            <symbol>make_agent_correction</symbol>
+        </error>
+        <error id="unusedFunction" severity="style" msg="The function &apos;make_agent_flat&apos; is never used." verbose="The function &apos;make_agent_flat&apos; is never used." cwe="561">
+            <location file="src/agents/agent_flat.cpp" line="23" column="0"/>
+            <symbol>make_agent_flat</symbol>
+        </error>
+        <error id="unusedFunction" severity="style" msg="The function &apos;name&apos; is never used." verbose="The function &apos;name&apos; is never used." cwe="561">
+            <location file="src/agents/agent_long.cpp" line="11" column="0"/>
+            <symbol>name</symbol>
+        </error>
+        <error id="unusedFunction" severity="style" msg="The function &apos;decide&apos; is never used." verbose="The function &apos;decide&apos; is never used." cwe="561">
+            <location file="src/agents/agent_long.cpp" line="13" column="0"/>
+            <symbol>decide</symbol>
+        </error>
+        <error id="unusedFunction" severity="style" msg="The function &apos;make_agent_long&apos; is never used." verbose="The function &apos;make_agent_long&apos; is never used." cwe="561">
+            <location file="src/agents/agent_long.cpp" line="24" column="0"/>
+            <symbol>make_agent_long</symbol>
+        </error>
+        <error id="unusedFunction" severity="style" msg="The function &apos;make_agent_short&apos; is never used." verbose="The function &apos;make_agent_short&apos; is never used." cwe="561">
+            <location file="src/agents/agent_short.cpp" line="24" column="0"/>
+            <symbol>make_agent_short</symbol>
+        </error>
+        <error id="unusedFunction" severity="style" msg="The function &apos;false_break_flags&apos; is never used." verbose="The function &apos;false_break_flags&apos; is never used." cwe="561">
+            <location file="src/features/manip_detector.cpp" line="6" column="0"/>
+            <symbol>false_break_flags</symbol>
+        </error>
+        <error id="unusedFunction" severity="style" msg="The function &apos;trap_index_series&apos; is never used." verbose="The function &apos;trap_index_series&apos; is never used." cwe="561">
+            <location file="src/features/manip_detector.cpp" line="29" column="0"/>
+            <symbol>trap_index_series</symbol>
+        </error>
+        <error id="unusedFunction" severity="style" msg="The function &apos;calc_mfi&apos; is never used." verbose="The function &apos;calc_mfi&apos; is never used." cwe="561">
+            <location file="src/features/money_flow.cpp" line="8" column="0"/>
+            <symbol>calc_mfi</symbol>
+        </error>
+        <error id="unusedFunction" severity="style" msg="The function &apos;calc_flow_ratio&apos; is never used." verbose="The function &apos;calc_flow_ratio&apos; is never used." cwe="561">
+            <location file="src/features/money_flow.cpp" line="36" column="0"/>
+            <symbol>calc_flow_ratio</symbol>
+        </error>
+        <error id="unusedFunction" severity="style" msg="The function &apos;calc_cum_flow&apos; is never used." verbose="The function &apos;calc_cum_flow&apos; is never used." cwe="561">
+            <location file="src/features/money_flow.cpp" line="48" column="0"/>
+            <symbol>calc_cum_flow</symbol>
+        </error>
+        <error id="unusedFunction" severity="style" msg="The function &apos;calc_sfi&apos; is never used." verbose="The function &apos;calc_sfi&apos; is never used." cwe="561">
+            <location file="src/features/money_flow.cpp" line="68" column="0"/>
+            <symbol>calc_sfi</symbol>
+        </error>
+        <error id="unusedFunction" severity="style" msg="The function &apos;rolling_support&apos; is never used." verbose="The function &apos;rolling_support&apos; is never used." cwe="561">
+            <location file="src/features/support_resistance.cpp" line="17" column="0"/>
+            <symbol>rolling_support</symbol>
+        </error>
+        <error id="unusedFunction" severity="style" msg="The function &apos;rolling_resistance&apos; is never used." verbose="The function &apos;rolling_resistance&apos; is never used." cwe="561">
+            <location file="src/features/support_resistance.cpp" line="27" column="0"/>
+            <symbol>rolling_resistance</symbol>
+        </error>
+        <error id="unusedFunction" severity="style" msg="The function &apos;calc_sharpe&apos; is never used." verbose="The function &apos;calc_sharpe&apos; is never used." cwe="561">
+            <location file="src/metrics.cpp" line="6" column="0"/>
+            <symbol>calc_sharpe</symbol>
+        </error>
+        <error id="unusedFunction" severity="style" msg="The function &apos;calc_max_drawdown&apos; is never used." verbose="The function &apos;calc_max_drawdown&apos; is never used." cwe="561">
+            <location file="src/metrics.cpp" line="16" column="0"/>
+            <symbol>calc_max_drawdown</symbol>
+        </error>
+        <error id="unusedFunction" severity="style" msg="The function &apos;calc_winrate&apos; is never used." verbose="The function &apos;calc_winrate&apos; is never used." cwe="561">
+            <location file="src/metrics.cpp" line="29" column="0"/>
+            <symbol>calc_winrate</symbol>
+        </error>
+        <error id="unusedFunction" severity="style" msg="The function &apos;step&apos; is never used." verbose="The function &apos;step&apos; is never used." cwe="561">
+            <location file="src/optim/adam.h" line="25" column="0"/>
+            <symbol>step</symbol>
+        </error>
+        <error id="unusedFunction" severity="style" msg="The function &apos;get_reward_avg&apos; is never used." verbose="The function &apos;get_reward_avg&apos; is never used." cwe="561">
+            <location file="src/rewardv2_accessors.cpp" line="34" column="0"/>
+            <symbol>get_reward_avg</symbol>
+        </error>
+        <error id="unusedFunction" severity="style" msg="The function &apos;get_reward_sharpe&apos; is never used." verbose="The function &apos;get_reward_sharpe&apos; is never used." cwe="561">
+            <location file="src/rewardv2_accessors.cpp" line="35" column="0"/>
+            <symbol>get_reward_sharpe</symbol>
+        </error>
+        <error id="unusedFunction" severity="style" msg="The function &apos;get_reward_winrate&apos; is never used." verbose="The function &apos;get_reward_winrate&apos; is never used." cwe="561">
+            <location file="src/rewardv2_accessors.cpp" line="36" column="0"/>
+            <symbol>get_reward_winrate</symbol>
+        </error>
+        <error id="unusedFunction" severity="style" msg="The function &apos;get_reward_drawdown&apos; is never used." verbose="The function &apos;get_reward_drawdown&apos; is never used." cwe="561">
+            <location file="src/rewardv2_accessors.cpp" line="37" column="0"/>
+            <symbol>get_reward_drawdown</symbol>
+        </error>
+        <error id="unusedFunction" severity="style" msg="The function &apos;get_reward_wctx&apos; is never used." verbose="The function &apos;get_reward_wctx&apos; is never used." cwe="561">
+            <location file="src/rewardv2_accessors.cpp" line="38" column="0"/>
+            <symbol>get_reward_wctx</symbol>
+        </error>
+        <error id="unusedFunction" severity="style" msg="The function &apos;set_reward_avg&apos; is never used." verbose="The function &apos;set_reward_avg&apos; is never used." cwe="561">
+            <location file="src/rewardv2_accessors.cpp" line="40" column="0"/>
+            <symbol>set_reward_avg</symbol>
+        </error>
+        <error id="unusedFunction" severity="style" msg="The function &apos;set_reward_sharpe&apos; is never used." verbose="The function &apos;set_reward_sharpe&apos; is never used." cwe="561">
+            <location file="src/rewardv2_accessors.cpp" line="41" column="0"/>
+            <symbol>set_reward_sharpe</symbol>
+        </error>
+        <error id="unusedFunction" severity="style" msg="The function &apos;set_reward_winrate&apos; is never used." verbose="The function &apos;set_reward_winrate&apos; is never used." cwe="561">
+            <location file="src/rewardv2_accessors.cpp" line="42" column="0"/>
+            <symbol>set_reward_winrate</symbol>
+        </error>
+        <error id="unusedFunction" severity="style" msg="The function &apos;set_reward_drawdown&apos; is never used." verbose="The function &apos;set_reward_drawdown&apos; is never used." cwe="561">
+            <location file="src/rewardv2_accessors.cpp" line="43" column="0"/>
+            <symbol>set_reward_drawdown</symbol>
+        </error>
+        <error id="unusedFunction" severity="style" msg="The function &apos;set_reward_wctx&apos; is never used." verbose="The function &apos;set_reward_wctx&apos; is never used." cwe="561">
+            <location file="src/rewardv2_accessors.cpp" line="44" column="0"/>
+            <symbol>set_reward_wctx</symbol>
+        </error>
+        <error id="unusedFunction" severity="style" msg="The function &apos;get_fee_per_trade&apos; is never used." verbose="The function &apos;get_fee_per_trade&apos; is never used." cwe="561">
+            <location file="src/rewardv2_accessors.cpp" line="47" column="0"/>
+            <symbol>get_fee_per_trade</symbol>
+        </error>
+        <error id="unusedFunction" severity="style" msg="The function &apos;get_alpha_sharpe&apos; is never used." verbose="The function &apos;get_alpha_sharpe&apos; is never used." cwe="561">
+            <location file="src/rewardv2_accessors.cpp" line="48" column="0"/>
+            <symbol>get_alpha_sharpe</symbol>
+        </error>
+        <error id="unusedFunction" severity="style" msg="The function &apos;init_rewardv2_from_env&apos; is never used." verbose="The function &apos;init_rewardv2_from_env&apos; is never used." cwe="561">
+            <location file="src/rewardv2_accessors.cpp" line="57" column="0"/>
+            <symbol>init_rewardv2_from_env</symbol>
+        </error>
+        <error id="unusedFunction" severity="style" msg="The function &apos;get_lambda_risk_eff&apos; is never used." verbose="The function &apos;get_lambda_risk_eff&apos; is never used." cwe="561">
+            <location file="src/rewardv2_accessors.cpp" line="68" column="0"/>
+            <symbol>get_lambda_risk_eff</symbol>
+        </error>
+        <error id="unusedFunction" severity="style" msg="The function &apos;get_mu_manip_eff&apos; is never used." verbose="The function &apos;get_mu_manip_eff&apos; is never used." cwe="561">
+            <location file="src/rewardv2_accessors.cpp" line="69" column="0"/>
+            <symbol>get_mu_manip_eff</symbol>
+        </error>
+        <error id="unusedFunction" severity="style" msg="The function &apos;bool01&apos; is never used." verbose="The function &apos;bool01&apos; is never used." cwe="561">
+            <location file="src/rt_metrics.h" line="49" column="0"/>
+            <symbol>bool01</symbol>
+        </error>
+        <error id="checkersReport" severity="information" msg="Active checkers: There was critical errors (use --checkers-report=&lt;filename&gt; to see details)" verbose="Active checkers: There was critical errors (use --checkers-report=&lt;filename&gt; to see details)"/>
+    </errors>
+</results>
