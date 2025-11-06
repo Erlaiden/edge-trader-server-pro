@@ -11,18 +11,16 @@
 #include "routes/train.cpp"
 #include "routes/model.cpp"
 #include "routes/infer.cpp"
-#include "routes/metrics.cpp"      // внутри namespace etai
+#include "routes/metrics.cpp"
 #include "routes/agents.cpp"
-#include "routes/backfill.inc.cpp" // static inline register_backfill_routes(...)
-#include "routes/train_env.cpp"    // новый роут: /api/train_env (за фичефлагом)
+#include "routes/backfill.inc.cpp"
+#include "routes/train_env.cpp"
 #include "routes/model_set.cpp"
 #include "routes/symbol_queue.cpp"
 #include "routes/symbol.cpp"
 #include "routes/diagnostic.cpp"
 #include "routes/symbol_prepare.cpp"
 #include "routes/robot.cpp"
-
-// Наш новый конвейер (этот файл ты только что создал)
 #include "routes/pipeline.cpp"
 #include "routes/compat_stubs.cpp"
 #include "routes/cors_and_errors.cpp"
@@ -32,37 +30,33 @@ int main(int argc, char** argv) {
     int port = 3000;
     if (argc > 1) port = std::atoi(argv[1]);
 
-    // 1) Инициализация состояния модели (из диска + дефолты)
     etai::init_model_atoms_from_disk(
         "cache/models/BTCUSDT_15_ppo_pro.json",
-        /*def_thr*/ 0.30,
-        /*def_ma*/  12,
-        /*feat*/    32
+        0.30, 12, 32
     );
 
-    // 2) HTTP-сервер
     httplib::Server svr;
     enable_cors_and_errors(svr);
 
-    // 3) Регистрация роутов
+    // ВАЖНО: Специфичные роуты регистрируем ПЕРВЫМИ!
     register_health_routes(svr);
     register_health_ai(svr);
     register_train_routes(svr);
     register_model_routes(svr);
     register_model_set_routes(svr);
-    register_infer_routes(svr);
-    etai::register_metrics_routes(svr); // <-- квалификация namespace
+    register_infer_routes(svr);              // ← ОСНОВНОЙ роут
+    etai::register_metrics_routes(svr);
     register_backfill_routes(svr);
     etai::setup_agents_routes(svr);
-    register_train_env_routes(svr);     // безопасная заглушка под ETAI_ENABLE_TRAIN_ENV
+    register_train_env_routes(svr);
     register_symbol_routes(svr);
     register_diagnostic_routes(svr);
     register_symbol_prepare_routes(svr);
     register_robot_routes(svr);
-
-    // Новый: конвейер подготовки и обучения
     register_pipeline_routes(svr);
-    register_compat_stubs(svr);
+    
+    // Заглушки и fallback'и - В САМОМ КОНЦЕ!
+    register_compat_stubs(svr);             // ← ПОСЛЕ всех реальных роутов
     register_version_status_routes(svr);
 
     std::cout << "[EdgeTrader] server started on port " << port
