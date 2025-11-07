@@ -1,5 +1,5 @@
 #include "train_logic.h"
-#include "server_accessors.h"   // etai::{set_model_thr,set_model_ma_len,set_model_feat_dim,set_current_model}
+#include "server_accessors.h"
 #include "ppo_pro.h"
 #include "utils_data.h"
 #include "http_reply.h"
@@ -41,12 +41,11 @@ json run_train_pro_and_save(const std::string& symbol,
 {
     std::lock_guard<std::mutex> lock(train_mutex);
 
-    // --- 1) Базовый TF
+    // --- 1) Загрузка данных
     arma::mat raw15;
     if (!load_raw_ohlcv(symbol, interval, raw15))
         throw std::runtime_error("Failed to load OHLCV");
 
-    // --- 2) Опциональные HTF (60/240/1440)
     arma::mat raw60, raw240, raw1440;
     const arma::mat *p60   = nullptr;
     const arma::mat *p240  = nullptr;
@@ -62,33 +61,17 @@ json run_train_pro_and_save(const std::string& symbol,
               << " 1440=" << (p1440 ? raw1440.n_rows : 0)
               << "  (cols15=" << raw15.n_cols << ")\n";
 
-    // --- 3) Тренировка
+    // --- 2) Обучение модели
     json trainer = trainPPO_pro(raw15, p60, p240, p1440, episodes, tp, sl, ma_len, use_antimanip);
 
-    // --- 4) ДОЗАПОЛНЯЕМ trainer служебными полями ДЛЯ СЕРИАЛИЗАЦИИ
-    // Контракт: модель на диске несёт параметры, которыми она получена.
-    // Эти поля потом увидит /api/model → mobile app.
-    try {
-        trainer["tp"]     = tp;
-        trainer["symbol"]   = symbol;
-        trainer["interval"] = interval;
-        trainer["sl"]     = sl;
-        trainer["ma_len"] = ma_len;
-    } catch (...) {
-        // не валим процесс — просто лог
-        std::cerr << "[TRAIN] warn: failed to stamp tp/sl/ma_len into model json\n";
-    }
+    // --- 3) Добавляем служебные поля на верхний уровень
+    trainer["tp"]       = tp;
+    trainer["symbol"]   = symbol;
+    trainer["interval"] = interval;
+    trainer["sl"]       = sl;
+    trainer["ma_len"]   = ma_len;
 
-    // --- 5) Сохранение модели на диск (включая policy.norm, если есть)
-    const std::string model_path = "cache/models/" + symbol + "_" + interval + "_ppo_pro.json";
-    {
-        std::ofstream f(model_path);
-        f << trainer.dump(2);
-    }
-
-    // --- 6) Обновляем атомики для health/metrics (thr, ma, feat_dim, current_model)
-    const double best_thr = trainer.value("best_thr", 0.5);
-
+    // --- 4) Вычисляем feat_dim из policy или metrics.feat_cols
     int feat_dim = 0;
     try {
         if (trainer.contains("policy") &&
@@ -97,6 +80,7 @@ json run_train_pro_and_save(const std::string& symbol,
             feat_dim = trainer["policy"]["feat_dim"].get<int>();
         }
     } catch (...) {}
+    
     if (feat_dim <= 0) {
         try {
             if (trainer.contains("metrics") &&
@@ -106,15 +90,34 @@ json run_train_pro_and_save(const std::string& symbol,
             }
         } catch (...) {}
     }
-    // FIXED: сохраняем feat_dim в metrics для promote_metrics
-    if (feat_dim > 0 && trainer.contains("metrics")) trainer["metrics"]["feat_dim"] = feat_dim;
 
+    // --- 5) CRITICAL: Добавляем недостающие поля в metrics ДО сохранения
+    if (trainer.contains("metrics")) {
+        if (feat_dim > 0) {
+            trainer["metrics"]["feat_dim"] = feat_dim;
+        }
+        trainer["metrics"]["tp"] = tp;
+        trainer["metrics"]["sl"] = sl;
+    }
+
+    // --- 6) Сохранение модели на диск
+    const std::string model_path = "cache/models/" + symbol + "_" + interval + "_ppo_pro.json";
+    {
+        std::ofstream f(model_path);
+        if (!f) {
+            throw std::runtime_error("Failed to open model file for writing: " + model_path);
+        }
+        f << trainer.dump(2);
+    }
+
+    // --- 7) Обновляем атомики для health/metrics
+    const double best_thr = trainer.value("best_thr", 0.5);
     set_model_thr(best_thr);
     set_model_ma_len(ma_len);
     if (feat_dim > 0) set_model_feat_dim(feat_dim);
     set_current_model(trainer);
 
-    // --- 7) Лог в stdout
+    // --- 8) Логирование
     try {
         const auto& m = trainer.at("metrics");
         std::cout << "[TRAIN] rows="       << m.value("N_rows", 0)
@@ -137,7 +140,7 @@ json run_train_pro_and_save(const std::string& symbol,
                   << ", tp=" << tp << ", sl=" << sl << ", ma=" << ma_len << ")\n";
     }
 
-    // --- 8) Стабилизированный ответ
+    // --- 9) Возврат результата
     return make_train_reply(trainer, tp, sl, ma_len, model_path);
 }
 
