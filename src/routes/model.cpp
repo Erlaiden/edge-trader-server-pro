@@ -12,12 +12,11 @@ using json = nlohmann::json;
 
 void register_model_routes(httplib::Server& svr) {
     
-    // GET /api/model - возвращает параметры загруженной модели
+    // GET /api/model - возвращает параметры + метрики модели
     svr.Get("/api/model", [](const httplib::Request& req, httplib::Response& res) {
         std::string symbol = qp(req, "symbol", "BTCUSDT");
         std::string interval = qp(req, "interval", "15");
         
-        // Читаем модель с диска
         std::string model_path = "cache/models/" + symbol + "_" + interval + "_ppo_pro.json";
         std::ifstream mf(model_path);
         
@@ -36,6 +35,7 @@ void register_model_routes(httplib::Server& svr) {
             json model;
             mf >> model;
             
+            // Базовые поля
             json out{
                 {"ok", true},
                 {"symbol", symbol},
@@ -48,7 +48,23 @@ void register_model_routes(httplib::Server& svr) {
                 {"ma_len", model.value("ma_len", 0)}
             };
             
-            // ДОБАВЛЯЕМ ВОЗРАСТ МОДЕЛИ
+            // КРИТИЧНО: Добавляем метрики из файла
+            if (model.contains("metrics") && model["metrics"].is_object()) {
+                const auto& m = model["metrics"];
+                
+                out["val_accuracy"] = m.value("val_accuracy", 0.0);
+                out["val_sharpe"] = m.value("val_sharpe", 0.0);
+                out["val_maxdd"] = m.value("val_drawdown", 0.0);
+                out["val_winrate"] = m.value("val_winrate", 0.0);
+                out["val_profit_avg"] = m.value("val_profit_avg", 0.0);
+                out["M_labeled"] = m.value("M_labeled", 0);
+                out["train_episodes"] = m.value("train_episodes", 0);
+                
+                // Полные метрики (для детального анализа)
+                out["metrics"] = m;
+            }
+            
+            // Возраст модели
             int age_days = etai::get_model_lifecycle().get_model_age_days(symbol, interval);
             if (age_days >= 0) {
                 out["model_age_days"] = age_days;
