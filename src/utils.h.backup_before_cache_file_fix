@@ -41,16 +41,7 @@ inline std::string canonical_interval(std::string interval) {
 }
 
 inline std::string cache_file(const std::string& symbol, const std::string& interval) {
-  // FIXED: Сначала проверяем cache/clean/, потом cache/
-  std::string clean_path = "cache/clean/" + symbol + "_" + canonical_interval(interval) + ".csv";
-  std::string raw_path = "cache/" + symbol + "_" + canonical_interval(interval) + ".csv";
-  
-  std::ifstream test(clean_path);
-  if (test.good()) {
-    test.close();
-    return clean_path;
-  }
-  return raw_path;
+  return "cache/" + symbol + "_" + canonical_interval(interval) + ".csv";
 }
 
 inline std::string join_csv(const std::vector<std::string>& cols) {
