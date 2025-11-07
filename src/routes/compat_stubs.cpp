@@ -23,7 +23,5 @@ inline void register_compat_stubs(httplib::Server& svr){
     svr.Get("/api/pipeline/prepare_train",    not_impl("/api/pipeline/prepare_train"));
     svr.Get("/api/agents/test",               not_impl("/api/agents/test"));
     svr.Get("/api/robot/keys",                not_impl("/api/robot/keys"));
-    svr.Get("/api/robot/start",               not_impl("/api/robot/start"));
-    svr.Get("/api/robot/stop",                not_impl("/api/robot/stop"));
     svr.Get("/api/model/status",              not_impl("/api/model/status"));
 }
