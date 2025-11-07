@@ -304,8 +304,6 @@ json trainPPO_pro(const arma::mat& raw15,
         metrics["val_reward_wctx"]= reward_wctx;
         metrics["htf_agree60"]    = htf_agree60;
         metrics["htf_agree240"]   = htf_agree240;
-        // FIXED: добавляем version в metrics
-        metrics["version"]        = env_enabled("ETAI_FEAT_ENABLE_MFLOW") ? 10 : 9;
 
         // Прометеус-гейджи
         etai::set_reward_avg(reward_v2);

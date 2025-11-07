@@ -39,11 +39,6 @@ static void promote_metrics(json& j) {
     copy("raw_cols");
     copy("feat_cols");
     copy("best_thr");
-    // FIXED: добавлены критические поля
-    copy("feat_dim");
-    copy("tp");
-    copy("sl");
-    copy("version");
 
     // расширенные Reward v2
     copy("val_profit_avg");
