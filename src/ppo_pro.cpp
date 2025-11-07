@@ -119,7 +119,10 @@ json trainPPO_pro(const arma::mat& raw15,
         const uword N = F.n_rows;
         const uword D = F.n_cols;
 
-        const int FEAT_VERSION = env_enabled("ETAI_FEAT_ENABLE_MFLOW") ? 10 : 9;
+        // КРИТИЧНО: HARDCODE VERSION 10 (всегда 32 фичи с MFLOW)
+        const int FEAT_VERSION = 10;
+        
+        std::cout << "[TRAIN] FORCED VERSION 10: D=" << D << " features\n";
 
         vec close = raw15.col(4);
         vec high  = raw15.col(2);
@@ -250,9 +253,9 @@ json trainPPO_pro(const arma::mat& raw15,
         json policy;
         policy["W"]            = std::vector<double>(W.begin(), W.end());
         policy["b"]            = { b };
-        policy["feat_dim"]     = (int)W.n_rows;
+        policy["feat_dim"]     = (int)D;
         policy["feat_version"] = FEAT_VERSION;
-        policy["note"]         = "logreg_v2_reward";
+        policy["note"]         = "logreg_v2_reward_v10";
 
         policy["norm"] = json::object();
         policy["norm"]["mu"] = std::vector<double>(mu.begin(), mu.end());
@@ -281,6 +284,10 @@ json trainPPO_pro(const arma::mat& raw15,
         metrics["val_reward_wctx"]= reward_wctx;
         metrics["htf_agree60"]    = htf_agree60;
         metrics["htf_agree240"]   = htf_agree240;
+        metrics["version"]        = FEAT_VERSION;
+        metrics["feat_dim"]       = (int)D;
+        metrics["tp"]             = tp;
+        metrics["sl"]             = sl;
 
         etai::set_reward_avg(reward_v2);
         etai::set_reward_sharpe(sharpe);
@@ -288,10 +295,9 @@ json trainPPO_pro(const arma::mat& raw15,
         etai::set_reward_drawdown(dd_max);
         etai::set_reward_wctx(reward_wctx);
 
-        // КРИТИЧНО: Добавляем ВСЕ поля на top-level СРАЗУ
         json out2;
         out2["ok"]            = true;
-        out2["schema"]        = "ppo_pro_v2_reward";
+        out2["schema"]        = "ppo_pro_v10";
         out2["mode"]          = "pro";
         out2["policy"]        = policy;
         out2["policy_source"] = "learn";
@@ -303,7 +309,7 @@ json trainPPO_pro(const arma::mat& raw15,
         out2["sl"]            = sl;
         out2["ma_len"]        = 12;
 
-        std::cout << "[TRAIN] PPO_PRO N="<<N<<" D="<<D
+        std::cout << "[TRAIN] PPO_PRO_V10 N="<<N<<" D="<<D
                   << " M="<<M<<" val="<<(int)(M - split)
                   << " thr="<<best_thr<<" acc="<<acc
                   << " Sharpe="<<sharpe<<" DD="<<dd_max<<" WinR="<<winrate
