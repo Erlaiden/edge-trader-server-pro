@@ -21,6 +21,7 @@
 #include "routes/diagnostic.cpp"
 #include "routes/symbol_prepare.cpp"
 #include "routes/robot.cpp"
+#include "routes/robot_executor.cpp"
 #include "routes/pipeline.cpp"
 #include "routes/compat_stubs.cpp"
 #include "routes/cors_and_errors.cpp"
@@ -53,6 +54,7 @@ int main(int argc, char** argv) {
     register_diagnostic_routes(svr);
     register_symbol_prepare_routes(svr);
     register_robot_routes(svr);
+    register_robot_trading(svr);
     register_pipeline_routes(svr);
     
     // Заглушки и fallback'и - В САМОМ КОНЦЕ!
