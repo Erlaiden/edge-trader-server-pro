@@ -1,98 +1,115 @@
-// routes/model.cpp — fixed version with full model reflection
-
-#include "../httplib.h"
+#include "model.h"
+#include "../model_lifecycle.h"
+#include "../json.hpp"
+#include "../http_helpers.h"
 #include "../server_accessors.h"
-#include "json.hpp"
+#include "../utils_model.h"
+#include <httplib.h>
 #include <fstream>
-#include <sstream>
-#include <string>
+#include <iostream>
 
 using json = nlohmann::json;
 
-namespace etai {
-
-static json load_json_file(const std::string& path, std::string& err) {
-    std::ifstream f(path);
-    if (!f) { err = "cannot open file: " + path; return {}; }
-    std::ostringstream ss; ss << f.rdbuf();
-    try {
-        return json::parse(ss.str());
-    } catch (const std::exception& ex) {
-        err = std::string("json parse failed: ") + ex.what();
-        return {};
-    }
-}
-
-// ----------- MAIN -----------
-inline void register_model_routes(httplib::Server& svr) {
-
-    // 1) Отдача состояния модели (атомики + JSON)
-    svr.Get("/api/model", [](const httplib::Request&, httplib::Response& res) {
-        json r;
-        r["ok"] = true;
-        r["model_thr"]    = etai::get_model_thr();
-        r["model_ma_len"] = etai::get_model_ma_len();
-        try { r["model_feat_dim"] = etai::get_model_feat_dim(); } catch (...) {}
-
-        // Дополнительно: извлечь ключевые поля из current_model
-        try {
-            json m = etai::get_current_model();
-            json mshort;
-            if (m.contains("best_thr")) mshort["best_thr"] = m["best_thr"];
-            if (m.contains("tp"))       mshort["tp"]       = m["tp"];
-            if (m.contains("sl"))       mshort["sl"]       = m["sl"];
-            if (m.contains("ma_len"))   mshort["ma_len"]   = m["ma_len"];
-            if (m.contains("policy") && m["policy"].contains("feat_dim"))
-                mshort["feat_dim"] = m["policy"]["feat_dim"];
-            if (!mshort.empty()) r["model"] = mshort;
-        } catch (...) {}
-
-        res.status = 200;
-        res.set_content(r.dump(2), "application/json");
-    });
-
-    // 2) Горячая подстановка модели
-    svr.Get("/api/model/reload", [](const httplib::Request& req, httplib::Response& res) {
-        const std::string path = req.has_param("path")
-            ? req.get_param_value("path")
-            : std::string("/opt/edge-trader-server/cache/models/BTCUSDT_15_ppo_pro.json");
-
-        std::string err;
-        json j = load_json_file(path, err);
-        if (!err.empty()) {
-            json r; r["ok"] = false; r["error"] = err; r["path"] = path;
-            res.status = 400;
-            res.set_content(r.dump(2), "application/json");
+void register_model_routes(httplib::Server& svr) {
+    
+    // GET /api/model - возвращает параметры загруженной модели
+    svr.Get("/api/model", [](const httplib::Request& req, httplib::Response& res) {
+        std::string symbol = qp(req, "symbol", "BTCUSDT");
+        std::string interval = qp(req, "interval", "15");
+        
+        // Читаем модель с диска
+        std::string model_path = "cache/models/" + symbol + "_" + interval + "_ppo_pro.json";
+        std::ifstream mf(model_path);
+        
+        if (!mf) {
+            json out{
+                {"ok", false},
+                {"error", "model_not_found"},
+                {"symbol", symbol},
+                {"interval", interval}
+            };
+            res.set_content(out.dump(), "application/json");
             return;
         }
-
-        // --- defaults from current ---
-        double thr = etai::get_model_thr();
-        int    ma  = etai::get_model_ma_len();
-        int    feat = 0;
-
-        try { if (j.contains("best_thr")) thr = j["best_thr"].get<double>(); } catch (...) {}
-        try { if (j.contains("ma_len"))   ma  = j["ma_len"].get<int>();      } catch (...) {}
-        try { if (j.contains("policy") && j["policy"].contains("feat_dim"))
-                  feat = j["policy"]["feat_dim"].get<int>(); } catch (...) {}
-
-        etai::set_model_thr(thr);
-        etai::set_model_ma_len(ma);
-        if (feat > 0) etai::set_model_feat_dim(feat);
-        etai::set_current_model(j);
-
-        json r;
-        r["ok"] = true;
-        r["applied"] = { {"thr", thr}, {"ma_len", ma}, {"feat_dim", feat} };
-        r["path"] = path;
-        res.status = 200;
-        res.set_content(r.dump(2), "application/json");
+        
+        try {
+            json model;
+            mf >> model;
+            
+            json out{
+                {"ok", true},
+                {"symbol", symbol},
+                {"interval", interval},
+                {"version", model.value("version", 0)},
+                {"feat_dim", model.value("feat_dim", 0)},
+                {"tp", model.value("tp", 0.0)},
+                {"sl", model.value("sl", 0.0)},
+                {"best_thr", model.value("best_thr", 0.0)},
+                {"ma_len", model.value("ma_len", 0)}
+            };
+            
+            // ДОБАВЛЯЕМ ВОЗРАСТ МОДЕЛИ
+            int age_days = etai::get_model_lifecycle().get_model_age_days(symbol, interval);
+            if (age_days >= 0) {
+                out["model_age_days"] = age_days;
+                out["model_expires_in_days"] = 7 - age_days;
+                out["model_needs_retrain"] = (age_days >= 7);
+                
+                if (age_days >= 6) {
+                    out["warning"] = "Model is old, retrain recommended";
+                } else if (age_days >= 5) {
+                    out["info"] = "Model will expire soon";
+                }
+            }
+            
+            res.set_content(out.dump(), "application/json");
+        } catch (const std::exception& e) {
+            json out{
+                {"ok", false},
+                {"error", "model_parse_failed"},
+                {"what", e.what()}
+            };
+            res.set_content(out.dump(), "application/json");
+        }
+    });
+    
+    // GET /api/model/reload - перезагрузка модели в память
+    svr.Get("/api/model/reload", [](const httplib::Request& req, httplib::Response& res) {
+        std::string symbol = qp(req, "symbol", "BTCUSDT");
+        std::string interval = qp(req, "interval", "15");
+        
+        std::string model_path = "cache/models/" + symbol + "_" + interval + "_ppo_pro.json";
+        std::ifstream mf(model_path);
+        
+        if (!mf) {
+            json out{{"ok", false}, {"error", "model_not_found"}};
+            res.set_content(out.dump(), "application/json");
+            return;
+        }
+        
+        try {
+            json model;
+            mf >> model;
+            
+            double thr = model.value("best_thr", 0.5);
+            int ma = model.value("ma_len", 12);
+            int feat = model.value("feat_dim", 32);
+            
+            etai::set_model_thr(thr);
+            etai::set_model_ma_len(ma);
+            etai::set_model_feat_dim(feat);
+            
+            json out{
+                {"ok", true},
+                {"reloaded", true},
+                {"thr", thr},
+                {"ma_len", ma},
+                {"feat_dim", feat}
+            };
+            res.set_content(out.dump(), "application/json");
+        } catch (const std::exception& e) {
+            json out{{"ok", false}, {"error", "reload_failed"}};
+            res.set_content(out.dump(), "application/json");
+        }
     });
 }
-
-} // namespace etai
-
-// Глобальный форвардер
-void register_model_routes(httplib::Server& svr) { etai::register_model_routes(svr); }
-void register_model_route(httplib::Server& svr)  { etai::register_model_routes(svr); }
-
