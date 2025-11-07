@@ -1,5 +1,5 @@
 #include "ppo_pro.h"
-#include "features.h"
+#include "features/features.h"
 #include "json.hpp"
 #include <armadillo>
 #include <vector>
@@ -10,7 +10,6 @@
 
 #include "metrics.h"
 #include "rewardv2_accessors.h"
-
 #include "features/support_resistance.h"
 #include "features/manip_detector.h"
 
@@ -19,9 +18,6 @@ using namespace arma;
 
 namespace etai {
 
-arma::Mat<double> build_feature_matrix(const arma::Mat<double>&);
-
-// ----------------- утилиты -----------------
 static inline bool env_enabled(const char* k){
     const char* s = std::getenv(k);
     if(!s || !*s) return false;
@@ -38,7 +34,6 @@ static inline double sigmoid(double z){
     return 1.0/(1.0+std::exp(-z));
 }
 
-// простая логрег
 static void train_logreg(const mat& X,const vec& y,vec& W,double& b,int epochs,double lr,double l2){
     W.set_size(X.n_cols); W.zeros(); b=0.0;
     for(int e=0;e<epochs;++e){
@@ -55,7 +50,6 @@ static vec predict_proba(const mat& X,const vec& W,double b){
     return z;
 }
 
-// PnL серия под tp/sl + комиссия
 static vec pnl_series(const vec& fut_ret, const vec& proba, double thr, double tp, double sl, double fee_abs){
     const uword N=fut_ret.n_rows;
     vec r(N, fill::zeros);
@@ -76,7 +70,6 @@ static vec pnl_series(const vec& fut_ret, const vec& proba, double thr, double t
     return r;
 }
 
-// простая симуляция Rv1 — только для поиска best_thr
 static double simulate_reward_v1(const vec& fut_ret,const vec& proba,double thr,double tp,double sl){
     double R=0.0; const uword N=fut_ret.n_rows;
     for(uword i=0;i<N;++i){
@@ -94,7 +87,6 @@ static double simulate_reward_v1(const vec& fut_ret,const vec& proba,double thr,
     return R;
 }
 
-// знак «тренда» из фич
 static int trend_sign_from_features(const mat& F, uword start_row, uword end_row){
     if (F.n_rows==0 || F.n_cols==0) return 0;
     if (start_row>=F.n_rows) start_row = F.n_rows-1;
@@ -107,7 +99,6 @@ static int trend_sign_from_features(const mat& F, uword start_row, uword end_row
     return 0;
 }
 
-// ---------- Тренер ----------
 json trainPPO_pro(const arma::mat& raw15,
                   const arma::mat* raw60,
                   const arma::mat* raw240,
@@ -124,15 +115,12 @@ json trainPPO_pro(const arma::mat& raw15,
             return out;
         }
 
-        // 1) Фичи 15m
         mat F = build_feature_matrix(raw15);
         const uword N = F.n_rows;
         const uword D = F.n_cols;
-        
-        // FIXED: Единый способ определения версии через env переменную
+
         const int FEAT_VERSION = env_enabled("ETAI_FEAT_ENABLE_MFLOW") ? 10 : 9;
 
-        // 2) Будущая доходность
         vec close = raw15.col(4);
         vec high  = raw15.col(2);
         vec low   = raw15.col(3);
@@ -145,7 +133,6 @@ json trainPPO_pro(const arma::mat& raw15,
         }
         vec fut = arma::shift(r,-1); fut(N-1)=0.0;
 
-        // 3) Разметка
         double thr_pos = clampd(tp, 1e-4, 1e-1);
         double thr_neg = clampd(sl, 1e-4, 1e-1);
         std::vector<uword> idx; idx.reserve(N);
@@ -177,7 +164,6 @@ json trainPPO_pro(const arma::mat& raw15,
         mat Xva = Xs.rows(split, M-1);  vec yva = ys.rows(split, M-1);
         vec fr_va = fut_s.rows(split, M-1);
 
-        // 4) Z-score нормализация (по колонкам трейна) — СОХРАНЯЕМ μ/σ
         vec mu = arma::mean(Xtr, 0).t();
         vec sd = arma::stddev(Xtr, 0, 0).t();
         for(uword j=0;j<D;++j){
@@ -186,16 +172,13 @@ json trainPPO_pro(const arma::mat& raw15,
             Xva.col(j) = (Xva.col(j) - mu(j)) / s;
         }
 
-        // 5) Логрег
         vec W; double b=0.0;
-        train_logreg(Xtr, ytr, W, b, /*epochs*/300, /*lr*/0.05, /*l2*/1e-4);
+        train_logreg(Xtr, ytr, W, b, 300, 0.05, 1e-4);
         vec pv = predict_proba(Xva, W, b);
 
-        // 6) Accuracy@0.5
         vec pred01 = conv_to<vec>::from(pv >= 0.5);
         double acc = arma::mean( conv_to<vec>::from(pred01 == yva) );
 
-        // 7) Поиск best_thr по v1
         double best_thr=0.50, best_Rv1=-1e100;
         for(double thr=0.30; thr<=0.70+1e-12; thr+=0.02){
             double R = simulate_reward_v1(fr_va, pv, thr, thr_pos, thr_neg);
@@ -203,7 +186,6 @@ json trainPPO_pro(const arma::mat& raw15,
         }
         best_thr = clampd(best_thr, 1e-4, 0.99);
 
-        // 8) Anti-manip (за флагом)
         double manip_ratio = 0.0;
         if(env_enabled("ETAI_ENABLE_ANTI_MANIP")){
             std::vector<double> Vopen(N), Vhigh(N), Vlow(N), Vclose(N);
@@ -211,7 +193,7 @@ json trainPPO_pro(const arma::mat& raw15,
 
             auto sup = rolling_support(Vlow,  20);
             auto res = rolling_resistance(Vhigh,20);
-            auto fbf = false_break_flags(Vopen, Vhigh, Vlow, Vclose, sup, res, /*tol*/5e-4);
+            auto fbf = false_break_flags(Vopen, Vhigh, Vlow, Vclose, sup, res, 5e-4);
 
             uword a = std::min<uword>(split, (uword)idx.size());
             uword bnd = (idx.size()==0) ? 0 : (uword)idx.size();
@@ -226,7 +208,6 @@ json trainPPO_pro(const arma::mat& raw15,
             manip_ratio = (den>0)? (double)cnt/(double)den : 0.0;
         }
 
-        // 9) Reward v2 @best_thr (база)
         double fee  = etai::get_fee_per_trade();
         double a_sh = etai::get_alpha_sharpe();
         double lam  = etai::get_lambda_risk();
@@ -240,7 +221,6 @@ json trainPPO_pro(const arma::mat& raw15,
         double risk     = dd_max;
         double reward_v2= profit - lam*risk - mu_m*manip_ratio + a_sh*sharpe - fee;
 
-        // 10) Мягкий MTF-контекст (под флагом)
         double wctx_htf = 1.0;
         int htf_agree60 = 0, htf_agree240 = 0;
         if (env_enabled("ETAI_MTF_ENABLE")){
@@ -267,7 +247,6 @@ json trainPPO_pro(const arma::mat& raw15,
         }
         double reward_wctx = reward_v2 * wctx_htf;
 
-        // 11) Политика + метрики
         json policy;
         policy["W"]            = std::vector<double>(W.begin(), W.end());
         policy["b"]            = { b };
@@ -275,7 +254,6 @@ json trainPPO_pro(const arma::mat& raw15,
         policy["feat_version"] = FEAT_VERSION;
         policy["note"]         = "logreg_v2_reward";
 
-        // norm: сохраняем mu/sd по трейну
         policy["norm"] = json::object();
         policy["norm"]["mu"] = std::vector<double>(mu.begin(), mu.end());
         policy["norm"]["sd"] = std::vector<double>(sd.begin(), sd.end());
@@ -289,37 +267,28 @@ json trainPPO_pro(const arma::mat& raw15,
         metrics["N_rows"]         = (int)N;
         metrics["raw_cols"]       = (int)raw15.n_cols;
         metrics["feat_cols"]      = (int)D;
-
         metrics["fee_per_trade"]  = fee;
         metrics["alpha_sharpe"]   = a_sh;
         metrics["lambda_risk"]    = lam;
         metrics["mu_manip"]       = mu_m;
-
         metrics["val_profit_avg"] = profit;
         metrics["val_sharpe"]     = sharpe;
         metrics["val_winrate"]    = winrate;
         metrics["val_drawdown"]   = dd_max;
         metrics["val_reward_v2"]  = reward_v2;
         metrics["val_manip_ratio"]= manip_ratio;
-
         metrics["wctx_htf"]       = wctx_htf;
         metrics["val_reward_wctx"]= reward_wctx;
         metrics["htf_agree60"]    = htf_agree60;
         metrics["htf_agree240"]   = htf_agree240;
-        
-        // FIXED: Используем единый FEAT_VERSION
-        metrics["version"]        = FEAT_VERSION;
-        metrics["feat_dim"]       = (int)D;  // FIXED: добавляем feat_dim сразу
-        metrics["tp"]             = tp;      // FIXED: добавляем tp
-        metrics["sl"]             = sl;      // FIXED: добавляем sl
 
-        // Прометеус-гейджи
         etai::set_reward_avg(reward_v2);
         etai::set_reward_sharpe(sharpe);
         etai::set_reward_winrate(winrate);
         etai::set_reward_drawdown(dd_max);
         etai::set_reward_wctx(reward_wctx);
 
+        // КРИТИЧНО: Добавляем ВСЕ поля на top-level СРАЗУ
         json out2;
         out2["ok"]            = true;
         out2["schema"]        = "ppo_pro_v2_reward";
@@ -329,9 +298,10 @@ json trainPPO_pro(const arma::mat& raw15,
         out2["best_thr"]      = best_thr;
         out2["metrics"]       = metrics;
         out2["version"]       = FEAT_VERSION;
-        out2["feat_dim"]      = (int)D;  // FIXED: добавляем на top-level тоже
+        out2["feat_dim"]      = (int)D;
         out2["tp"]            = tp;
         out2["sl"]            = sl;
+        out2["ma_len"]        = 12;
 
         std::cout << "[TRAIN] PPO_PRO N="<<N<<" D="<<D
                   << " M="<<M<<" val="<<(int)(M - split)
