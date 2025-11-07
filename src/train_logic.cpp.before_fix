@@ -61,60 +61,46 @@ json run_train_pro_and_save(const std::string& symbol,
               << " 1440=" << (p1440 ? raw1440.n_rows : 0)
               << "  (cols15=" << raw15.n_cols << ")\n";
 
-    // --- 2) Обучение модели (теперь ppo_pro.cpp добавляет tp/sl/feat_dim/version в metrics)
+    // --- 2) Обучение модели
     json trainer = trainPPO_pro(raw15, p60, p240, p1440, episodes, tp, sl, ma_len, use_antimanip);
 
     // --- 3) Добавляем служебные поля на верхний уровень
+    trainer["tp"]       = tp;
     trainer["symbol"]   = symbol;
     trainer["interval"] = interval;
+    trainer["sl"]       = sl;
     trainer["ma_len"]   = ma_len;
+
+    // --- 4) Вычисляем feat_dim из policy или metrics.feat_cols
+    int feat_dim = 0;
+    try {
+        if (trainer.contains("policy") &&
+            trainer["policy"].contains("feat_dim") &&
+            !trainer["policy"]["feat_dim"].is_null()) {
+            feat_dim = trainer["policy"]["feat_dim"].get<int>();
+        }
+    } catch (...) {}
     
-    // FIXED: Копируем критические поля из metrics если их ещё нет на top-level
+    if (feat_dim <= 0) {
+        try {
+            if (trainer.contains("metrics") &&
+                trainer["metrics"].contains("feat_cols") &&
+                !trainer["metrics"]["feat_cols"].is_null()) {
+                feat_dim = trainer["metrics"]["feat_cols"].get<int>();
+            }
+        } catch (...) {}
+    }
+
+    // --- 5) CRITICAL: Добавляем недостающие поля в metrics ДО сохранения
     if (trainer.contains("metrics")) {
-        const auto& m = trainer["metrics"];
-        if (m.contains("tp") && !trainer.contains("tp"))
-            trainer["tp"] = m["tp"];
-        if (m.contains("sl") && !trainer.contains("sl"))
-            trainer["sl"] = m["sl"];
-        if (m.contains("version") && !trainer.contains("version"))
-            trainer["version"] = m["version"];
-        if (m.contains("feat_dim") && !trainer.contains("feat_dim"))
-            trainer["feat_dim"] = m["feat_dim"];
+        if (feat_dim > 0) {
+            trainer["metrics"]["feat_dim"] = feat_dim;
+        }
+        trainer["metrics"]["tp"] = tp;
+        trainer["metrics"]["sl"] = sl;
     }
 
-    // --- 4) Валидация что критические поля присутствуют
-    bool model_valid = true;
-    std::string validation_error;
-    
-    if (!trainer.contains("version") || trainer["version"].is_null()) {
-        model_valid = false;
-        validation_error += "version missing; ";
-    }
-    if (!trainer.contains("feat_dim") || trainer["feat_dim"].is_null() || trainer["feat_dim"].get<int>() <= 0) {
-        model_valid = false;
-        validation_error += "feat_dim invalid; ";
-    }
-    if (!trainer.contains("tp") || trainer["tp"].is_null()) {
-        model_valid = false;
-        validation_error += "tp missing; ";
-    }
-    if (!trainer.contains("sl") || trainer["sl"].is_null()) {
-        model_valid = false;
-        validation_error += "sl missing; ";
-    }
-    if (!trainer.contains("metrics") || !trainer["metrics"].contains("M_labeled") || 
-        trainer["metrics"]["M_labeled"].get<int>() < 200) {
-        model_valid = false;
-        validation_error += "insufficient training data; ";
-    }
-
-    trainer["model_valid"] = model_valid;
-    if (!model_valid) {
-        trainer["validation_error"] = validation_error;
-        std::cerr << "[TRAIN] WARNING: Model validation failed: " << validation_error << "\n";
-    }
-
-    // --- 5) Сохранение модели на диск (только если валидна)
+    // --- 6) Сохранение модели на диск
     const std::string model_path = "cache/models/" + symbol + "_" + interval + "_ppo_pro.json";
     {
         std::ofstream f(model_path);
@@ -123,25 +109,20 @@ json run_train_pro_and_save(const std::string& symbol,
         }
         f << trainer.dump(2);
     }
-    std::cout << "[TRAIN] Model saved to " << model_path << " (valid=" << model_valid << ")\n";
 
-    // --- 6) Обновляем атомики для health/metrics (только если валидна)
-    if (model_valid) {
-        const double best_thr = trainer.value("best_thr", 0.5);
-        const int feat_dim = trainer.value("feat_dim", 0);
-        
-        set_model_thr(best_thr);
-        set_model_ma_len(ma_len);
-        if (feat_dim > 0) set_model_feat_dim(feat_dim);
-        set_current_model(trainer);
-    }
+    // --- 7) Обновляем атомики для health/metrics
+    const double best_thr = trainer.value("best_thr", 0.5);
+    set_model_thr(best_thr);
+    set_model_ma_len(ma_len);
+    if (feat_dim > 0) set_model_feat_dim(feat_dim);
+    set_current_model(trainer);
 
-    // --- 7) Логирование
+    // --- 8) Логирование
     try {
         const auto& m = trainer.at("metrics");
         std::cout << "[TRAIN] rows="       << m.value("N_rows", 0)
                   << " M_labeled="         << m.value("M_labeled", 0)
-                  << " best_thr="          << trainer.value("best_thr", 0.0)
+                  << " best_thr="          << best_thr
                   << " acc="               << m.value("val_accuracy", 0.0)
                   << " Rv1="               << m.value("val_reward_v1", m.value("val_reward", 0.0))
                   << " profit="            << m.value("val_profit_avg", 0.0)
@@ -149,18 +130,17 @@ json run_train_pro_and_save(const std::string& symbol,
                   << " winrate="           << m.value("val_winrate", 0.0)
                   << " dd="                << m.value("val_drawdown", 0.0)
                   << " Rv2="               << m.value("val_reward_v2", 0.0)
-                  << " feat_dim="          << trainer.value("feat_dim", 0)
-                  << " version="           << trainer.value("version", 0)
-                  << " tp="                << trainer.value("tp", 0.0)
-                  << " sl="                << trainer.value("sl", 0.0)
+                  << " feat_dim="          << feat_dim
+                  << " tp="                << tp
+                  << " sl="                << sl
                   << " ma="                << ma_len
-                  << " valid="             << model_valid
                   << std::endl;
     } catch (...) {
-        std::cout << "[TRAIN] metrics missing\n";
+        std::cout << "[TRAIN] metrics missing (feat_dim=" << feat_dim
+                  << ", tp=" << tp << ", sl=" << sl << ", ma=" << ma_len << ")\n";
     }
 
-    // --- 8) Возврат результата
+    // --- 9) Возврат результата
     return make_train_reply(trainer, tp, sl, ma_len, model_path);
 }
 

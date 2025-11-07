@@ -128,9 +128,7 @@ json trainPPO_pro(const arma::mat& raw15,
         mat F = build_feature_matrix(raw15);
         const uword N = F.n_rows;
         const uword D = F.n_cols;
-        
-        // FIXED: Единый способ определения версии через env переменную
-        const int FEAT_VERSION = env_enabled("ETAI_FEAT_ENABLE_MFLOW") ? 10 : 9;
+        const int FEAT_VERSION = (D > 28 ? 10 : 9);
 
         // 2) Будущая доходность
         vec close = raw15.col(4);
@@ -267,7 +265,7 @@ json trainPPO_pro(const arma::mat& raw15,
         }
         double reward_wctx = reward_v2 * wctx_htf;
 
-        // 11) Политика + метрики
+        // 11) Политика + метрики (ДОБАВЛЯЕМ НОРМИРОВКУ)
         json policy;
         policy["W"]            = std::vector<double>(W.begin(), W.end());
         policy["b"]            = { b };
@@ -275,7 +273,7 @@ json trainPPO_pro(const arma::mat& raw15,
         policy["feat_version"] = FEAT_VERSION;
         policy["note"]         = "logreg_v2_reward";
 
-        // norm: сохраняем mu/sd по трейну
+        // norm: сохраняем mu/sd по трейну (как массивы double такой же длины, что и feat_dim)
         policy["norm"] = json::object();
         policy["norm"]["mu"] = std::vector<double>(mu.begin(), mu.end());
         policy["norm"]["sd"] = std::vector<double>(sd.begin(), sd.end());
@@ -306,12 +304,8 @@ json trainPPO_pro(const arma::mat& raw15,
         metrics["val_reward_wctx"]= reward_wctx;
         metrics["htf_agree60"]    = htf_agree60;
         metrics["htf_agree240"]   = htf_agree240;
-        
-        // FIXED: Используем единый FEAT_VERSION
-        metrics["version"]        = FEAT_VERSION;
-        metrics["feat_dim"]       = (int)D;  // FIXED: добавляем feat_dim сразу
-        metrics["tp"]             = tp;      // FIXED: добавляем tp
-        metrics["sl"]             = sl;      // FIXED: добавляем sl
+        // FIXED: добавляем version в metrics
+        metrics["version"]        = env_enabled("ETAI_FEAT_ENABLE_MFLOW") ? 10 : 9;
 
         // Прометеус-гейджи
         etai::set_reward_avg(reward_v2);
@@ -329,9 +323,6 @@ json trainPPO_pro(const arma::mat& raw15,
         out2["best_thr"]      = best_thr;
         out2["metrics"]       = metrics;
         out2["version"]       = FEAT_VERSION;
-        out2["feat_dim"]      = (int)D;  // FIXED: добавляем на top-level тоже
-        out2["tp"]            = tp;
-        out2["sl"]            = sl;
 
         std::cout << "[TRAIN] PPO_PRO N="<<N<<" D="<<D
                   << " M="<<M<<" val="<<(int)(M - split)
