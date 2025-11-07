@@ -6,6 +6,7 @@
 #include "infer_policy.h"
 #include "utils_data.h"
 #include "features/features.h"
+#include "infer_cache.h"
 #include <armadillo>
 #include <fstream>
 #include <iostream>
@@ -14,6 +15,9 @@
 using json = nlohmann::json;
 
 static std::atomic<unsigned long long> REQUEST_COUNTER{0};
+static std::atomic<unsigned long long> CACHE_HITS{0};
+static std::atomic<unsigned long long> CACHE_MISSES{0};
+static std::atomic<unsigned long long> POLICY_FAILURES{0};
 
 // Safe JSON helpers
 static inline double jnum(const json& j, const char* k, double defv){
@@ -121,15 +125,27 @@ void register_infer_routes(httplib::Server& srv) {
         out["raw_cols"] = (int)raw.n_cols;
         out["F_rows"]   = (int)F.n_rows;
         out["F_cols"]   = (int)F.n_cols;
-        out["ETAI_FEAT_ENABLE_MFLOW"] = (std::getenv("ETAI_FEAT_ENABLE_MFLOW")? true:false);
+        res.set_content(out.dump(), "application/json");
+    });
+    
+    srv.Get("/api/infer/stats", [&](const httplib::Request&, httplib::Response& res){
+        json out{
+            {"cache_hits", (unsigned long long)CACHE_HITS.load()},
+            {"cache_misses", (unsigned long long)CACHE_MISSES.load()},
+            {"policy_failures", (unsigned long long)POLICY_FAILURES.load()},
+            {"total_requests", (unsigned long long)REQUEST_COUNTER.load()}
+        };
+        res.set_content(out.dump(), "application/json");
+    });
+    
+    srv.Post("/api/infer/cache/clear", [&](const httplib::Request&, httplib::Response& res){
+        etai::get_infer_cache().clear();
+        json out{{"ok", true}, {"message", "cache_cleared"}};
         res.set_content(out.dump(), "application/json");
     });
 
     srv.Get("/api/infer", [&](const httplib::Request& req, httplib::Response& res){
         unsigned long long req_id = REQUEST_COUNTER.fetch_add(1);
-        
-        // КРИТИЧНО: Логируем СРАЗУ при входе
-        std::cerr << "[INFER#" << req_id << "] ========== REQUEST START ==========" << std::endl;
         
         try {
             REQ_INFER.fetch_add(1, std::memory_order_relaxed);
@@ -137,142 +153,122 @@ void register_infer_routes(httplib::Server& srv) {
             std::string symbol   = qp(req, "symbol", "BTCUSDT");
             std::string interval = qp(req, "interval", "15");
             
-            std::cerr << "[INFER#" << req_id << "] Params: symbol=" << symbol << " interval=" << interval << std::endl;
+            // 1. КЭSH
+            etai::CachedInferData cached;
+            bool from_cache = etai::get_infer_cache().get(symbol, interval, cached);
             
-            const std::string model_path = "cache/models/" + symbol + "_" + interval + "_ppo_pro.json";
+            if (from_cache) {
+                CACHE_HITS.fetch_add(1);
+            } else {
+                CACHE_MISSES.fetch_add(1);
+                
+                const std::string model_path = "cache/models/" + symbol + "_" + interval + "_ppo_pro.json";
+                std::ifstream mf(model_path);
+                if (!mf) {
+                    json out{{"ok",false},{"error","model_not_found"}};
+                    res.set_content(out.dump(), "application/json");
+                    return;
+                }
+                
+                try {
+                    mf >> cached.model;
+                } catch (const std::exception& e) {
+                    json out{{"ok",false},{"error","model_parse_failed"}};
+                    res.set_content(out.dump(), "application/json");
+                    return;
+                }
 
-            // 1. ЗАГРУЗКА МОДЕЛИ С ДИСКА
-            std::cerr << "[INFER#" << req_id << "] Opening model: " << model_path << std::endl;
-            std::ifstream mf(model_path);
-            if (!mf) {
-                std::cerr << "[INFER#" << req_id << "] ERROR: Model file not found" << std::endl;
-                json out{{"ok",false},{"error","model_not_found"},{"path",model_path}};
-                res.set_content(out.dump(), "application/json");
-                return;
-            }
-            
-            json model;
-            try {
-                mf >> model;
-                std::cerr << "[INFER#" << req_id << "] Model JSON parsed successfully" << std::endl;
-            } catch (const std::exception& e) {
-                std::cerr << "[INFER#" << req_id << "] ERROR: JSON parse failed: " << e.what() << std::endl;
-                json out{{"ok",false},{"error","model_parse_failed"},{"what",e.what()}};
-                res.set_content(out.dump(), "application/json");
-                return;
-            }
+                if (!jbool(cached.model, "ok", false)) {
+                    json out{{"ok",false},{"error","model_invalid"}};
+                    res.set_content(out.dump(), "application/json");
+                    return;
+                }
 
-            // Валидация модели
-            bool model_ok = jbool(model, "ok", false);
-            std::cerr << "[INFER#" << req_id << "] Model ok=" << model_ok << std::endl;
-            
-            if (!model_ok) {
-                std::cerr << "[INFER#" << req_id << "] ERROR: Model ok=false" << std::endl;
-                json out{{"ok",false},{"error","model_invalid"},{"model_ok",false}};
-                res.set_content(out.dump(), "application/json");
-                return;
-            }
-
-            double best_thr = jnum(model, "best_thr", 0.5);
-            int    ma_len   = jint(model, "ma_len", 12);
-            int    version  = jint(model, "version", 0);
-            double tp       = jnum(model, "tp", 0.008);
-            double sl       = jnum(model, "sl", 0.004);
-            int    feat_dim = jint(model, "feat_dim", 0);
-
-            std::cerr << "[INFER#" << req_id << "] Model params: version=" << version 
-                      << " feat_dim=" << feat_dim << " thr=" << best_thr << std::endl;
-
-            if (version == 0) {
-                std::cerr << "[INFER#" << req_id << "] ERROR: version=0" << std::endl;
-                json out{{"ok",false},{"error","model_no_version"}};
-                res.set_content(out.dump(), "application/json");
-                return;
+                cached.M15 = etai::load_cached_matrix(symbol, interval);
+                if (cached.M15.n_elem == 0) {
+                    json out{{"ok",false},{"error","no_cached_data"}};
+                    res.set_content(out.dump(), "application/json");
+                    return;
+                }
+                
+                cached.M60 = etai::load_cached_matrix(symbol, "60");
+                cached.M240 = etai::load_cached_matrix(symbol, "240");
+                cached.M1440 = etai::load_cached_matrix(symbol, "1440");
+                
+                cached.loaded_at = std::chrono::steady_clock::now();
+                etai::get_infer_cache().put(symbol, interval, cached);
             }
 
-            if (feat_dim == 0) {
-                std::cerr << "[INFER#" << req_id << "] ERROR: feat_dim=0" << std::endl;
-                json out{{"ok",false},{"error","model_no_feat_dim"}};
-                res.set_content(out.dump(), "application/json");
-                return;
-            }
+            int version = jint(cached.model, "version", 0);
+            int feat_dim = jint(cached.model, "feat_dim", 0);
+            double best_thr = jnum(cached.model, "best_thr", 0.5);
+            int ma_len = jint(cached.model, "ma_len", 12);
+            double tp = jnum(cached.model, "tp", 0.008);
+            double sl = jnum(cached.model, "sl", 0.004);
 
-            // 2. ЗАГРУЗКА ДАННЫХ 15M
-            std::cerr << "[INFER#" << req_id << "] Loading 15m data..." << std::endl;
-            arma::mat M15 = etai::load_cached_matrix(symbol, interval);
-            if (M15.n_elem == 0) {
-                std::cerr << "[INFER#" << req_id << "] ERROR: No cached 15m data" << std::endl;
-                json out{{"ok",false},{"error","no_cached_data"}};
-                res.set_content(out.dump(), "application/json");
-                return;
-            }
-            std::cerr << "[INFER#" << req_id << "] 15m data: " << M15.n_cols << " candles" << std::endl;
-
-            // 3. ПАРАМЕТРЫ
-            double k_atr = qpd(req, "k_atr", 1.2);
-            double eps   = qpd(req, "eps", 0.05);
-            std::string htf = qp(req, "htf", "60,240,1440");
-            
-            std::set<std::string> wanted;
-            { 
-                std::string t; 
-                for (char c: htf){ 
-                    if(c==','){ 
-                        if(!t.empty()){wanted.insert(t); t.clear();} 
-                    } else t.push_back(c);
-                } 
-                if(!t.empty()) wanted.insert(t); 
-            }
-
-            // 4. ЗАГРУЗКА HTF
-            arma::mat M60, M240, M1440;
-            const arma::mat *p60=nullptr, *p240=nullptr, *p1440=nullptr;
-            
-            if (wanted.count("60")) { 
-                M60 = etai::load_cached_matrix(symbol, "60");
-                if (M60.n_elem) { M60 = M60.t(); p60 = &M60; }
-            }
-            if (wanted.count("240")) { 
-                M240 = etai::load_cached_matrix(symbol, "240");
-                if (M240.n_elem) { M240 = M240.t(); p240 = &M240; }
-            }
-            if (wanted.count("1440")) { 
-                M1440 = etai::load_cached_matrix(symbol, "1440");
-                if (M1440.n_elem) { M1440 = M1440.t(); p1440 = &M1440; }
-            }
-
-            // 5. ИНФЕРЕНС
-            arma::mat raw15 = M15.t();
-            
-            std::cerr << "[INFER#" << req_id << "] Calling policy..." << std::endl;
-            json inf = etai::infer_with_policy_mtf(raw15, model, p60, 12, p240, 12, p1440, 12);
-            
-            bool policy_ok = jbool(inf, "ok", false);
-            std::string sig = jstr(inf, "signal", "UNKNOWN");
-            std::cerr << "[INFER#" << req_id << "] Policy returned: ok=" << policy_ok << " signal=" << sig << std::endl;
-
-            if (!policy_ok) {
-                std::cerr << "[INFER#" << req_id << "] ERROR: Policy failed" << std::endl;
-                json out{
-                    {"ok", false},
-                    {"error", "policy_failed"},
-                    {"policy_error", jstr(inf, "error", "unknown")}
-                };
+            if (version == 0 || feat_dim == 0) {
+                json out{{"ok",false},{"error","model_incomplete"}};
                 res.set_content(out.dump(), "application/json");
                 return;
             }
 
+            // 2. ИНФЕРЕНС С RETRY
+            arma::mat M60_t, M240_t, M1440_t;
+            const arma::mat *p60 = nullptr, *p240 = nullptr, *p1440 = nullptr;
+            
+            if (cached.M60.n_elem) { M60_t = cached.M60.t(); p60 = &M60_t; }
+            if (cached.M240.n_elem) { M240_t = cached.M240.t(); p240 = &M240_t; }
+            if (cached.M1440.n_elem) { M1440_t = cached.M1440.t(); p1440 = &M1440_t; }
+            
+            arma::mat raw15 = cached.M15.t();
+            
+            json inf;
+            bool policy_success = false;
+            
+            // RETRY до 3 раз
+            for (int attempt = 0; attempt < 3 && !policy_success; ++attempt) {
+                try {
+                    inf = etai::infer_with_policy_mtf(raw15, cached.model, p60, 12, p240, 12, p1440, 12);
+                    
+                    // Валидация результата
+                    if (jbool(inf, "ok", false) && 
+                        jint(inf, "feat_dim_used", 0) > 0 &&
+                        inf.contains("htf")) {
+                        policy_success = true;
+                    } else {
+                        std::cerr << "[INFER#" << req_id << "] Policy returned invalid result, attempt " << (attempt+1) << std::endl;
+                        if (attempt < 2) std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                    }
+                } catch (const std::exception& e) {
+                    std::cerr << "[INFER#" << req_id << "] Policy exception: " << e.what() << ", attempt " << (attempt+1) << std::endl;
+                    if (attempt < 2) std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                } catch (...) {
+                    std::cerr << "[INFER#" << req_id << "] Policy unknown exception, attempt " << (attempt+1) << std::endl;
+                    if (attempt < 2) std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                }
+            }
+
+            if (!policy_success) {
+                POLICY_FAILURES.fetch_add(1);
+                json out{{"ok", false},{"error", "policy_failed_after_retries"}};
+                res.set_content(out.dump(), "application/json");
+                return;
+            }
+
+            std::string sig = jstr(inf, "signal", "NEUTRAL");
             double score15 = jnum(inf, "score15", 0.0);
 
-            // 6. Счётчики
             if (sig == "LONG") INFER_SIG_LONG.fetch_add(1, std::memory_order_relaxed);
             else if (sig == "SHORT") INFER_SIG_SHORT.fetch_add(1, std::memory_order_relaxed);
             else INFER_SIG_NEUTRAL.fetch_add(1, std::memory_order_relaxed);
 
             LAST_INFER_TS.store((long long)time(nullptr)*1000, std::memory_order_relaxed);
 
-            // 7. РЕЖИМЫ
+            // Режимы
+            double k_atr = qpd(req, "k_atr", 1.2);
+            double eps = qpd(req, "eps", 0.05);
             double thr = best_thr > 0 ? best_thr : 0.5;
+            
             int upVotes=0, downVotes=0;
             htf_votes(inf, upVotes, downVotes);
             int netHTF = upVotes - downVotes;
@@ -282,15 +278,13 @@ void register_infer_routes(httplib::Server& srv) {
             double excess = std::fabs(score15) - thr;
 
             if (excess >= 0.0) {
-                if (score15 > 0) {
-                    marketMode = (netHTF >= 2) ? "trendUp" : (netHTF <= -2) ? "correction" : "trendUp";
-                } else if (score15 < 0) {
-                    marketMode = (netHTF <= -2) ? "trendDown" : (netHTF >= 2) ? "correction" : "trendDown";
-                }
+                if (score15 > 0) marketMode = (netHTF >= 2) ? "trendUp" : (netHTF <= -2) ? "correction" : "trendUp";
+                else if (score15 < 0) marketMode = (netHTF <= -2) ? "trendDown" : (netHTF >= 2) ? "correction" : "trendDown";
+                
                 double htfFactor = std::min(1.0, std::fabs((double)netHTF)/4.0);
                 confidence = std::min(100.0, 100.0 * (0.5*std::min(1.0, excess/(thr>0?thr:0.5)) + 0.5*htfFactor));
             } else {
-                double atr = atr14_from_M(M15);
+                double atr = atr14_from_M(cached.M15);
                 double band = k_atr * atr;
 
                 if (score15 >= -thr*eps && score15 <= thr*eps) sig = "NEUTRAL";
@@ -298,17 +292,12 @@ void register_infer_routes(httplib::Server& srv) {
                 else if (score15 < -thr*eps) sig = "LONG";
                 
                 marketMode = "flat";
-                double flatRatio = std::min(1.0, std::fabs(score15)/(thr>0?thr:0.5));
-                confidence = std::min(100.0, 70.0 * flatRatio);
+                confidence = std::min(100.0, 70.0 * std::min(1.0, std::fabs(score15)/(thr>0?thr:0.5)));
                 inf["flat_band"] = band;
                 inf["flat_k_atr"] = k_atr;
             }
 
             json safe_htf = (inf.contains("htf") && inf["htf"].is_object()) ? inf["htf"] : json::object();
-            double safe_wctx_htf = jnum(inf, "wctx_htf", 0.0);
-            double safe_vol_thr  = jnum(inf, "vol_threshold", 0.0);
-            int    safe_feat_dim = jint(inf, "feat_dim_used", 0);
-            bool   safe_used_norm= jbool(inf, "used_norm", true);
 
             json out{
                 {"ok", true},
@@ -325,33 +314,25 @@ void register_infer_routes(httplib::Server& srv) {
                 {"market_mode", marketMode},
                 {"confidence", confidence},
                 {"htf", safe_htf},
-                {"feat_dim_used", safe_feat_dim},
-                {"used_norm", safe_used_norm},
-                {"wctx_htf", safe_wctx_htf},
-                {"vol_threshold", safe_vol_thr},
-                {"agents", make_agents_summary()}
+                {"feat_dim_used", jint(inf, "feat_dim_used", 0)},
+                {"used_norm", jbool(inf, "used_norm", true)},
+                {"wctx_htf", jnum(inf, "wctx_htf", 0.0)},
+                {"vol_threshold", jnum(inf, "vol_threshold", 0.0)},
+                {"agents", make_agents_summary()},
+                {"from_cache", from_cache}
             };
 
-            enrich_with_levels(out, M15, tp, sl);
-            
-            std::cerr << "[INFER#" << req_id << "] SUCCESS ==========" << std::endl;
+            enrich_with_levels(out, cached.M15, tp, sl);
             res.set_content(out.dump(), "application/json");
         }
         catch (const std::exception& e) {
-            std::cerr << "[INFER#" << req_id << "] EXCEPTION: " << e.what() << " ==========" << std::endl;
-            json out{
-                {"ok", false},
-                {"error", "infer_exception"},
-                {"what", e.what()}
-            };
+            std::cerr << "[INFER#" << req_id << "] EXCEPTION: " << e.what() << std::endl;
+            json out{{"ok", false},{"error", "infer_exception"},{"what", e.what()}};
             res.set_content(out.dump(), "application/json");
         }
         catch (...) {
-            std::cerr << "[INFER#" << req_id << "] UNKNOWN EXCEPTION ==========" << std::endl;
-            json out{
-                {"ok", false},
-                {"error", "infer_unknown_exception"}
-            };
+            std::cerr << "[INFER#" << req_id << "] UNKNOWN EXCEPTION" << std::endl;
+            json out{{"ok", false},{"error", "infer_unknown_exception"}};
             res.set_content(out.dump(), "application/json");
         }
     });

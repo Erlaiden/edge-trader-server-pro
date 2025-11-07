@@ -45,15 +45,25 @@ inline void enable_cors_and_errors(httplib::Server& svr){
 int main(int argc, char** argv) {
     int port = 3000;
     if (argc > 1) port = std::atoi(argv[1]);
-    
+
     etai::init_model_atoms_from_disk(
         "cache/models/BTCUSDT_15_ppo_pro.json",
         0.30, 12, 32
     );
-    
+
     httplib::Server svr;
-    enable_cors_and_errors(svr);
     
+    // ОПТИМАЛЬНО для 8 CPU: 16 потоков (2x cores)
+    svr.new_task_queue = []() { 
+        return new httplib::ThreadPool(16); 
+    };
+    
+    svr.set_keep_alive_max_count(100);
+    svr.set_read_timeout(10, 0);
+    svr.set_write_timeout(10, 0);
+    
+    enable_cors_and_errors(svr);
+
     register_health_routes(svr);
     register_health_ai(svr);
     register_train_routes(svr);
@@ -71,15 +81,17 @@ int main(int argc, char** argv) {
     register_pipeline_routes(svr);
     register_compat_stubs(svr);
     register_version_status_routes(svr);
-    
+
     std::cout << "[EdgeTrader] Server started on port " << port << std::endl;
+    std::cout << "[EdgeTrader] Thread pool: 16 workers (optimized for 8 CPU)" << std::endl;
+    std::cout << "[EdgeTrader] RAM cache: enabled (5min TTL)" << std::endl;
     std::cout << "[EdgeTrader] 🤖 Robot: READY" << std::endl;
     std::cout << "[EdgeTrader] Model: thr=" << etai::get_model_thr()
               << " ma=" << etai::get_model_ma_len()
               << " feat=" << etai::get_model_feat_dim() << std::endl;
-    
+
     svr.listen("0.0.0.0", port);
-    
+
     robot::stop();
     return 0;
 }
