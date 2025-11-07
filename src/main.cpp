@@ -2,6 +2,7 @@
 #include <armadillo>
 #include "json.hpp"
 #include "server_accessors.h"
+#include "model_lifecycle.h"
 
 #include "routes/health.cpp"
 #include "routes/health_ai.cpp"
@@ -90,8 +91,12 @@ int main(int argc, char** argv) {
               << " ma=" << etai::get_model_ma_len()
               << " feat=" << etai::get_model_feat_dim() << std::endl;
 
+    // Запускаем lifecycle manager (модели живут 7 дней)
+    etai::get_model_lifecycle().start();
+
     svr.listen("0.0.0.0", port);
 
+    etai::get_model_lifecycle().stop();
     robot::stop();
     return 0;
 }
