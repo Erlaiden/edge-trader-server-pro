@@ -139,6 +139,13 @@ void register_infer_routes(httplib::Server& srv) {
     });
     
     srv.Post("/api/infer/cache/clear", [&](const httplib::Request&, httplib::Response& res){
+
+    // Альтернативный GET endpoint для очистки кэша
+    srv.Get("/api/cache/clear", [&](const httplib::Request&, httplib::Response& res){
+        etai::get_infer_cache().clear();
+        json out{{"ok", true}, {"message", "cache_cleared"}};
+        res.set_content(out.dump(), "application/json");
+    });
         etai::get_infer_cache().clear();
         json out{{"ok", true}, {"message", "cache_cleared"}};
         res.set_content(out.dump(), "application/json");
