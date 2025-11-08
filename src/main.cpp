@@ -97,6 +97,18 @@ int main(int argc, char** argv) {
     // Автообновление данных каждые 15 минут
     etai::get_auto_backfill().start();
 
+    // Endpoint для очистки кэша (добавлен в main.cpp)
+    svr.Get("/api/cache/clear", [](const httplib::Request&, httplib::Response& res) {
+        etai::get_infer_cache().clear();
+        json out{{"ok", true}, {"message", "cache_cleared_from_main"}};
+        res.set_content(out.dump(), "application/json");
+    });
+    
+    svr.Post("/api/infer/cache/clear", [](const httplib::Request&, httplib::Response& res) {
+        etai::get_infer_cache().clear();
+        json out{{"ok", true}, {"message", "cache_cleared_from_main"}};
+        res.set_content(out.dump(), "application/json");
+    });
     svr.listen("0.0.0.0", port);
 
     etai::get_auto_backfill().stop();
