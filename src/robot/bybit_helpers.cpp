@@ -60,7 +60,6 @@ static json bybit_request(const std::string& method, const std::string& endpoint
     }
 }
 
-// Получить баланс USDT
 double get_balance(const std::string& apiKey, const std::string& apiSecret) {
     auto result = bybit_request("GET", "/v5/account/wallet-balance", apiKey, apiSecret,
                                 json::object(), "accountType=UNIFIED");
@@ -82,7 +81,6 @@ double get_balance(const std::string& apiKey, const std::string& apiSecret) {
     return 0.0;
 }
 
-// Получить текущую позицию
 json get_position(const std::string& apiKey, const std::string& apiSecret, const std::string& symbol) {
     std::string params = "category=linear&symbol=" + symbol;
     auto result = bybit_request("GET", "/v5/position/list", apiKey, apiSecret, json::object(), params);
@@ -103,13 +101,12 @@ json get_position(const std::string& apiKey, const std::string& apiSecret, const
     return nullptr;
 }
 
-// FIXED: Открыть сделку с готовыми TP/SL ценами (не процентами!)
 bool open_trade(const std::string& apiKey, const std::string& apiSecret,
                 const std::string& symbol, const std::string& side, double qty,
                 double tp_price, double sl_price, int leverage) {
 
     std::cout << "[TRADE] Opening position..." << std::endl;
-    std::cout << "[TRADE] Params: " << symbol << " " << side << " qty=" << qty 
+    std::cout << "[TRADE] Params: " << symbol << " " << side << " qty=" << qty
               << " TP=" << tp_price << " SL=" << sl_price << " lev=" << leverage << std::endl;
 
     // 1. Установить leverage
@@ -146,23 +143,21 @@ bool open_trade(const std::string& apiKey, const std::string& apiSecret,
     }
 
     std::string orderId = order_res["result"]["orderId"];
-    std::cout << "[TRADE] Order created: " << orderId << ", waiting 2 sec..." << std::endl;
+    std::cout << "[TRADE] Order created: " << orderId << ", waiting 5 sec..." << std::endl;
 
-    // 3. Подождать исполнения ордера
-    std::this_thread::sleep_for(std::chrono::seconds(2));
+    // FIXED: Увеличил задержку с 2 до 5 секунд
+    std::this_thread::sleep_for(std::chrono::seconds(5));
 
-    // 4. Установить TP/SL (используем готовые цены!)
+    // 3. Установить TP/SL
     std::cout << "[TRADE] Setting TP/SL..." << std::endl;
 
-    // FIXED: Форматируем цены с точностью до 6 знаков и убираем trailing zeros
     std::ostringstream tp_stream, sl_stream;
     tp_stream << std::fixed << std::setprecision(6) << tp_price;
     sl_stream << std::fixed << std::setprecision(6) << sl_price;
-    
+
     std::string tp_str = tp_stream.str();
     std::string sl_str = sl_stream.str();
-    
-    // Убираем trailing zeros
+
     tp_str.erase(tp_str.find_last_not_of('0') + 1, std::string::npos);
     sl_str.erase(sl_str.find_last_not_of('0') + 1, std::string::npos);
     if (tp_str.back() == '.') tp_str.pop_back();
@@ -179,11 +174,13 @@ bool open_trade(const std::string& apiKey, const std::string& apiSecret,
     auto tpsl_res = bybit_request("POST", "/v5/position/trading-stop", apiKey, apiSecret, tpsl_body);
 
     if (tpsl_res.value("retCode", -1) != 0) {
-        std::cout << "[TRADE] TP/SL failed: " << tpsl_res.value("retMsg", "") << std::endl;
-        return true; // Позиция открыта, но без TP/SL
+        std::cout << "[TRADE] ❌ CRITICAL: TP/SL failed: " << tpsl_res.value("retMsg", "") << std::endl;
+        std::cout << "[TRADE] ⚠️  Position opened WITHOUT protection!" << std::endl;
+        std::cout << "[TRADE] 🔴 MANUAL ACTION REQUIRED - Close position manually!" << std::endl;
+        return false;
     }
 
-    std::cout << "[TRADE] TP/SL set: TP=" << tp_str << " SL=" << sl_str << std::endl;
+    std::cout << "[TRADE] ✅ TP/SL set successfully: TP=" << tp_str << " SL=" << sl_str << std::endl;
     return true;
 }
 
