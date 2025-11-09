@@ -109,7 +109,7 @@ void register_robot_routes(httplib::Server& srv) {
         cfg.sl_percent = cfg_json.value("slPercent", 1.0);
         cfg.min_confidence = cfg_json.value("minConfidence", 60.0);
         cfg.check_interval_sec = cfg_json.value("checkInterval", 60);
-        cfg.auto_trade = cfg_json.value("autoTrade", false);  // FIXED: добавлен флаг auto_trade
+        cfg.auto_trade = cfg_json.value("autoTrade", false);
 
         bool success = robot::start(keys["apiKey"], keys["apiSecret"], cfg);
 
@@ -177,7 +177,32 @@ void register_robot_routes(httplib::Server& srv) {
     });
 
     srv.Get("/api/robot/pnl", [&](const httplib::Request& req, httplib::Response& res){
-        json out{{"ok",true},{"today",0.0},{"total",0.0},{"unrealized",0.0}};
+        json keys = read_json(std::string(KEYS_PATH));
+        if (!keys.contains("apiKey") || !keys.contains("apiSecret")) {
+            json out{{"ok",false},{"today",0.0},{"total",0.0},{"unrealized",0.0}};
+            res.set_content(out.dump(), "application/json");
+            return;
+        }
+
+        json cfg = read_json(std::string(CONFIG_PATH));
+        std::string symbol = cfg.value("symbol", "AIAUSDT");
+
+        auto pos = robot::get_position(keys["apiKey"], keys["apiSecret"], symbol);
+
+        double unrealized = 0.0;
+        if (!pos.is_null()) {
+            try {
+                unrealized = std::stod(pos.value("unrealisedPnl", "0"));
+            } catch(...) {}
+        }
+
+        json out{
+            {"ok", true},
+            {"today", 0.0},
+            {"total", 0.0},
+            {"unrealized", unrealized}
+        };
+        
         res.set_content(out.dump(), "application/json");
     });
 
@@ -208,7 +233,7 @@ void register_robot_routes(httplib::Server& srv) {
                 {"tpPercent", 2.0},
                 {"slPercent", 1.0},
                 {"minConfidence", 60.0},
-                {"autoTrade", false}  // FIXED: добавлен дефолтный флаг
+                {"autoTrade", false}
             };
         }
         json out{{"ok", true}, {"config", cfg}};
