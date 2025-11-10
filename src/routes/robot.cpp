@@ -17,9 +17,19 @@ namespace robot {
 
 void register_robot_routes(httplib::Server& srv) {
     
-    // GET /api/robot/status - public (без auth)
+    // GET /api/robot/status - требует JWT
     srv.Get("/api/robot/status", [&](const httplib::Request& req, httplib::Response& res){
-        json out{{"ok", true}, {"running", robot::is_running()}};
+        json out{{"ok", true}, {"running", false}, {"keys_present", false}};
+        
+        int user_id;
+        if (!jwt_middleware::require_auth(req, res, user_id)) {
+            return;
+        }
+        
+        json keys = db::get_user_api_keys(user_id);
+        out["keys_present"] = !keys.empty();
+        out["running"] = robot::is_running();
+        
         res.set_content(out.dump(), "application/json");
     });
     
@@ -117,6 +127,47 @@ void register_robot_routes(httplib::Server& srv) {
         }
     });
     
+    // GET /api/robot/config - требует JWT
+    srv.Get("/api/robot/config", [&](const httplib::Request& req, httplib::Response& res){
+        json out{{"ok", false}};
+        
+        int user_id;
+        if (!jwt_middleware::require_auth(req, res, user_id)) {
+            return;
+        }
+        
+        // TODO: load from PostgreSQL user_configs table
+        json config = {
+            {"symbol", "BTCUSDT"},
+            {"leverage", 10},
+            {"balancePercent", 90.0},
+            {"tpPercent", 2.0},
+            {"slPercent", 1.0},
+            {"minConfidence", 60.0},
+            {"autoTrade", false},
+            {"checkInterval", 60}
+        };
+        
+        out["ok"] = true;
+        out["config"] = config;
+        res.set_content(out.dump(), "application/json");
+    });
+    
+    // POST /api/robot/config - требует JWT
+    srv.Post("/api/robot/config", [&](const httplib::Request& req, httplib::Response& res){
+        json out{{"ok", false}};
+        
+        int user_id;
+        if (!jwt_middleware::require_auth(req, res, user_id)) {
+            return;
+        }
+        
+        // TODO: save to PostgreSQL user_configs table
+        out["ok"] = true;
+        res.set_content(out.dump(), "application/json");
+    });
+    
+
     // GET /api/robot/pnl - требует JWT
     srv.Get("/api/robot/pnl", [&](const httplib::Request& req, httplib::Response& res){
         json out{{"ok", true}, {"today", 0}, {"total", 0}, {"unrealized", 0}};
