@@ -5,6 +5,7 @@
 #include <mutex>
 #include <chrono>
 #include <ctime>
+#include "../robot/smtp.cpp"
 
 using json = nlohmann::json;
 
@@ -22,8 +23,9 @@ static std::string generate_code() {
 
 // Отправка email (пока логируем, потом добавим SMTP)
 static bool send_email(const std::string& to, const std::string& code) {
-    std::cout << "[AUTH] ✉️  Verification code for " << to << ": " << code << std::endl;
-    // TODO: Zoho SMTP integration
+    if (!smtp::send_verification_email(to, code)) {
+        return false;
+    }
     return true;
 }
 

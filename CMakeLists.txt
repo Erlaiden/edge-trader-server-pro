@@ -12,6 +12,7 @@ add_definitions(-DCPPHTTPLIB_OPENSSL_SUPPORT)
 
 find_package(OpenSSL REQUIRED)
 find_package(Armadillo REQUIRED)
+find_package(CURL REQUIRED)
 
 set(SRC_CORE
     src/metrics.cpp
@@ -52,4 +53,9 @@ endif()
 
 add_executable(edge_trader_server ${SRC_CORE} ${SRC_ENV})
 target_include_directories(edge_trader_server PRIVATE src)
-target_link_libraries(edge_trader_server PRIVATE armadillo OpenSSL::SSL OpenSSL::Crypto)
+target_link_libraries(edge_trader_server PRIVATE 
+    armadillo 
+    OpenSSL::SSL 
+    OpenSSL::Crypto
+    CURL::libcurl
+)
