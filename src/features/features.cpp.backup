@@ -21,11 +21,13 @@ namespace etai {
 // Версия фич по умолчанию (без Money Flow)
 constexpr int FEAT_VERSION_BASE = 9;
 
-
 static inline bool env_enabled(const char* k){
-    // ВСЕГДА ВКЛЮЧЁН Money Flow для 32 фичей (версия 10)
-    return true;
+    const char* s = std::getenv(k);
+    if(!s || !*s) return false;
+    // "1", "true", "yes" включают
+    return (s[0]=='1') || (s[0]=='T'||s[0]=='t') || (s[0]=='Y'||s[0]=='y');
 }
+
 // ---------- вспомогательные функции ----------
 static double ema_one(const std::vector<double>& v, int period, size_t i) {
     if (i + 1 < (size_t)period) return NAN;

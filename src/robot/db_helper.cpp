@@ -103,4 +103,108 @@ json get_user_api_keys(int user_id) {
     }
 }
 
+
+json get_user_config(int user_id) {
+    std::lock_guard<std::mutex> lock(db_mutex);
+
+    try {
+        pqxx::connection conn(DB_CONN);
+        pqxx::work txn(conn);
+
+        pqxx::result res = txn.exec_params(
+            "SELECT symbol, leverage, balance_percent, tp_percent, sl_percent, "
+            "min_confidence, auto_trade, check_interval FROM user_configs WHERE user_id = $1",
+            user_id);
+
+        if (res.empty()) {
+            // Возвращаем дефолтный конфиг если не найден
+            return json{
+                {"symbol", "BTCUSDT"},
+                {"leverage", 10},
+                {"balancePercent", 90.0},
+                {"tpPercent", 2.0},
+                {"slPercent", 1.0},
+                {"minConfidence", 60.0},
+                {"autoTrade", false},
+                {"checkInterval", 60}
+            };
+        }
+
+        return json{
+            {"symbol", res[0][0].as<std::string>()},
+            {"leverage", res[0][1].as<int>()},
+            {"balancePercent", res[0][2].as<double>()},
+            {"tpPercent", res[0][3].as<double>()},
+            {"slPercent", res[0][4].as<double>()},
+            {"minConfidence", res[0][5].as<double>()},
+            {"autoTrade", res[0][6].as<bool>()},
+            {"checkInterval", res[0][7].as<int>()}
+        };
+
+    } catch (const std::exception& e) {
+        std::cerr << "[DB] ERROR get_user_config: " << e.what() << std::endl;
+        return json{
+            {"symbol", "BTCUSDT"},
+            {"leverage", 10},
+            {"balancePercent", 90.0},
+            {"tpPercent", 2.0},
+            {"slPercent", 1.0},
+            {"minConfidence", 60.0},
+            {"autoTrade", false},
+            {"checkInterval", 60}
+        };
+    }
+}
+
+
+bool save_user_config(int user_id, const json& config) {
+    std::lock_guard<std::mutex> lock(db_mutex);
+
+    try {
+        pqxx::connection conn(DB_CONN);
+        pqxx::work txn(conn);
+
+        std::string symbol = config.value("symbol", "BTCUSDT");
+        int leverage = config.value("leverage", 10);
+        double balance_percent = config.value("balancePercent", 90.0);
+        double tp_percent = config.value("tpPercent", 2.0);
+        double sl_percent = config.value("slPercent", 1.0);
+        double min_confidence = config.value("minConfidence", 60.0);
+        bool auto_trade = config.value("autoTrade", false);
+        int check_interval = config.value("checkInterval", 60);
+
+        // UPDATE или INSERT если не существует
+        pqxx::result check = txn.exec_params(
+            "SELECT user_id FROM user_configs WHERE user_id = $1", user_id);
+
+        if (check.empty()) {
+            // INSERT
+            txn.exec_params(
+                "INSERT INTO user_configs (user_id, symbol, leverage, balance_percent, "
+                "tp_percent, sl_percent, min_confidence, auto_trade, check_interval) "
+                "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+                user_id, symbol, leverage, balance_percent, tp_percent, sl_percent,
+                min_confidence, auto_trade, check_interval);
+        } else {
+            // UPDATE
+            txn.exec_params(
+                "UPDATE user_configs SET symbol=$2, leverage=$3, balance_percent=$4, "
+                "tp_percent=$5, sl_percent=$6, min_confidence=$7, auto_trade=$8, "
+                "check_interval=$9 WHERE user_id=$1",
+                user_id, symbol, leverage, balance_percent, tp_percent, sl_percent,
+                min_confidence, auto_trade, check_interval);
+        }
+
+        txn.commit();
+
+        std::cout << "[DB] ✅ Saved config for user_id=" << user_id 
+                  << " symbol=" << symbol << " leverage=" << leverage << std::endl;
+        return true;
+
+    } catch (const std::exception& e) {
+        std::cerr << "[DB] ERROR save_user_config: " << e.what() << std::endl;
+        return false;
+    }
+}
+
 }
