@@ -7,14 +7,16 @@ using json = nlohmann::json;
 
 void register_robot_keys_routes(httplib::Server& srv) {
     
-    // POST /api/robot/keys - Сохранить API ключи (per-user)
     srv.Post("/api/robot/keys", [&](const httplib::Request& req, httplib::Response& res){
         json out{{"ok", false}};
         
         int user_id;
         if (!jwt_middleware::require_auth(req, res, user_id)) {
-            return; // 401 already set
+            std::cerr << "[ROBOT_KEYS] AUTH FAILED" << std::endl;
+            return;
         }
+        
+        std::cerr << "[ROBOT_KEYS] POST keys for user_id=" << user_id << std::endl;
         
         try {
             json in = json::parse(req.body);
@@ -23,13 +25,16 @@ void register_robot_keys_routes(httplib::Server& srv) {
             std::string api_secret = in.value("apiSecret", "");
             bool testnet = in.value("testnet", false);
             
+            std::cerr << "[ROBOT_KEYS] Parsed: apiKey=" << api_key << ", testnet=" << testnet << std::endl;
+            
             if (api_key.empty() || api_secret.empty()) {
                 out["error"] = "missing_keys";
                 res.set_content(out.dump(), "application/json");
                 return;
             }
             
-            // Сохраняем в PostgreSQL для этого user_id
+            std::cerr << "[ROBOT_KEYS] Calling save_user_api_keys..." << std::endl;
+            
             if (!db::save_user_api_keys(user_id, api_key, api_secret, testnet)) {
                 out["error"] = "database_error";
                 res.set_content(out.dump(), "application/json");
@@ -40,13 +45,13 @@ void register_robot_keys_routes(httplib::Server& srv) {
             out["message"] = "keys_saved";
             res.set_content(out.dump(), "application/json");
             
-        } catch(...) {
+        } catch(const std::exception& e) {
+            std::cerr << "[ROBOT_KEYS] EXCEPTION: " << e.what() << std::endl;
             out["error"] = "exception";
             res.set_content(out.dump(), "application/json");
         }
     });
     
-    // GET /api/robot/keys - Получить API ключи (per-user)
     srv.Get("/api/robot/keys", [&](const httplib::Request& req, httplib::Response& res){
         json out{{"ok", false}};
         
@@ -68,7 +73,6 @@ void register_robot_keys_routes(httplib::Server& srv) {
             out["ok"] = true;
             out["keys_present"] = true;
             out["testnet"] = keys.value("testnet", false);
-            // НЕ возвращаем сами ключи по соображениям безопасности
             
             res.set_content(out.dump(), "application/json");
             
