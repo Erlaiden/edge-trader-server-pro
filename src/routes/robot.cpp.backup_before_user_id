@@ -169,19 +169,14 @@ void register_robot_routes(httplib::Server& srv) {
 
     // GET /api/robot/pnl - требует JWT
     srv.Get("/api/robot/pnl", [&](const httplib::Request& req, httplib::Response& res){
+        json out{{"ok", true}, {"today", 0}, {"total", 0}, {"unrealized", 0}};
+
         int user_id;
         if (!jwt_middleware::require_auth(req, res, user_id)) {
             return;
         }
 
-        json pnl = db::get_user_pnl(user_id);
-        json out{
-            {"ok", true}, 
-            {"today", pnl.value("today", 0.0)},
-            {"total", pnl.value("total", 0.0)},
-            {"unrealized", pnl.value("unrealized", 0.0)}
-        };
-
+        // TODO: implement real PnL calculation per user
         res.set_content(out.dump(), "application/json");
     });
 
@@ -214,7 +209,7 @@ void register_robot_routes(httplib::Server& srv) {
             cfg.check_interval_sec = cfg_json.value("checkInterval", 60);
             cfg.auto_trade = cfg_json.value("autoTrade", false);
 
-            bool success = robot::start(keys["apiKey"], keys["apiSecret"], cfg, user_id);
+            bool success = robot::start(keys["apiKey"], keys["apiSecret"], cfg);
             out["ok"] = success;
             out["running"] = robot::is_running();
             res.set_content(out.dump(), "application/json");
