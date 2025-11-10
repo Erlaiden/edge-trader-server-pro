@@ -11,9 +11,11 @@
 
 using json = nlohmann::json;
 
+// Временное хранилище кодов (email -> {code, expires_at})
 static std::map<std::string, std::pair<std::string, long long>> verification_codes;
 static std::mutex codes_mutex;
 
+// Генерация 6-значного кода
 static std::string generate_code() {
     static std::random_device rd;
     static std::mt19937 gen(rd());
@@ -21,6 +23,7 @@ static std::string generate_code() {
     return std::to_string(dis(gen));
 }
 
+// Отправка email (пока логируем, потом добавим SMTP)
 static bool send_email(const std::string& to, const std::string& code) {
     if (!smtp::send_verification_email(to, code)) {
         return false;
@@ -44,7 +47,7 @@ void register_auth_routes(httplib::Server& srv) {
             }
             
             std::string code = generate_code();
-            long long expires_at = std::time(nullptr) + 600;
+            long long expires_at = std::time(nullptr) + 600; // 10 минут
             
             {
                 std::lock_guard<std::mutex> lock(codes_mutex);
@@ -120,7 +123,9 @@ void register_auth_routes(httplib::Server& srv) {
             res.set_content(out.dump(), "application/json");
         }
     });
-    
+}
+
+    // POST /api/auth/register (после verify-code успешной)
     srv.Post("/api/auth/register", [&](const httplib::Request& req, httplib::Response& res){
         json out{{"ok", false}};
         
@@ -134,6 +139,7 @@ void register_auth_routes(httplib::Server& srv) {
                 return;
             }
             
+            // Получить или создать пользователя
             int user_id = db::get_or_create_user(email);
             
             if (user_id < 0) {
@@ -142,12 +148,14 @@ void register_auth_routes(httplib::Server& srv) {
                 return;
             }
             
+            // Генерируем JWT токен
             std::string token = jwt_helper::generate_token(user_id, email);
             
             out["ok"] = true;
             out["user_id"] = user_id;
             out["email"] = email;
             out["token"] = token;
+            out["message"] = "registered";
             
             res.set_content(out.dump(), "application/json");
             

@@ -4,10 +4,8 @@ project(edge_trader_server CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# --- Опции ---
 option(ETAI_BUILD_ENV "Build on-policy env modules" OFF)
 
-# --- Включаем SSL для httplib ---
 add_definitions(-DCPPHTTPLIB_OPENSSL_SUPPORT)
 
 find_package(OpenSSL REQUIRED)
@@ -18,8 +16,6 @@ set(SRC_CORE
     src/metrics.cpp
     src/rewardv2_accessors.cpp
     src/main.cpp
-
-    # --- Core ---
     src/ppo_pro.cpp
     src/ppo.cpp
     src/optim/adam.cpp
@@ -32,8 +28,6 @@ set(SRC_CORE
     src/features/manip_detector.cpp
     src/features/support_resistance.cpp
     src/features/money_flow.cpp
-
-    # --- Agents ---
     src/agents/agent_long.cpp
     src/agents/agent_short.cpp
     src/agents/agent_flat.cpp
@@ -58,4 +52,6 @@ target_link_libraries(edge_trader_server PRIVATE
     OpenSSL::SSL 
     OpenSSL::Crypto
     CURL::libcurl
+    pqxx
+    pq
 )
