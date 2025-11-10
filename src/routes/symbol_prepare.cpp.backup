@@ -160,8 +160,8 @@ void register_symbol_prepare_routes(httplib::Server& svr) {
             steps.push_back("training");
             std::cout << "[PREPARE] Training model for " << symbol << std::endl;
             try {
-                double tp = 0.02;
-                double sl = 0.01;
+                double tp = 0.008;
+                double sl = 0.004;
                 int ma_len = 12;
 
                 json train_result = etai::run_train_pro_and_save(

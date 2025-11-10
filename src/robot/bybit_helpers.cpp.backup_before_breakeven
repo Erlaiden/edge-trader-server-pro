@@ -101,36 +101,6 @@ json get_position(const std::string& apiKey, const std::string& apiSecret, const
     return nullptr;
 }
 
-// NEW: Функция для обновления только Stop Loss
-bool update_stop_loss(const std::string& apiKey, const std::string& apiSecret,
-                      const std::string& symbol, double new_sl_price) {
-    
-    std::ostringstream sl_stream;
-    sl_stream << std::fixed << std::setprecision(6) << new_sl_price;
-    std::string sl_str = sl_stream.str();
-    
-    // Убираем trailing zeros
-    sl_str.erase(sl_str.find_last_not_of('0') + 1, std::string::npos);
-    if (sl_str.back() == '.') sl_str.pop_back();
-
-    json tpsl_body = {
-        {"category", "linear"},
-        {"symbol", symbol},
-        {"positionIdx", 0},
-        {"stopLoss", sl_str}
-    };
-
-    auto res = bybit_request("POST", "/v5/position/trading-stop", apiKey, apiSecret, tpsl_body);
-
-    if (res.value("retCode", -1) != 0) {
-        std::cout << "[BREAKEVEN] ❌ Failed to update SL: " << res.value("retMsg", "") << std::endl;
-        return false;
-    }
-
-    std::cout << "[BREAKEVEN] ✅ SL updated to: $" << sl_str << std::endl;
-    return true;
-}
-
 bool open_trade(const std::string& apiKey, const std::string& apiSecret,
                 const std::string& symbol, const std::string& side, double qty,
                 double tp_price, double sl_price, int leverage) {
@@ -175,6 +145,7 @@ bool open_trade(const std::string& apiKey, const std::string& apiSecret,
     std::string orderId = order_res["result"]["orderId"];
     std::cout << "[TRADE] Order created: " << orderId << ", waiting 5 sec..." << std::endl;
 
+    // FIXED: Увеличил задержку с 2 до 5 секунд
     std::this_thread::sleep_for(std::chrono::seconds(5));
 
     // 3. Установить TP/SL
