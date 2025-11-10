@@ -96,11 +96,11 @@ bool save_user_api_keys(int user_id, const std::string& api_key, const std::stri
         
         txn.commit();
         
-        std::cout << "[DB] Saved API keys for user_id=" << user_id << std::endl;
+        std::cerr << "[DB] DEBUG: Attempting to save keys for user_id=" << user_id << std::endl; std::cout << "[DB] Saved API keys for user_id=" << user_id << std::endl;
         return true;
         
     } catch (const std::exception& e) {
-        std::cerr << "[DB] Error saving keys: " << e.what() << std::endl;
+        std::cerr << "[DB] ERROR saving keys: " << e.what() << std::endl;
         return false;
     }
 }

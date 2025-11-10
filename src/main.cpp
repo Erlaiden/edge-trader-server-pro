@@ -29,8 +29,10 @@
 #include "robot/robot_loop.cpp"
 #include "routes/auth.cpp"
 #include "routes/robot.cpp"
+#include "routes/robot_keys.cpp"
 
 void register_auth_routes(httplib::Server& srv);
+void register_robot_keys_routes(httplib::Server& srv);
 void register_robot_routes(httplib::Server& srv);
 
 inline void enable_cors_and_errors(httplib::Server& svr){
@@ -82,6 +84,7 @@ int main(int argc, char** argv) {
     register_diagnostic_routes(svr);
     register_symbol_prepare_routes(svr);
     register_robot_routes(svr);
+    register_robot_keys_routes(svr);
     register_auth_routes(svr);
     register_pipeline_routes(svr);
     register_compat_stubs(svr);
