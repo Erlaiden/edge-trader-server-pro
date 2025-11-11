@@ -15,7 +15,7 @@ extern double get_balance(const std::string& apiKey, const std::string& apiSecre
 extern json get_position(const std::string& apiKey, const std::string& apiSecret, const std::string& symbol);
 extern bool open_trade(const std::string& apiKey, const std::string& apiSecret,
                       const std::string& symbol, const std::string& side, double qty,
-                      double tp_price, double sl_price, int leverage);
+                      double tp_percent, double sl_percent, int leverage);
 extern bool update_stop_loss(const std::string& apiKey, const std::string& apiSecret,
                              const std::string& symbol, double new_sl_price);
 
@@ -30,7 +30,7 @@ struct RobotConfig {
     double min_confidence = 60.0;
     int check_interval_sec = 60;
     bool auto_trade = false;
-    
+
     double breakeven_trigger_percent = 75.0;
     double breakeven_offset_percent = 0.3;
 };
@@ -64,51 +64,50 @@ void trading_loop(const std::string& apiKey, const std::string& apiSecret) {
     while (robot_running) {
         try {
             auto position = get_position(apiKey, apiSecret, config.symbol);
-            
+
             if (!position.is_null()) {
                 // ПОЗИЦИЯ СУЩЕСТВУЕТ
-                
+
                 std::string side = position.value("side", "");
                 double entry_price = std::stod(position.value("avgPrice", "0"));
                 double current_price = std::stod(position.value("markPrice", "0"));
-                
+
                 auto it = position_tracker.find(config.symbol);
                 if (it == position_tracker.end()) {
                     PositionTracking track;
                     track.user_id = current_user_id;
                     track.side = side;
                     track.entry_price = entry_price;
-                    
+
                     std::string tp_str = position.value("takeProfit", "");
                     std::string sl_str = position.value("stopLoss", "");
-                    
+
                     if (!tp_str.empty() && tp_str != "0") {
                         track.tp_price = std::stod(tp_str);
                     }
                     if (!sl_str.empty() && sl_str != "0") {
                         track.sl_price = std::stod(sl_str);
                     }
-                    
+
                     track.breakeven_applied = false;
-                    
-                    // Проверяем есть ли trade_id в БД
+
                     track.trade_id = db::get_open_trade_id(current_user_id, config.symbol);
-                    
+
                     position_tracker[config.symbol] = track;
-                    
+
                     std::cout << "[ROBOT_LOOP] Position detected: " << side << " @ $" << entry_price
-                              << " TP=$" << track.tp_price << " SL=$" << track.sl_price 
+                              << " TP=$" << track.tp_price << " SL=$" << track.sl_price
                               << " trade_id=" << track.trade_id << std::endl;
                 }
-                
+
                 PositionTracking& track = position_tracker[config.symbol];
-                
+
                 // BREAKEVEN ЛОГИКА
                 if (!track.breakeven_applied && track.tp_price > 0 && track.entry_price > 0) {
-                    
+
                     double distance_to_tp = 0.0;
                     double progress_percent = 0.0;
-                    
+
                     if (track.side == "Buy") {
                         distance_to_tp = track.tp_price - track.entry_price;
                         double current_progress = current_price - track.entry_price;
@@ -118,61 +117,68 @@ void trading_loop(const std::string& apiKey, const std::string& apiSecret) {
                         double current_progress = track.entry_price - current_price;
                         progress_percent = (current_progress / distance_to_tp) * 100.0;
                     }
-                    
+
                     std::cout << "[ROBOT_LOOP] Monitoring: " << track.side << " price=$" << current_price
                               << " progress=" << (int)progress_percent << "% to TP" << std::endl;
-                    
+
                     if (progress_percent >= config.breakeven_trigger_percent) {
-                        
+
                         double new_sl = 0.0;
-                        
+
                         if (track.side == "Buy") {
                             new_sl = track.entry_price * (1.0 + config.breakeven_offset_percent / 100.0);
                         } else {
                             new_sl = track.entry_price * (1.0 - config.breakeven_offset_percent / 100.0);
                         }
-                        
+
                         std::cout << "[BREAKEVEN] 🎯 TRIGGER! Progress=" << (int)progress_percent
                                   << "% (>=" << config.breakeven_trigger_percent << "%)" << std::endl;
                         std::cout << "[BREAKEVEN] Moving SL: $" << track.sl_price << " → $" << new_sl
                                   << " (entry + " << config.breakeven_offset_percent << "%)" << std::endl;
-                        
+
                         bool success = update_stop_loss(apiKey, apiSecret, config.symbol, new_sl);
-                        
+
                         if (success) {
                             track.breakeven_applied = true;
                             track.sl_price = new_sl;
-                            
-                            // Сохраняем в БД
+
                             if (track.trade_id > 0) {
                                 db::mark_breakeven_activated(track.trade_id);
                             }
-                            
+
                             std::cout << "[BREAKEVEN] ✅ Breakeven activated! Position protected." << std::endl;
                         } else {
                             std::cout << "[BREAKEVEN] ❌ Failed to update SL, will retry next cycle" << std::endl;
                         }
                     }
                 }
-                
+
                 std::this_thread::sleep_for(std::chrono::seconds(config.check_interval_sec));
                 continue;
-                
+
             } else {
                 // НЕТ ПОЗИЦИИ
                 if (position_tracker.find(config.symbol) != position_tracker.end()) {
-                    
+
                     PositionTracking& track = position_tracker[config.symbol];
-                    
+
                     std::cout << "[ROBOT_LOOP] Position closed, clearing tracking" << std::endl;
-                    
-                    // TODO: Проверить через Bybit API причину закрытия и exit_price
-                    // Пока просто помечаем как закрытую
+
                     if (track.trade_id > 0) {
-                        std::cout << "[ROBOT_LOOP] ⚠️ Trade closed but exit details unknown (trade_id=" 
-                                  << track.trade_id << ")" << std::endl;
+                        auto signal = etai_get_signal(config.symbol);
+                        double exit_price = signal.value("last_close", track.entry_price);
+                        double pnl = 0.0;
+
+                        if (track.side == "Buy") {
+                            pnl = (exit_price - track.entry_price) * track.qty;
+                        } else {
+                            pnl = (track.entry_price - exit_price) * track.qty;
+                        }
+
+                        db::update_trade(track.trade_id, exit_price, pnl, "closed", "position_closed");
+                        std::cout << "[ROBOT_LOOP] Trade closed: id=" << track.trade_id << " exit=" << exit_price << " pnl=" << pnl << std::endl;
                     }
-                    
+
                     position_tracker.erase(config.symbol);
                 }
             }
@@ -236,50 +242,52 @@ void trading_loop(const std::string& apiKey, const std::string& apiSecret) {
             }
 
             std::string side = signal_type == "LONG" ? "Buy" : "Sell";
-            double tp_price = 0.0;
-            double sl_price = 0.0;
-
-            if (signal_type == "LONG") {
-                tp_price = signal.value("tp_price_long", 0.0);
-                sl_price = signal.value("sl_price_long", 0.0);
-            } else {
-                tp_price = signal.value("tp_price_short", 0.0);
-                sl_price = signal.value("sl_price_short", 0.0);
-            }
-
-            if (tp_price <= 0 || sl_price <= 0) {
-                std::cout << "[ROBOT_LOOP] Invalid TP/SL from signal: TP=" << tp_price
-                          << " SL=" << sl_price << std::endl;
-                std::this_thread::sleep_for(std::chrono::seconds(config.check_interval_sec));
-                continue;
-            }
 
             std::cout << "[ROBOT_LOOP] 🚀 Opening " << side << " " << qty << " @ $" << last_close
                       << " (confidence: " << confidence << "%)" << std::endl;
-            std::cout << "[ROBOT_LOOP]    TP: $" << tp_price << " SL: $" << sl_price << std::endl;
+            std::cout << "[ROBOT_LOOP]    TP: " << config.tp_percent << "% SL: " << config.sl_percent << "%" << std::endl;
 
             bool success = open_trade(apiKey, apiSecret, config.symbol, side, qty,
-                                     tp_price, sl_price, config.leverage);
+                                     config.tp_percent, config.sl_percent, config.leverage);
 
             if (success) {
                 std::cout << "[ROBOT_LOOP] ✅ Trade opened successfully!" << std::endl;
-                
+
+                // Получаем реальную позицию чтобы сохранить правильные TP/SL
+                auto new_position = get_position(apiKey, apiSecret, config.symbol);
+                double real_entry = last_close;
+                double real_tp = 0.0;
+                double real_sl = 0.0;
+
+                if (!new_position.is_null()) {
+                    real_entry = std::stod(new_position.value("avgPrice", std::to_string(last_close)));
+                    std::string tp_str = new_position.value("takeProfit", "");
+                    std::string sl_str = new_position.value("stopLoss", "");
+                    
+                    if (!tp_str.empty() && tp_str != "0") {
+                        real_tp = std::stod(tp_str);
+                    }
+                    if (!sl_str.empty() && sl_str != "0") {
+                        real_sl = std::stod(sl_str);
+                    }
+                }
+
                 // Сохраняем в БД
-                int trade_id = db::save_trade(current_user_id, config.symbol, side, qty, 
-                                               last_close, tp_price, sl_price);
-                
+                int trade_id = db::save_trade(current_user_id, config.symbol, side, qty,
+                                               real_entry, real_tp, real_sl);
+
                 // Инициализируем tracking
                 PositionTracking track;
                 track.user_id = current_user_id;
                 track.trade_id = trade_id;
                 track.side = side;
-                track.entry_price = last_close;
-                track.tp_price = tp_price;
-                track.sl_price = sl_price;
+                track.entry_price = real_entry;
+                track.tp_price = real_tp;
+                track.sl_price = real_sl;
                 track.qty = qty;
                 track.breakeven_applied = false;
                 position_tracker[config.symbol] = track;
-                
+
                 std::cout << "[ROBOT_LOOP] 📝 Saved to DB with trade_id=" << trade_id << std::endl;
 
             } else {
@@ -312,7 +320,6 @@ bool start(const std::string& apiKey, const std::string& apiSecret, const RobotC
     return true;
 }
 
-// Для обратной совместимости - без user_id
 bool start(const std::string& apiKey, const std::string& apiSecret, const RobotConfig& cfg) {
     return start(apiKey, apiSecret, cfg, 0);
 }
@@ -328,7 +335,7 @@ void stop() {
         delete robot_thread;
         robot_thread = nullptr;
     }
-    
+
     position_tracker.clear();
     current_user_id = 0;
 }
