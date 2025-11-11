@@ -86,6 +86,7 @@ static inline double atr14_from_M(const arma::mat& M) {
     return ema;
 }
 
+// Средний ATR за последние 50 свечей
 static inline double avg_atr_from_M(const arma::mat& M) {
     if (M.n_cols < 50 || M.n_rows < 5) return 0.0;
     size_t N = M.n_cols;
@@ -264,147 +265,90 @@ void register_infer_routes(httplib::Server& srv) {
 
             LAST_INFER_TS.store((long long)time(nullptr)*1000, std::memory_order_relaxed);
 
+            double k_atr = qpd(req, "k_atr", 1.2);
+            double eps = qpd(req, "eps", 0.05);
+            double thr = best_thr > 0 ? best_thr : 0.5;
+
             int upVotes=0, downVotes=0;
             htf_votes(inf, upVotes, downVotes);
             int netHTF = upVotes - downVotes;
 
-            // =====================================================================
-            // 🚀 НОВАЯ УМНАЯ ЛОГИКА РАСЧЕТА CONFIDENCE
-            // =====================================================================
-            
-            // 1. Базовая уверенность от силы сигнала модели (независимо от порога!)
-            double signal_strength = std::fabs(score15);
-            double base_confidence = signal_strength * 100.0;  // 0.28 -> 28%
-            
-            // 2. Учитываем если сигнал сильнее обычного
-            if (signal_strength > 0.3) {
-                base_confidence += (signal_strength - 0.3) * 150.0;  // Бонус за силу >0.3
-            }
-            
-            // 3. Бонус/штраф от HTF согласованности
-            double htf_modifier = 0.0;
-            if (netHTF != 0) {
-                // Проверяем согласован ли HTF с сигналом модели
-                bool htf_agrees = (score15 > 0 && netHTF > 0) || (score15 < 0 && netHTF < 0);
-                
-                if (htf_agrees) {
-                    // HTF согласен - сильный бонус
-                    htf_modifier = std::min(25.0, std::fabs(netHTF) * 8.0);
-                } else {
-                    // HTF противоречит - небольшой штраф, но не обнуляем
-                    htf_modifier = -std::min(15.0, std::fabs(netHTF) * 5.0);
-                }
-            }
-            
-            double confidence = base_confidence + htf_modifier;
-            confidence = std::max(0.0, std::min(100.0, confidence));
-            
-            // Логируем расчет
-            std::cout << "[CONFIDENCE] signal_strength=" << signal_strength 
-                      << " base=" << base_confidence 
-                      << " netHTF=" << netHTF 
-                      << " htf_mod=" << htf_modifier
-                      << " final=" << confidence << "%" << std::endl;
+            std::string marketMode = "flat";
+            double confidence = 0.0;
+            double excess = std::fabs(score15) - thr;
 
-            // =====================================================================
-            // 🎯 ОПРЕДЕЛЕНИЕ РЕЖИМА И АДАПТИВНОГО ПОРОГА
-            // =====================================================================
-            
+            if (excess >= 0.0) {
+                if (score15 > 0) marketMode = (netHTF >= 2) ? "trendUp" : (netHTF <= -2) ? "correction" : "trendUp";
+                else if (score15 < 0) marketMode = (netHTF <= -2) ? "trendDown" : (netHTF >= 2) ? "correction" : "trendDown";
+
+                double htfFactor = std::min(1.0, std::fabs((double)netHTF)/4.0);
+                confidence = std::min(100.0, 100.0 * (0.5*std::min(1.0, excess/(thr>0?thr:0.5)) + 0.5*htfFactor));
+            } else {
+                double band = k_atr * atr;
+
+                if (score15 >= -thr*eps && score15 <= thr*eps) sig = "NEUTRAL";
+                else if (score15 > thr*eps) sig = "SHORT";
+                else if (score15 < -thr*eps) sig = "LONG";
+
+                marketMode = "flat";
+                confidence = std::min(100.0, 70.0 * std::min(1.0, std::fabs(score15)/(thr>0?thr:0.5)));
+                inf["flat_band"] = band;
+                inf["flat_k_atr"] = k_atr;
+            }
+
             json safe_htf = (inf.contains("htf") && inf["htf"].is_object()) ? inf["htf"] : json::object();
-            
+
+            // 🔥 АДАПТИВНАЯ СИСТЕМА - определяем режим рынка
             etai::MarketRegime regime = etai::detect_regime(safe_htf, cached.M15, atr, avg_atr);
             etai::RegimeParams params = etai::get_regime_params(regime);
             std::string regime_str = etai::regime_to_string(regime);
-            
-            std::string marketMode = "adaptive";
-            if (score15 > 0.2) marketMode = "bullish";
-            else if (score15 < -0.2) marketMode = "bearish";
-            else marketMode = "neutral";
 
             std::string original_sig = sig;
             double original_conf = confidence;
-            
-            // =====================================================================
-            // 🔥 АДАПТИВНЫЙ ПОРОГ - зависит от режима и направления сигнала
-            // =====================================================================
-            
-            double adaptive_threshold = params.min_confidence;
-            
+
+            // Применяем фильтры по режиму
             if (regime == etai::MarketRegime::RANGE_BOUND && params.use_mean_reversion) {
-                // ФЛЕТ: mean reversion
+                // ФЛЕТ: mean reversion стратегия
                 double channel_pos = etai::get_channel_position(cached.M15, atr);
                 
-                if ((channel_pos > 0.80 && sig == "SHORT") || (channel_pos < 0.20 && sig == "LONG")) {
-                    // Хорошая позиция для mean reversion - низкий порог
-                    adaptive_threshold = 20.0;
-                    std::cout << "[RANGE] Good mean reversion setup, threshold lowered to 20%" << std::endl;
-                } else if (channel_pos > 0.40 && channel_pos < 0.60) {
-                    // Середина канала - высокий порог
-                    adaptive_threshold = 50.0;
+                if (channel_pos > 0.85) {
+                    // Около верха канала - только SHORT
+                    sig = "SHORT";
+                    confidence = std::min(confidence, 70.0);
+                } else if (channel_pos < 0.15) {
+                    // Около низа канала - только LONG
+                    sig = "LONG";
+                    confidence = std::min(confidence, 70.0);
                 } else {
-                    adaptive_threshold = 35.0;
+                    // Середина канала - не торгуем
+                    sig = "NEUTRAL";
+                    confidence = 0.0;
                 }
-            } else if (regime == etai::MarketRegime::MANIPULATION) {
-                // Манипуляция - не торгуем
-                sig = "NEUTRAL";
-                confidence = 0.0;
-                adaptive_threshold = 100.0;
             } else {
-                // Тренды, коррекции, пробои
+                // Обычные фильтры для трендов/пробоев/коррекций
                 
-                // Определяем согласованность сигнала с режимом
-                bool signal_with_trend = false;
-                bool signal_against_trend = false;
-                
-                if (sig == "LONG") {
-                    signal_with_trend = (netHTF > 0);
-                    signal_against_trend = (netHTF < -1);
-                } else if (sig == "SHORT") {
-                    signal_with_trend = (netHTF < 0);
-                    signal_against_trend = (netHTF > 1);
+                // 1. Проверяем разрешён ли сигнал
+                if (sig == "LONG" && !params.allow_long) {
+                    sig = "NEUTRAL";
+                    confidence = 0.0;
+                }
+                if (sig == "SHORT" && !params.allow_short) {
+                    sig = "NEUTRAL";
+                    confidence = 0.0;
                 }
                 
-                if (signal_with_trend) {
-                    // ПО ТРЕНДУ - агрессивный вход, низкий порог
-                    adaptive_threshold = params.min_confidence * 0.6;  // 35% -> 21%
-                    std::cout << "[TREND] Signal with trend, threshold=" << adaptive_threshold << "%" << std::endl;
-                    
-                } else if (signal_against_trend) {
-                    // ПРОТИВ ТРЕНДА - осторожно, высокий порог
-                    adaptive_threshold = params.min_confidence * 1.5;  // 35% -> 52.5%
-                    std::cout << "[COUNTER] Signal against trend, threshold=" << adaptive_threshold << "%" << std::endl;
-                    
-                } else {
-                    // НЕЙТРАЛЬНО - обычный порог
-                    adaptive_threshold = params.min_confidence;
+                // 2. Проверяем минимальную confidence
+                if (confidence < params.min_confidence) {
+                    sig = "NEUTRAL";
+                    confidence = 0.0;
                 }
             }
-            
-            // =====================================================================
-            // ✅ ФИНАЛЬНОЕ РЕШЕНИЕ
-            // =====================================================================
-            
-            // Проверяем пороговое значение
-            if (confidence < adaptive_threshold) {
-                sig = "NEUTRAL";
-                std::cout << "[FILTER] Confidence " << confidence 
-                          << "% below threshold " << adaptive_threshold 
-                          << "%, signal blocked" << std::endl;
-            }
-            
-            // ИСКЛЮЧЕНИЕ: Если модель ОЧЕНЬ уверена (>70%) - торгуем в любом случае!
-            if (confidence >= 70.0 && sig == "NEUTRAL" && original_sig != "NEUTRAL") {
-                sig = original_sig;  // Восстанавливаем сигнал
-                std::cout << "[OVERRIDE] High confidence " << confidence 
-                          << "% overrides filters, signal: " << sig << std::endl;
-            }
-            
-            // Логируем финальное решение
-            if (sig != original_sig || std::fabs(confidence - original_conf) > 2.0) {
-                std::cerr << "[DECISION] Regime=" << regime_str
-                          << " | Original: " << original_sig << " @ " << (int)original_conf << "%"
-                          << " | Final: " << sig << " @ " << (int)confidence << "%"
-                          << " | Threshold: " << (int)adaptive_threshold << "%" << std::endl;
+
+            // Логируем если сигнал изменён
+            if (sig != original_sig) {
+                std::cerr << "[ADAPTIVE] Regime=" << regime_str 
+                          << " changed signal: " << original_sig << "→" << sig 
+                          << " conf: " << original_conf << "→" << confidence << std::endl;
             }
 
             // Обновляем счётчики
@@ -412,7 +356,7 @@ void register_infer_routes(httplib::Server& srv) {
             else if (sig == "SHORT") INFER_SIG_SHORT.fetch_add(1, std::memory_order_relaxed);
             else INFER_SIG_NEUTRAL.fetch_add(1, std::memory_order_relaxed);
 
-            // TP/SL из regime params
+            // ✅ Используем TP/SL из regime params
             double final_tp = params.tp_percent;
             double final_sl = params.sl_percent;
 
@@ -426,7 +370,7 @@ void register_infer_routes(httplib::Server& srv) {
 
             json out{
                 {"ok", true},
-                {"mode", "smart_aggressive"},
+                {"mode", "adaptive"},
                 {"regime", regime_str},
                 {"regime_note", params.note},
                 {"symbol", symbol},
@@ -438,8 +382,6 @@ void register_infer_routes(httplib::Server& srv) {
                 {"score15", score15},
                 {"market_mode", marketMode},
                 {"confidence", confidence},
-                {"adaptive_threshold", adaptive_threshold},
-                {"netHTF", netHTF},
                 {"htf", safe_htf},
                 {"feat_dim_used", jint(inf, "feat_dim_used", 0)},
                 {"used_norm", jbool(inf, "used_norm", true)},
@@ -463,7 +405,7 @@ void register_infer_routes(httplib::Server& srv) {
                 out["sl_price_long"] = last * (1.0 - final_sl);
                 out["tp_price_short"] = last * (1.0 - final_tp);
                 out["sl_price_short"] = last * (1.0 + final_sl);
-
+                
                 if (regime == etai::MarketRegime::RANGE_BOUND) {
                     out["channel_position"] = etai::get_channel_position(cached.M15, atr);
                 }
