@@ -9,8 +9,6 @@
 #include "infer_cache.h"
 #include "../market/regime_detector.h"
 #include <armadillo>
-#include "../market/volume_analysis.h"
-#include "../market/candlestick_patterns.h"
 #include <fstream>
 #include <iostream>
 #include <atomic>
@@ -300,94 +298,6 @@ void register_infer_routes(httplib::Server& srv) {
             
             double confidence = base_confidence + htf_modifier;
             confidence = std::max(0.0, std::min(100.0, confidence));
-
-            // =====================================================================
-            // 📊 VOLUME ANALYSIS - критично для скальпинга!
-            // =====================================================================
-            
-            auto volume_signal = etai::analyze_volume(cached.M15, 20);
-            
-            std::cout << "[VOLUME] signal=" << volume_signal.signal 
-                      << " ratio=" << volume_signal.volume_ratio 
-                      << " OBV=" << volume_signal.obv
-                      << " boost=" << volume_signal.confidence_boost << "%" << std::endl;
-            
-            // Применяем volume boost/penalty к confidence
-            if (sig == "LONG" && (volume_signal.signal == "strong_buy" || volume_signal.signal == "accumulation")) {
-                confidence += volume_signal.confidence_boost;
-                std::cout << "[VOLUME] ✅ LONG confirmed by volume!" << std::endl;
-            }
-            else if (sig == "SHORT" && (volume_signal.signal == "strong_sell" || volume_signal.signal == "distribution")) {
-                confidence += volume_signal.confidence_boost;
-                std::cout << "[VOLUME] ✅ SHORT confirmed by volume!" << std::endl;
-            }
-            else if (sig == "LONG" && volume_signal.signal == "strong_sell") {
-                confidence -= 15.0;
-                std::cout << "[VOLUME] ⚠️ WARNING: LONG but volume shows SELL pressure!" << std::endl;
-            }
-            else if (sig == "SHORT" && volume_signal.signal == "strong_buy") {
-                confidence -= 15.0;
-                std::cout << "[VOLUME] ⚠️ WARNING: SHORT but volume shows BUY pressure!" << std::endl;
-            }
-            else if (volume_signal.signal == "low_volume_warning") {
-                confidence += volume_signal.confidence_boost;
-                std::cout << "[VOLUME] ⚠️ Low volume - suspicious move!" << std::endl;
-            }
-            
-            // Дивергенция
-            bool has_divergence = etai::detect_volume_divergence(cached.M15, 10);
-            if (has_divergence) {
-                std::cout << "[VOLUME] 🔥 DIVERGENCE detected - potential reversal!" << std::endl;
-                if ((sig == "SHORT" && score15 < -0.2) || (sig == "LONG" && score15 > 0.2)) {
-                    confidence += 12.0;
-                }
-            }
-            
-            confidence = std::max(0.0, std::min(100.0, confidence));
-
-            // =====================================================================
-            // 🕯️ CANDLESTICK PATTERN ANALYSIS
-            // =====================================================================
-            
-            auto candle_signal = etai::analyze_candles(cached.M15);
-            
-            if (candle_signal.pattern != etai::CandlePattern::NONE) {
-                std::cout << "[CANDLE] Pattern: " << candle_signal.pattern_name
-                          << " | Signal: " << candle_signal.signal
-                          << " | Strength: " << candle_signal.strength
-                          << " | Boost: " << candle_signal.confidence_boost << "%" << std::endl;
-                
-                // Применяем candle boost если направление совпадает
-                if (sig == "LONG" && candle_signal.signal == "bullish") {
-                    confidence += candle_signal.confidence_boost;
-                    
-                    if (candle_signal.is_reversal) {
-                        std::cout << "[CANDLE] 🔥 BULLISH REVERSAL pattern detected!" << std::endl;
-                    }
-                }
-                else if (sig == "SHORT" && candle_signal.signal == "bearish") {
-                    confidence += candle_signal.confidence_boost;
-                    
-                    if (candle_signal.is_reversal) {
-                        std::cout << "[CANDLE] 🔥 BEARISH REVERSAL pattern detected!" << std::endl;
-                    }
-                }
-                else if (candle_signal.signal == "neutral") {
-                    confidence += candle_signal.confidence_boost;  // Обычно штраф для DOJI
-                    std::cout << "[CANDLE] ⚠️ Indecision - " << candle_signal.pattern_name << std::endl;
-                }
-                else if ((sig == "LONG" && candle_signal.signal == "bearish") ||
-                         (sig == "SHORT" && candle_signal.signal == "bullish")) {
-                    // Конфликт сигналов
-                    confidence -= 10.0;
-                    std::cout << "[CANDLE] ⚠️ Conflict: model says " << sig 
-                              << " but candle is " << candle_signal.signal << std::endl;
-                }
-            }
-            
-            confidence = std::max(0.0, std::min(100.0, confidence));
-
-
             
             // Логируем расчет
             std::cout << "[CONFIDENCE] signal_strength=" << signal_strength 
@@ -425,14 +335,14 @@ void register_infer_routes(httplib::Server& srv) {
                 double channel_pos = etai::get_channel_position(cached.M15, atr);
                 
                 if ((channel_pos > 0.80 && sig == "SHORT") || (channel_pos < 0.20 && sig == "LONG")) {
-                    // Хорошая позиция для mean reversion - ОЧЕНЬ низкий порог
-                    adaptive_threshold = 15.0;
+                    // Хорошая позиция для mean reversion - низкий порог
+                    adaptive_threshold = 20.0;
                     std::cout << "[RANGE] Good mean reversion setup, threshold lowered to 20%" << std::endl;
                 } else if (channel_pos > 0.40 && channel_pos < 0.60) {
                     // Середина канала - высокий порог
-                    adaptive_threshold = 30.0;
+                    adaptive_threshold = 50.0;
                 } else {
-                    adaptive_threshold = 22.0;
+                    adaptive_threshold = 35.0;
                 }
             } else if (regime == etai::MarketRegime::MANIPULATION) {
                 // Манипуляция - не торгуем
@@ -456,12 +366,12 @@ void register_infer_routes(httplib::Server& srv) {
                 
                 if (signal_with_trend) {
                     // ПО ТРЕНДУ - агрессивный вход, низкий порог
-                    adaptive_threshold = params.min_confidence * 0.5;  // 35% -> 21%
+                    adaptive_threshold = params.min_confidence * 0.6;  // 35% -> 21%
                     std::cout << "[TREND] Signal with trend, threshold=" << adaptive_threshold << "%" << std::endl;
                     
                 } else if (signal_against_trend) {
                     // ПРОТИВ ТРЕНДА - осторожно, высокий порог
-                    adaptive_threshold = params.min_confidence * 1.2;  // 35% -> 52.5%
+                    adaptive_threshold = params.min_confidence * 1.5;  // 35% -> 52.5%
                     std::cout << "[COUNTER] Signal against trend, threshold=" << adaptive_threshold << "%" << std::endl;
                     
                 } else {
@@ -516,14 +426,6 @@ void register_infer_routes(httplib::Server& srv) {
 
             json out{
                 {"ok", true},
-                {"volume_signal", volume_signal.signal},
-                {"volume_ratio", volume_signal.volume_ratio},
-                {"volume_obv", volume_signal.obv},
-                {"volume_boost", volume_signal.confidence_boost},
-                {"candle_pattern", candle_signal.pattern_name},
-                {"candle_signal", candle_signal.signal},
-                {"candle_strength", candle_signal.strength},
-                {"candle_boost", candle_signal.confidence_boost},
                 {"mode", "smart_aggressive"},
                 {"regime", regime_str},
                 {"regime_note", params.note},

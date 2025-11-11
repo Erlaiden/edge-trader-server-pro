@@ -182,25 +182,25 @@ MarketRegime detect_regime(
 RegimeParams get_regime_params(MarketRegime regime) {
     switch (regime) {
         case MarketRegime::STRONG_UPTREND:
-            return {true, false, 0.04, 0.015, 40.0, "Strong uptrend - only LONG", false};
+            return {true, false, 0.04, 0.015, 22.0, "Strong uptrend - only LONG", false};
 
         case MarketRegime::STRONG_DOWNTREND:
-            return {false, true, 0.04, 0.015, 40.0, "Strong downtrend - only SHORT", false};
+            return {false, true, 0.04, 0.015, 22.0, "Strong downtrend - only SHORT", false};
 
         case MarketRegime::RANGE_BOUND:
-            return {true, true, 0.015, 0.008, 45.0, "Range - mean reversion", true};
+            return {true, true, 0.015, 0.008, 20.0, "Range - mean reversion", true};
 
         case MarketRegime::CORRECTION_UP:
-            return {true, false, 0.035, 0.02, 45.0, "Correction in uptrend - LONG reversal", false};
+            return {true, false, 0.035, 0.02, 22.0, "Correction in uptrend - LONG reversal", false};
 
         case MarketRegime::CORRECTION_DOWN:
-            return {false, true, 0.035, 0.02, 45.0, "Correction in downtrend - SHORT reversal", false};
+            return {false, true, 0.035, 0.02, 22.0, "Correction in downtrend - SHORT reversal", false};
 
         case MarketRegime::BREAKOUT_UP:
-            return {true, false, 0.08, 0.025, 40.0, "Breakout up - LONG immediately", false};
+            return {true, false, 0.08, 0.025, 20.0, "Breakout up - LONG immediately", false};
 
         case MarketRegime::BREAKOUT_DOWN:
-            return {false, true, 0.08, 0.025, 40.0, "Breakout down - SHORT immediately", false};
+            return {false, true, 0.08, 0.025, 20.0, "Breakout down - SHORT immediately", false};
 
         case MarketRegime::MANIPULATION:
             return {false, false, 0.0, 0.0, 100.0, "Manipulation - do not trade", false};
