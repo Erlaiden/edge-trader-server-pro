@@ -65,13 +65,46 @@ static inline json make_agents_summary() {
     };
 }
 
-static inline void enrich_with_levels(json &out, const arma::mat& M15, double tp, double sl) {
-    if (M15.n_rows >= 5 && M15.n_cols >= 1) {
+// ✅ ДИНАМИЧЕСКИЕ TP/SL НА ОСНОВЕ ATR
+static inline void enrich_with_dynamic_levels(json &out, const arma::mat& M15, double atr) {
+    if (M15.n_rows >= 5 && M15.n_cols >= 1 && atr > 0) {
         double last = (double) M15.row(4)(M15.n_cols - 1);
-        out["tp_price_long"]   = last * (1.0 + tp);
-        out["sl_price_long"]   = last * (1.0 - sl);
-        out["tp_price_short"]  = last * (1.0 - tp);
-        out["sl_price_short"]  = last * (1.0 + sl);
+        
+        // Адаптивные множители на основе волатильности
+        double atr_percent = (atr / last) * 100.0;
+        
+        double tp_multiplier = 2.5;  // По умолчанию
+        double sl_multiplier = 1.2;
+        
+        // Высокая волатильность (ATR > 3%) → шире
+        if (atr_percent > 3.0) {
+            tp_multiplier = 3.5;
+            sl_multiplier = 1.5;
+        }
+        // Средняя волатильность (1.5% - 3%)
+        else if (atr_percent > 1.5) {
+            tp_multiplier = 3.0;
+            sl_multiplier = 1.3;
+        }
+        // Низкая волатильность (< 1.5%)
+        else {
+            tp_multiplier = 2.0;
+            sl_multiplier = 1.0;
+        }
+        
+        // Рассчитываем TP/SL в процентах от цены
+        double tp_percent = (atr * tp_multiplier / last);
+        double sl_percent = (atr * sl_multiplier / last);
+        
+        out["tp"] = tp_percent;
+        out["sl"] = sl_percent;
+        out["atr"] = atr;
+        out["atr_percent"] = atr_percent;
+        
+        out["tp_price_long"]   = last * (1.0 + tp_percent);
+        out["sl_price_long"]   = last * (1.0 - sl_percent);
+        out["tp_price_short"]  = last * (1.0 - tp_percent);
+        out["sl_price_short"]  = last * (1.0 + sl_percent);
         out["last_close"]      = last;
     }
 }
@@ -127,7 +160,7 @@ void register_infer_routes(httplib::Server& srv) {
         out["F_cols"]   = (int)F.n_cols;
         res.set_content(out.dump(), "application/json");
     });
-    
+
     srv.Get("/api/infer/stats", [&](const httplib::Request&, httplib::Response& res){
         json out{
             {"cache_hits", (unsigned long long)CACHE_HITS.load()},
@@ -137,8 +170,12 @@ void register_infer_routes(httplib::Server& srv) {
         };
         res.set_content(out.dump(), "application/json");
     });
-    
+
     srv.Post("/api/infer/cache/clear", [&](const httplib::Request&, httplib::Response& res){
+        etai::get_infer_cache().clear();
+        json out{{"ok", true}, {"message", "cache_cleared"}};
+        res.set_content(out.dump(), "application/json");
+    });
 
     // Альтернативный GET endpoint для очистки кэша
     srv.Get("/api/cache/clear", [&](const httplib::Request&, httplib::Response& res){
@@ -146,29 +183,25 @@ void register_infer_routes(httplib::Server& srv) {
         json out{{"ok", true}, {"message", "cache_cleared"}};
         res.set_content(out.dump(), "application/json");
     });
-        etai::get_infer_cache().clear();
-        json out{{"ok", true}, {"message", "cache_cleared"}};
-        res.set_content(out.dump(), "application/json");
-    });
 
     srv.Get("/api/infer", [&](const httplib::Request& req, httplib::Response& res){
         unsigned long long req_id = REQUEST_COUNTER.fetch_add(1);
-        
+
         try {
             REQ_INFER.fetch_add(1, std::memory_order_relaxed);
 
             std::string symbol   = qp(req, "symbol", "BTCUSDT");
             std::string interval = qp(req, "interval", "15");
-            
+
             // 1. КЭSH
             etai::CachedInferData cached;
             bool from_cache = etai::get_infer_cache().get(symbol, interval, cached);
-            
+
             if (from_cache) {
                 CACHE_HITS.fetch_add(1);
             } else {
                 CACHE_MISSES.fetch_add(1);
-                
+
                 const std::string model_path = "cache/models/" + symbol + "_" + interval + "_ppo_pro.json";
                 std::ifstream mf(model_path);
                 if (!mf) {
@@ -176,7 +209,7 @@ void register_infer_routes(httplib::Server& srv) {
                     res.set_content(out.dump(), "application/json");
                     return;
                 }
-                
+
                 try {
                     mf >> cached.model;
                 } catch (const std::exception& e) {
@@ -197,11 +230,11 @@ void register_infer_routes(httplib::Server& srv) {
                     res.set_content(out.dump(), "application/json");
                     return;
                 }
-                
+
                 cached.M60 = etai::load_cached_matrix(symbol, "60");
                 cached.M240 = etai::load_cached_matrix(symbol, "240");
                 cached.M1440 = etai::load_cached_matrix(symbol, "1440");
-                
+
                 cached.loaded_at = std::chrono::steady_clock::now();
                 etai::get_infer_cache().put(symbol, interval, cached);
             }
@@ -210,8 +243,6 @@ void register_infer_routes(httplib::Server& srv) {
             int feat_dim = jint(cached.model, "feat_dim", 0);
             double best_thr = jnum(cached.model, "best_thr", 0.5);
             int ma_len = jint(cached.model, "ma_len", 12);
-            double tp = jnum(cached.model, "tp", 0.008);
-            double sl = jnum(cached.model, "sl", 0.004);
 
             if (version == 0 || feat_dim == 0) {
                 json out{{"ok",false},{"error","model_incomplete"}};
@@ -219,26 +250,29 @@ void register_infer_routes(httplib::Server& srv) {
                 return;
             }
 
-            // 2. ИНФЕРЕНС С RETRY
+            // 2. РАСЧЁТ ATR
+            double atr = atr14_from_M(cached.M15);
+
+            // 3. ИНФЕРЕНС С RETRY
             arma::mat M60_t, M240_t, M1440_t;
             const arma::mat *p60 = nullptr, *p240 = nullptr, *p1440 = nullptr;
-            
+
             if (cached.M60.n_elem) { M60_t = cached.M60.t(); p60 = &M60_t; }
             if (cached.M240.n_elem) { M240_t = cached.M240.t(); p240 = &M240_t; }
             if (cached.M1440.n_elem) { M1440_t = cached.M1440.t(); p1440 = &M1440_t; }
-            
+
             arma::mat raw15 = cached.M15.t();
-            
+
             json inf;
             bool policy_success = false;
-            
+
             // RETRY до 3 раз
             for (int attempt = 0; attempt < 3 && !policy_success; ++attempt) {
                 try {
                     inf = etai::infer_with_policy_mtf(raw15, cached.model, p60, 12, p240, 12, p1440, 12);
-                    
+
                     // Валидация результата
-                    if (jbool(inf, "ok", false) && 
+                    if (jbool(inf, "ok", false) &&
                         jint(inf, "feat_dim_used", 0) > 0 &&
                         inf.contains("htf")) {
                         policy_success = true;
@@ -275,7 +309,7 @@ void register_infer_routes(httplib::Server& srv) {
             double k_atr = qpd(req, "k_atr", 1.2);
             double eps = qpd(req, "eps", 0.05);
             double thr = best_thr > 0 ? best_thr : 0.5;
-            
+
             int upVotes=0, downVotes=0;
             htf_votes(inf, upVotes, downVotes);
             int netHTF = upVotes - downVotes;
@@ -287,17 +321,16 @@ void register_infer_routes(httplib::Server& srv) {
             if (excess >= 0.0) {
                 if (score15 > 0) marketMode = (netHTF >= 2) ? "trendUp" : (netHTF <= -2) ? "correction" : "trendUp";
                 else if (score15 < 0) marketMode = (netHTF <= -2) ? "trendDown" : (netHTF >= 2) ? "correction" : "trendDown";
-                
+
                 double htfFactor = std::min(1.0, std::fabs((double)netHTF)/4.0);
                 confidence = std::min(100.0, 100.0 * (0.5*std::min(1.0, excess/(thr>0?thr:0.5)) + 0.5*htfFactor));
             } else {
-                double atr = atr14_from_M(cached.M15);
                 double band = k_atr * atr;
 
                 if (score15 >= -thr*eps && score15 <= thr*eps) sig = "NEUTRAL";
                 else if (score15 > thr*eps) sig = "SHORT";
                 else if (score15 < -thr*eps) sig = "LONG";
-                
+
                 marketMode = "flat";
                 confidence = std::min(100.0, 70.0 * std::min(1.0, std::fabs(score15)/(thr>0?thr:0.5)));
                 inf["flat_band"] = band;
@@ -314,8 +347,6 @@ void register_infer_routes(httplib::Server& srv) {
                 {"version", version},
                 {"thr", best_thr},
                 {"ma_len", ma_len},
-                {"tp", tp},
-                {"sl", sl},
                 {"signal", sig},
                 {"score15", score15},
                 {"market_mode", marketMode},
@@ -329,7 +360,9 @@ void register_infer_routes(httplib::Server& srv) {
                 {"from_cache", from_cache}
             };
 
-            enrich_with_levels(out, cached.M15, tp, sl);
+            // ✅ ДИНАМИЧЕСКИЕ TP/SL НА ОСНОВЕ ATR
+            enrich_with_dynamic_levels(out, cached.M15, atr);
+            
             res.set_content(out.dump(), "application/json");
         }
         catch (const std::exception& e) {
