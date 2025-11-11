@@ -101,15 +101,13 @@ json get_position(const std::string& apiKey, const std::string& apiSecret, const
     return nullptr;
 }
 
-// NEW: Функция для обновления только Stop Loss
 bool update_stop_loss(const std::string& apiKey, const std::string& apiSecret,
                       const std::string& symbol, double new_sl_price) {
-    
+
     std::ostringstream sl_stream;
     sl_stream << std::fixed << std::setprecision(6) << new_sl_price;
     std::string sl_str = sl_stream.str();
-    
-    // Убираем trailing zeros
+
     sl_str.erase(sl_str.find_last_not_of('0') + 1, std::string::npos);
     if (sl_str.back() == '.') sl_str.pop_back();
 
@@ -133,11 +131,11 @@ bool update_stop_loss(const std::string& apiKey, const std::string& apiSecret,
 
 bool open_trade(const std::string& apiKey, const std::string& apiSecret,
                 const std::string& symbol, const std::string& side, double qty,
-                double tp_price, double sl_price, int leverage) {
+                double tp_percent, double sl_percent, int leverage) {
 
     std::cout << "[TRADE] Opening position..." << std::endl;
     std::cout << "[TRADE] Params: " << symbol << " " << side << " qty=" << qty
-              << " TP=" << tp_price << " SL=" << sl_price << " lev=" << leverage << std::endl;
+              << " TP=" << tp_percent << "% SL=" << sl_percent << "% lev=" << leverage << std::endl;
 
     // 1. Установить leverage
     json lev_body = {
@@ -173,13 +171,40 @@ bool open_trade(const std::string& apiKey, const std::string& apiSecret,
     }
 
     std::string orderId = order_res["result"]["orderId"];
-    std::cout << "[TRADE] Order created: " << orderId << ", waiting 5 sec..." << std::endl;
+    std::cout << "[TRADE] Order created: " << orderId << ", waiting for fill..." << std::endl;
 
-    std::this_thread::sleep_for(std::chrono::seconds(5));
+    // 3. Подождать исполнения и получить РЕАЛЬНУЮ entry_price
+    std::this_thread::sleep_for(std::chrono::seconds(3));
 
-    // 3. Установить TP/SL
-    std::cout << "[TRADE] Setting TP/SL..." << std::endl;
+    auto position = get_position(apiKey, apiSecret, symbol);
+    if (position.is_null()) {
+        std::cout << "[TRADE] ❌ CRITICAL: Position not found after order!" << std::endl;
+        return false;
+    }
 
+    double real_entry_price = std::stod(position.value("avgPrice", "0"));
+    if (real_entry_price <= 0) {
+        std::cout << "[TRADE] ❌ CRITICAL: Invalid entry price!" << std::endl;
+        return false;
+    }
+
+    std::cout << "[TRADE] ✅ Position opened at: $" << real_entry_price << std::endl;
+
+    // 4. Рассчитать TP/SL на основе РЕАЛЬНОЙ entry_price
+    double tp_price = 0.0;
+    double sl_price = 0.0;
+
+    if (side == "Buy") {
+        tp_price = real_entry_price * (1.0 + tp_percent / 100.0);
+        sl_price = real_entry_price * (1.0 - sl_percent / 100.0);
+    } else {
+        tp_price = real_entry_price * (1.0 - tp_percent / 100.0);
+        sl_price = real_entry_price * (1.0 + sl_percent / 100.0);
+    }
+
+    std::cout << "[TRADE] Calculated TP/SL: TP=$" << tp_price << " SL=$" << sl_price << std::endl;
+
+    // 5. Установить TP/SL
     std::ostringstream tp_stream, sl_stream;
     tp_stream << std::fixed << std::setprecision(6) << tp_price;
     sl_stream << std::fixed << std::setprecision(6) << sl_price;
