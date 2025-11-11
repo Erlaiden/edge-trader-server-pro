@@ -11,6 +11,8 @@
 #include <armadillo>
 #include "../market/volume_analysis.h"
 #include "../market/candlestick_patterns.h"
+#include "../market/open_interest.h"
+#include "../market/support_resistance.h"
 #include <fstream>
 #include <iostream>
 #include "../market/volatility_regime.h"
@@ -342,6 +344,53 @@ void register_infer_routes(httplib::Server& srv) {
                 if ((sig == "SHORT" && score15 < -0.2) || (sig == "LONG" && score15 > 0.2)) {
                     confidence += 12.0;
                 }
+            }
+            
+            confidence = std::max(0.0, std::min(100.0, confidence));
+
+
+            // =====================================================================
+            // 💰 OPEN INTEREST ANALYSIS
+            // =====================================================================
+            
+            auto oi_data = etai::get_open_interest(symbol, "1h");
+            
+            if (oi_data.data_available) {
+                double price_24h_ago = 0.0;
+                if (cached.M15.n_cols >= 96) {
+                    price_24h_ago = cached.M15(4, cached.M15.n_cols - 96);
+                }
+                double current_price = cached.M15(4, cached.M15.n_cols - 1);
+                double price_change_24h = 0.0;
+                if (price_24h_ago > 0) {
+                    price_change_24h = ((current_price - price_24h_ago) / price_24h_ago) * 100.0;
+                }
+                
+                double oi_boost = etai::analyze_oi_with_price(oi_data, price_change_24h, sig);
+                confidence += oi_boost;
+                
+                std::cout << "[OI] boost=" << oi_boost << "%" << std::endl;
+            }
+            
+            confidence = std::max(0.0, std::min(100.0, confidence));
+
+            // =====================================================================
+            // 📊 SUPPORT/RESISTANCE ANALYSIS
+            // =====================================================================
+            
+            auto sr_analysis = etai::analyze_support_resistance(cached.M15, 50);
+            
+            if (sr_analysis.position == "near_support" && sig == "LONG") {
+                confidence += sr_analysis.confidence_boost;
+                std::cout << "[S/R] LONG from support +" << sr_analysis.confidence_boost << "%" << std::endl;
+            }
+            else if (sr_analysis.position == "near_resistance" && sig == "SHORT") {
+                confidence += std::abs(sr_analysis.confidence_boost);
+                std::cout << "[S/R] SHORT from resistance +" << std::abs(sr_analysis.confidence_boost) << "%" << std::endl;
+            }
+            else if (sr_analysis.position == "near_resistance" && sig == "LONG") {
+                confidence += sr_analysis.confidence_boost;
+                std::cout << "[S/R] LONG into resistance " << sr_analysis.confidence_boost << "%" << std::endl;
             }
             
             confidence = std::max(0.0, std::min(100.0, confidence));
