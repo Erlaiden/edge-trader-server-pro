@@ -27,7 +27,7 @@ struct RobotConfig {
     double balance_percent = 90.0;
     double tp_percent = 2.0;
     double sl_percent = 1.0;
-    double min_confidence = 40.0;
+    double min_confidence = 60.0;
     int check_interval_sec = 60;
     bool auto_trade = false;
 

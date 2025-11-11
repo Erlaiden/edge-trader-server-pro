@@ -1,0 +1,25 @@
+--- infer.cpp.orig
++++ infer.cpp.new
+@@ -325,14 +325,24 @@
+             double htfFactor = 0.0;
+             double confidence = 0.0;
+ 
+-            if (score15 > 0) marketMode = (netHTF >= 2) ? "trendUp" : (netHTF <= -2) ? "correction" : "trendUp";
+-            else if (score15 < 0) marketMode = (netHTF <= -2) ? "trendDown" : (netHTF >= 2) ? "correction" : "trendDown";
++            // 🔄 УЛУЧШЕННАЯ ЛОГИКА ОПРЕДЕЛЕНИЯ ТРЕНДА
++            if (std::abs(score15) > threshold) {
++                if (score15 > 0) {
++                    marketMode = (netHTF >= 1) ? "trendUp" : (netHTF < -1) ? "correction" : "sideways";
++                } else {
++                    marketMode = (netHTF <= -1) ? "trendDown" : (netHTF > 1) ? "correction" : "sideways";
++                }
++            } else {
++                marketMode = "sideways";
++            }
+ 
+             // 📊 АДАПТИВНЫЙ РАСЧЕТ CONFIDENCE
+-            confidence = std::min(100.0, 70.0 * std::min(1.0, std::fabs(score15)/(thr>0?thr:0.5)));
++            double volatilityFactor = calculateAdaptiveVolatility(recentCandles);
++            confidence = std::min(100.0, 
++                90.0 * std::min(1.0, std::fabs(score15)/(thr>0?thr:0.5)) * volatilityFactor
++            );
