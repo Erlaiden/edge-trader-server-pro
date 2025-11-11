@@ -7,6 +7,7 @@
 #include "utils_data.h"
 #include "features/features.h"
 #include "infer_cache.h"
+#include "../market/regime_detector.h"
 #include <armadillo>
 #include <fstream>
 #include <iostream>
@@ -65,60 +66,6 @@ static inline json make_agents_summary() {
     };
 }
 
-// ✅ УМНАЯ ГИБРИДНАЯ СИСТЕМА: МОДЕЛЬ + ATR
-static inline void enrich_with_hybrid_levels(json &out, const arma::mat& M15, 
-                                              double model_tp, double model_sl,
-                                              double atr, int leverage) {
-    if (M15.n_rows >= 5 && M15.n_cols >= 1 && atr > 0) {
-        double last = (double) M15.row(4)(M15.n_cols - 1);
-        
-        // 1. Рассчитываем ATR multiplier
-        double atr_percent = (atr / last);
-        
-        // Средняя историческая волатильность (~2% для крипты)
-        double avg_volatility = 0.02;
-        double raw_multiplier = atr_percent / avg_volatility;
-        
-        // 2. Ограничиваем multiplier в зависимости от leverage
-        double max_multiplier = 10.0; // По умолчанию для 1x
-        
-        if (leverage >= 10) {
-            max_multiplier = 3.0;  // 10x+ → max 3x (консервативно)
-        } else if (leverage >= 5) {
-            max_multiplier = 5.0;  // 5x-9x → max 5x
-        } else if (leverage >= 3) {
-            max_multiplier = 7.0;  // 3x-4x → max 7x
-        }
-        
-        double final_multiplier = std::min(raw_multiplier, max_multiplier);
-        final_multiplier = std::max(final_multiplier, 1.0); // Минимум 1x
-        
-        // 3. Применяем к обученным значениям
-        double tp_percent = model_tp * final_multiplier;
-        double sl_percent = model_sl * final_multiplier;
-        
-        // 4. Дополнительная проверка: Risk/Reward должен быть >= 2:1
-        if (tp_percent / sl_percent < 2.0) {
-            tp_percent = sl_percent * 2.0;
-        }
-        
-        out["tp"] = tp_percent;
-        out["sl"] = sl_percent;
-        out["atr"] = atr;
-        out["atr_percent"] = atr_percent * 100.0;
-        out["atr_multiplier"] = final_multiplier;
-        out["max_multiplier"] = max_multiplier;
-        out["model_base_tp"] = model_tp;
-        out["model_base_sl"] = model_sl;
-        
-        out["tp_price_long"]   = last * (1.0 + tp_percent);
-        out["sl_price_long"]   = last * (1.0 - sl_percent);
-        out["tp_price_short"]  = last * (1.0 - tp_percent);
-        out["sl_price_short"]  = last * (1.0 + sl_percent);
-        out["last_close"]      = last;
-    }
-}
-
 static inline double atr14_from_M(const arma::mat& M) {
     if (M.n_cols < 16 || M.n_rows < 5) return 0.0;
     size_t N = M.n_cols;
@@ -137,6 +84,19 @@ static inline double atr14_from_M(const arma::mat& M) {
         prevClose = cl;
     }
     return ema;
+}
+
+// Средний ATR за последние 50 свечей
+static inline double avg_atr_from_M(const arma::mat& M) {
+    if (M.n_cols < 50 || M.n_rows < 5) return 0.0;
+    size_t N = M.n_cols;
+    double sum = 0.0;
+    for (size_t i = N-50; i < N; ++i) {
+        double hi = (double)M.row(2)(i);
+        double lo = (double)M.row(3)(i);
+        sum += (hi - lo);
+    }
+    return sum / 50.0;
 }
 
 static inline void htf_votes(const json& inf, int& up, int& down) {
@@ -201,7 +161,7 @@ void register_infer_routes(httplib::Server& srv) {
 
             std::string symbol   = qp(req, "symbol", "BTCUSDT");
             std::string interval = qp(req, "interval", "15");
-            int leverage = (int)qpd(req, "leverage", 10.0); // Для расчёта max_multiplier
+            int leverage = (int)qpd(req, "leverage", 10.0);
 
             etai::CachedInferData cached;
             bool from_cache = etai::get_infer_cache().get(symbol, interval, cached);
@@ -252,8 +212,7 @@ void register_infer_routes(httplib::Server& srv) {
             int feat_dim = jint(cached.model, "feat_dim", 0);
             double best_thr = jnum(cached.model, "best_thr", 0.5);
             int ma_len = jint(cached.model, "ma_len", 12);
-            
-            // ✅ ЧИТАЕМ ОБУЧЕННЫЕ TP/SL ИЗ МОДЕЛИ
+
             double model_tp = jnum(cached.model, "tp", 0.02);
             double model_sl = jnum(cached.model, "sl", 0.01);
 
@@ -263,10 +222,9 @@ void register_infer_routes(httplib::Server& srv) {
                 return;
             }
 
-            // Расчёт ATR
             double atr = atr14_from_M(cached.M15);
+            double avg_atr = avg_atr_from_M(cached.M15);
 
-            // Инференс
             arma::mat M60_t, M240_t, M1440_t;
             const arma::mat *p60 = nullptr, *p240 = nullptr, *p1440 = nullptr;
 
@@ -288,14 +246,9 @@ void register_infer_routes(httplib::Server& srv) {
                         inf.contains("htf")) {
                         policy_success = true;
                     } else {
-                        std::cerr << "[INFER#" << req_id << "] Policy returned invalid result, attempt " << (attempt+1) << std::endl;
                         if (attempt < 2) std::this_thread::sleep_for(std::chrono::milliseconds(10));
                     }
-                } catch (const std::exception& e) {
-                    std::cerr << "[INFER#" << req_id << "] Policy exception: " << e.what() << ", attempt " << (attempt+1) << std::endl;
-                    if (attempt < 2) std::this_thread::sleep_for(std::chrono::milliseconds(10));
                 } catch (...) {
-                    std::cerr << "[INFER#" << req_id << "] Policy unknown exception, attempt " << (attempt+1) << std::endl;
                     if (attempt < 2) std::this_thread::sleep_for(std::chrono::milliseconds(10));
                 }
             }
@@ -309,10 +262,6 @@ void register_infer_routes(httplib::Server& srv) {
 
             std::string sig = jstr(inf, "signal", "NEUTRAL");
             double score15 = jnum(inf, "score15", 0.0);
-
-            if (sig == "LONG") INFER_SIG_LONG.fetch_add(1, std::memory_order_relaxed);
-            else if (sig == "SHORT") INFER_SIG_SHORT.fetch_add(1, std::memory_order_relaxed);
-            else INFER_SIG_NEUTRAL.fetch_add(1, std::memory_order_relaxed);
 
             LAST_INFER_TS.store((long long)time(nullptr)*1000, std::memory_order_relaxed);
 
@@ -349,9 +298,81 @@ void register_infer_routes(httplib::Server& srv) {
 
             json safe_htf = (inf.contains("htf") && inf["htf"].is_object()) ? inf["htf"] : json::object();
 
+            // 🔥 АДАПТИВНАЯ СИСТЕМА - определяем режим рынка
+            etai::MarketRegime regime = etai::detect_regime(safe_htf, cached.M15, atr, avg_atr);
+            etai::RegimeParams params = etai::get_regime_params(regime);
+            std::string regime_str = etai::regime_to_string(regime);
+
+            std::string original_sig = sig;
+            double original_conf = confidence;
+
+            // Применяем фильтры по режиму
+            if (regime == etai::MarketRegime::RANGE_BOUND && params.use_mean_reversion) {
+                // ФЛЕТ: mean reversion стратегия
+                double channel_pos = etai::get_channel_position(cached.M15, atr);
+                
+                if (channel_pos > 0.85) {
+                    // Около верха канала - только SHORT
+                    sig = "SHORT";
+                    confidence = std::min(confidence, 70.0);
+                } else if (channel_pos < 0.15) {
+                    // Около низа канала - только LONG
+                    sig = "LONG";
+                    confidence = std::min(confidence, 70.0);
+                } else {
+                    // Середина канала - не торгуем
+                    sig = "NEUTRAL";
+                    confidence = 0.0;
+                }
+            } else {
+                // Обычные фильтры для трендов/пробоев/коррекций
+                
+                // 1. Проверяем разрешён ли сигнал
+                if (sig == "LONG" && !params.allow_long) {
+                    sig = "NEUTRAL";
+                    confidence = 0.0;
+                }
+                if (sig == "SHORT" && !params.allow_short) {
+                    sig = "NEUTRAL";
+                    confidence = 0.0;
+                }
+                
+                // 2. Проверяем минимальную confidence
+                if (confidence < params.min_confidence) {
+                    sig = "NEUTRAL";
+                    confidence = 0.0;
+                }
+            }
+
+            // Логируем если сигнал изменён
+            if (sig != original_sig) {
+                std::cerr << "[ADAPTIVE] Regime=" << regime_str 
+                          << " changed signal: " << original_sig << "→" << sig 
+                          << " conf: " << original_conf << "→" << confidence << std::endl;
+            }
+
+            // Обновляем счётчики
+            if (sig == "LONG") INFER_SIG_LONG.fetch_add(1, std::memory_order_relaxed);
+            else if (sig == "SHORT") INFER_SIG_SHORT.fetch_add(1, std::memory_order_relaxed);
+            else INFER_SIG_NEUTRAL.fetch_add(1, std::memory_order_relaxed);
+
+            // ✅ Используем TP/SL из regime params
+            double final_tp = params.tp_percent;
+            double final_sl = params.sl_percent;
+
+            // Для пробоев - адаптивные уровни
+            if (regime == etai::MarketRegime::BREAKOUT_UP || regime == etai::MarketRegime::BREAKOUT_DOWN) {
+                double atr_percent = (atr / (double)cached.M15.row(4)(cached.M15.n_cols-1));
+                double multiplier = std::min(atr_percent / 0.02, 3.0);
+                final_tp = params.tp_percent * multiplier;
+                final_sl = params.sl_percent * multiplier;
+            }
+
             json out{
                 {"ok", true},
-                {"mode", "hybrid"},
+                {"mode", "adaptive"},
+                {"regime", regime_str},
+                {"regime_note", params.note},
                 {"symbol", symbol},
                 {"interval", interval},
                 {"version", version},
@@ -367,12 +388,29 @@ void register_infer_routes(httplib::Server& srv) {
                 {"wctx_htf", jnum(inf, "wctx_htf", 0.0)},
                 {"vol_threshold", jnum(inf, "vol_threshold", 0.0)},
                 {"agents", make_agents_summary()},
-                {"from_cache", from_cache}
+                {"from_cache", from_cache},
+                {"atr", atr},
+                {"avg_atr", avg_atr},
+                {"tp", final_tp},
+                {"sl", final_sl},
+                {"model_base_tp", model_tp},
+                {"model_base_sl", model_sl}
             };
 
-            // ✅ УМНАЯ ГИБРИДНАЯ СИСТЕМА
-            enrich_with_hybrid_levels(out, cached.M15, model_tp, model_sl, atr, leverage);
-            
+            // Добавляем цены для TP/SL
+            if (cached.M15.n_rows >= 5 && cached.M15.n_cols >= 1) {
+                double last = (double)cached.M15.row(4)(cached.M15.n_cols - 1);
+                out["last_close"] = last;
+                out["tp_price_long"] = last * (1.0 + final_tp);
+                out["sl_price_long"] = last * (1.0 - final_sl);
+                out["tp_price_short"] = last * (1.0 - final_tp);
+                out["sl_price_short"] = last * (1.0 + final_sl);
+                
+                if (regime == etai::MarketRegime::RANGE_BOUND) {
+                    out["channel_position"] = etai::get_channel_position(cached.M15, atr);
+                }
+            }
+
             res.set_content(out.dump(), "application/json");
         }
         catch (const std::exception& e) {

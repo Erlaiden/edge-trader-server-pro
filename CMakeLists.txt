@@ -33,6 +33,7 @@ set(SRC_CORE
     src/agents/agent_flat.cpp
     src/agents/agent_correction.cpp
     src/agents/agent_breakout.cpp
+    src/market/regime_detector.cpp
 )
 
 set(SRC_ENV)
