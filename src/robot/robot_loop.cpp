@@ -193,6 +193,12 @@ void trading_loop(const std::string& apiKey, const std::string& apiSecret) {
 
             std::string signal_type = signal.value("signal", "NEUTRAL");
             double confidence = signal.value("confidence", 0.0);
+            // ✅ ДИНАМИЧЕСКИЕ TP/SL ИЗ AI
+            double dynamic_tp = signal.value("tp", config.tp_percent / 100.0) * 100.0;
+            double dynamic_sl = signal.value("sl", config.sl_percent / 100.0) * 100.0;
+            double atr_percent = signal.value("atr_percent", 0.0);
+            std::cout << "[ROBOT_LOOP] ATR: " << atr_percent << "% → TP: " << dynamic_tp << "% SL: " << dynamic_sl << "%" << std::endl;
+
             double last_close = signal.value("last_close", 0.0);
 
             std::cout << "[ROBOT_LOOP] Signal: " << signal_type
@@ -245,10 +251,10 @@ void trading_loop(const std::string& apiKey, const std::string& apiSecret) {
 
             std::cout << "[ROBOT_LOOP] 🚀 Opening " << side << " " << qty << " @ $" << last_close
                       << " (confidence: " << confidence << "%)" << std::endl;
-            std::cout << "[ROBOT_LOOP]    TP: " << config.tp_percent << "% SL: " << config.sl_percent << "%" << std::endl;
+            std::cout << "[ROBOT_LOOP]    TP: " << dynamic_tp << "% SL: " << dynamic_sl << "%" << std::endl;
 
             bool success = open_trade(apiKey, apiSecret, config.symbol, side, qty,
-                                     config.tp_percent, config.sl_percent, config.leverage);
+                                     dynamic_tp, dynamic_sl, config.leverage);
 
             if (success) {
                 std::cout << "[ROBOT_LOOP] ✅ Trade opened successfully!" << std::endl;

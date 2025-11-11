@@ -190,11 +190,19 @@ bool open_trade(const std::string& apiKey, const std::string& apiSecret,
 
     std::cout << "[TRADE] ✅ Position opened at: $" << real_entry_price << std::endl;
 
+    // ✅ ЗАЩИТА ОТ ЛИКВИДАЦИИ
+    double liq_price = 0.0;
+    std::string liq_str = position.value("liqPrice", "");
+    if (!liq_str.empty() && liq_str != "0") {
+        liq_price = std::stod(liq_str);
+        std::cout << "[TRADE] Liquidation price: $" << liq_price << std::endl;
+    }
+
     // 4. Рассчитать TP/SL на основе РЕАЛЬНОЙ entry_price
     double tp_price = 0.0;
     double sl_price = 0.0;
 
-    if (side == "Buy") {
+        if (side == "Buy") {
         tp_price = real_entry_price * (1.0 + tp_percent / 100.0);
         sl_price = real_entry_price * (1.0 - sl_percent / 100.0);
     } else {
@@ -203,6 +211,40 @@ bool open_trade(const std::string& apiKey, const std::string& apiSecret,
     }
 
     std::cout << "[TRADE] Calculated TP/SL: TP=$" << tp_price << " SL=$" << sl_price << std::endl;
+
+    // ✅ ПРОВЕРКА БЕЗОПАСНОСТИ: SL должен быть минимум в 5% от ликвидации
+    if (liq_price > 0) {
+        double sl_to_liq_distance = 0.0;
+        
+        if (side == "Buy") {
+            // LONG: SL > liq (SL выше ликвидации)
+            sl_to_liq_distance = (sl_price - liq_price) / real_entry_price * 100.0;
+        } else {
+            // SHORT: SL < liq (SL ниже ликвидации)
+            sl_to_liq_distance = (liq_price - sl_price) / real_entry_price * 100.0;
+        }
+        
+        std::cout << "[TRADE] Distance SL to Liquidation: " << sl_to_liq_distance << "%" << std::endl;
+        
+        // Если SL слишком близко к ликвидации (< 5%), сдвигаем его
+        if (sl_to_liq_distance < 5.0) {
+            double old_sl = sl_price;
+            
+            if (side == "Buy") {
+                // Для LONG: SL = liq + 5% от entry
+                sl_price = liq_price + (real_entry_price * 0.05);
+            } else {
+                // Для SHORT: SL = liq - 5% от entry
+                sl_price = liq_price - (real_entry_price * 0.05);
+            }
+            
+            std::cout << "[TRADE] ⚠️  SL too close to liquidation!" << std::endl;
+            std::cout << "[TRADE] 🛡️  Adjusted SL: $" << old_sl << " → $" << sl_price 
+                      << " (safe distance: 5%)" << std::endl;
+        } else {
+            std::cout << "[TRADE] ✅ SL is safe from liquidation" << std::endl;
+        }
+    }
 
     // 5. Установить TP/SL
     std::ostringstream tp_stream, sl_stream;
