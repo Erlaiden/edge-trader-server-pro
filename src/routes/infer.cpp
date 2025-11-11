@@ -65,41 +65,51 @@ static inline json make_agents_summary() {
     };
 }
 
-// ✅ ДИНАМИЧЕСКИЕ TP/SL НА ОСНОВЕ ATR
-static inline void enrich_with_dynamic_levels(json &out, const arma::mat& M15, double atr) {
+// ✅ УМНАЯ ГИБРИДНАЯ СИСТЕМА: МОДЕЛЬ + ATR
+static inline void enrich_with_hybrid_levels(json &out, const arma::mat& M15, 
+                                              double model_tp, double model_sl,
+                                              double atr, int leverage) {
     if (M15.n_rows >= 5 && M15.n_cols >= 1 && atr > 0) {
         double last = (double) M15.row(4)(M15.n_cols - 1);
         
-        // Адаптивные множители на основе волатильности
-        double atr_percent = (atr / last) * 100.0;
+        // 1. Рассчитываем ATR multiplier
+        double atr_percent = (atr / last);
         
-        double tp_multiplier = 2.5;  // По умолчанию
-        double sl_multiplier = 1.2;
+        // Средняя историческая волатильность (~2% для крипты)
+        double avg_volatility = 0.02;
+        double raw_multiplier = atr_percent / avg_volatility;
         
-        // Высокая волатильность (ATR > 3%) → шире
-        if (atr_percent > 3.0) {
-            tp_multiplier = 3.5;
-            sl_multiplier = 1.5;
-        }
-        // Средняя волатильность (1.5% - 3%)
-        else if (atr_percent > 1.5) {
-            tp_multiplier = 3.0;
-            sl_multiplier = 1.3;
-        }
-        // Низкая волатильность (< 1.5%)
-        else {
-            tp_multiplier = 2.0;
-            sl_multiplier = 1.0;
+        // 2. Ограничиваем multiplier в зависимости от leverage
+        double max_multiplier = 10.0; // По умолчанию для 1x
+        
+        if (leverage >= 10) {
+            max_multiplier = 3.0;  // 10x+ → max 3x (консервативно)
+        } else if (leverage >= 5) {
+            max_multiplier = 5.0;  // 5x-9x → max 5x
+        } else if (leverage >= 3) {
+            max_multiplier = 7.0;  // 3x-4x → max 7x
         }
         
-        // Рассчитываем TP/SL в процентах от цены
-        double tp_percent = (atr * tp_multiplier / last);
-        double sl_percent = (atr * sl_multiplier / last);
+        double final_multiplier = std::min(raw_multiplier, max_multiplier);
+        final_multiplier = std::max(final_multiplier, 1.0); // Минимум 1x
+        
+        // 3. Применяем к обученным значениям
+        double tp_percent = model_tp * final_multiplier;
+        double sl_percent = model_sl * final_multiplier;
+        
+        // 4. Дополнительная проверка: Risk/Reward должен быть >= 2:1
+        if (tp_percent / sl_percent < 2.0) {
+            tp_percent = sl_percent * 2.0;
+        }
         
         out["tp"] = tp_percent;
         out["sl"] = sl_percent;
         out["atr"] = atr;
-        out["atr_percent"] = atr_percent;
+        out["atr_percent"] = atr_percent * 100.0;
+        out["atr_multiplier"] = final_multiplier;
+        out["max_multiplier"] = max_multiplier;
+        out["model_base_tp"] = model_tp;
+        out["model_base_sl"] = model_sl;
         
         out["tp_price_long"]   = last * (1.0 + tp_percent);
         out["sl_price_long"]   = last * (1.0 - sl_percent);
@@ -177,7 +187,6 @@ void register_infer_routes(httplib::Server& srv) {
         res.set_content(out.dump(), "application/json");
     });
 
-    // Альтернативный GET endpoint для очистки кэша
     srv.Get("/api/cache/clear", [&](const httplib::Request&, httplib::Response& res){
         etai::get_infer_cache().clear();
         json out{{"ok", true}, {"message", "cache_cleared"}};
@@ -192,8 +201,8 @@ void register_infer_routes(httplib::Server& srv) {
 
             std::string symbol   = qp(req, "symbol", "BTCUSDT");
             std::string interval = qp(req, "interval", "15");
+            int leverage = (int)qpd(req, "leverage", 10.0); // Для расчёта max_multiplier
 
-            // 1. КЭSH
             etai::CachedInferData cached;
             bool from_cache = etai::get_infer_cache().get(symbol, interval, cached);
 
@@ -243,6 +252,10 @@ void register_infer_routes(httplib::Server& srv) {
             int feat_dim = jint(cached.model, "feat_dim", 0);
             double best_thr = jnum(cached.model, "best_thr", 0.5);
             int ma_len = jint(cached.model, "ma_len", 12);
+            
+            // ✅ ЧИТАЕМ ОБУЧЕННЫЕ TP/SL ИЗ МОДЕЛИ
+            double model_tp = jnum(cached.model, "tp", 0.02);
+            double model_sl = jnum(cached.model, "sl", 0.01);
 
             if (version == 0 || feat_dim == 0) {
                 json out{{"ok",false},{"error","model_incomplete"}};
@@ -250,10 +263,10 @@ void register_infer_routes(httplib::Server& srv) {
                 return;
             }
 
-            // 2. РАСЧЁТ ATR
+            // Расчёт ATR
             double atr = atr14_from_M(cached.M15);
 
-            // 3. ИНФЕРЕНС С RETRY
+            // Инференс
             arma::mat M60_t, M240_t, M1440_t;
             const arma::mat *p60 = nullptr, *p240 = nullptr, *p1440 = nullptr;
 
@@ -266,12 +279,10 @@ void register_infer_routes(httplib::Server& srv) {
             json inf;
             bool policy_success = false;
 
-            // RETRY до 3 раз
             for (int attempt = 0; attempt < 3 && !policy_success; ++attempt) {
                 try {
                     inf = etai::infer_with_policy_mtf(raw15, cached.model, p60, 12, p240, 12, p1440, 12);
 
-                    // Валидация результата
                     if (jbool(inf, "ok", false) &&
                         jint(inf, "feat_dim_used", 0) > 0 &&
                         inf.contains("htf")) {
@@ -305,7 +316,6 @@ void register_infer_routes(httplib::Server& srv) {
 
             LAST_INFER_TS.store((long long)time(nullptr)*1000, std::memory_order_relaxed);
 
-            // Режимы
             double k_atr = qpd(req, "k_atr", 1.2);
             double eps = qpd(req, "eps", 0.05);
             double thr = best_thr > 0 ? best_thr : 0.5;
@@ -341,7 +351,7 @@ void register_infer_routes(httplib::Server& srv) {
 
             json out{
                 {"ok", true},
-                {"mode", "pro"},
+                {"mode", "hybrid"},
                 {"symbol", symbol},
                 {"interval", interval},
                 {"version", version},
@@ -360,8 +370,8 @@ void register_infer_routes(httplib::Server& srv) {
                 {"from_cache", from_cache}
             };
 
-            // ✅ ДИНАМИЧЕСКИЕ TP/SL НА ОСНОВЕ ATR
-            enrich_with_dynamic_levels(out, cached.M15, atr);
+            // ✅ УМНАЯ ГИБРИДНАЯ СИСТЕМА
+            enrich_with_hybrid_levels(out, cached.M15, model_tp, model_sl, atr, leverage);
             
             res.set_content(out.dump(), "application/json");
         }
