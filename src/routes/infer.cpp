@@ -13,6 +13,7 @@
 #include "../market/candlestick_patterns.h"
 #include <fstream>
 #include <iostream>
+#include "../market/volatility_regime.h"
 #include <atomic>
 
 using json = nlohmann::json;
