@@ -14,6 +14,7 @@
 #include "../market/open_interest.h"
 #include "../market/support_resistance.h"
 #include <fstream>
+#include "../market/funding_rate.h"
 #include <iostream>
 #include "../market/volatility_regime.h"
 #include <atomic>
@@ -391,6 +392,21 @@ void register_infer_routes(httplib::Server& srv) {
             else if (sr_analysis.position == "near_resistance" && sig == "LONG") {
                 confidence += sr_analysis.confidence_boost;
                 std::cout << "[S/R] LONG into resistance " << sr_analysis.confidence_boost << "%" << std::endl;
+            }
+            
+            confidence = std::max(0.0, std::min(100.0, confidence));
+
+
+            // =====================================================================
+            // 💸 FUNDING RATE ANALYSIS
+            // =====================================================================
+            
+            auto funding_data = etai::get_funding_rate(symbol);
+            
+            if (funding_data.data_available) {
+                double funding_boost = etai::apply_funding_boost(funding_data, sig);
+                confidence += funding_boost;
+                std::cout << "[FUNDING] boost=" << funding_boost << "%" << std::endl;
             }
             
             confidence = std::max(0.0, std::min(100.0, confidence));
