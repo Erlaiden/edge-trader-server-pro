@@ -39,6 +39,7 @@ void register_trades_routes(httplib::Server& srv);
 
 inline void enable_cors_and_errors(httplib::Server& svr){
     svr.set_error_handler([](const httplib::Request& req, httplib::Response& res){
+        if (!res.body.empty()) return;
         json j; j["ok"]=false; j["error"]="not_found"; j["path"]=req.path;
         res.status=404; res.set_content(j.dump(),"application/json");
     });
@@ -85,9 +86,9 @@ int main(int argc, char** argv) {
     register_symbol_routes(svr);
     register_diagnostic_routes(svr);
     register_symbol_prepare_routes(svr);
-    register_robot_routes(svr);
     register_robot_keys_routes(svr);
     register_auth_routes(svr);
+    register_robot_routes(svr);
     register_trades_routes(svr);
     register_pipeline_routes(svr);
     register_compat_stubs(svr);

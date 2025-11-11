@@ -1,5 +1,5 @@
 #include "json.hpp"
-#include <httplib.h>
+#include "httplib.h"
 #include "../robot/jwt_middleware.cpp"
 #include "../robot/db_helper.cpp"
 
@@ -7,7 +7,7 @@ using json = nlohmann::json;
 
 namespace robot {
     struct RobotConfig;
-    extern bool start(const std::string& apiKey, const std::string& apiSecret, const RobotConfig& cfg);
+    extern bool start(const std::string& apiKey, const std::string& apiSecret, const RobotConfig& cfg, int user_id);
     extern void stop();
     extern bool is_running();
     extern RobotConfig get_config();
@@ -15,10 +15,17 @@ namespace robot {
     extern json get_position(const std::string& apiKey, const std::string& apiSecret, const std::string& symbol);
 }
 
-void register_robot_routes(httplib::Server& srv) {
+void register_robot_routes(httplib::Server& svr) {
+    std::cout << "[DEBUG] register_robot_routes() called" << std::endl;
+
+    // ТЕСТОВЫЙ ENDPOINT БЕЗ JWT
+    svr.Get("/api/robot/test", [](const httplib::Request&, httplib::Response& res){
+        json out{{"ok", true}, {"message", "test_works_no_jwt"}};
+        res.set_content(out.dump(), "application/json");
+    });
 
     // GET /api/robot/status - требует JWT
-    srv.Get("/api/robot/status", [&](const httplib::Request& req, httplib::Response& res){
+    svr.Get("/api/robot/status", [](const httplib::Request& req, httplib::Response& res){
         json out{{"ok", true}, {"running", false}, {"keys_present", false}};
 
         int user_id;
@@ -33,44 +40,8 @@ void register_robot_routes(httplib::Server& srv) {
         res.set_content(out.dump(), "application/json");
     });
 
-    // POST /api/robot/keys - требует JWT
-    srv.Post("/api/robot/keys", [&](const httplib::Request& req, httplib::Response& res){
-        json out{{"ok", false}};
-
-        int user_id;
-        if (!jwt_middleware::require_auth(req, res, user_id)) {
-            return;
-        }
-
-        try {
-            json in = json::parse(req.body);
-            std::string apiKey = in.value("apiKey", "");
-            std::string apiSecret = in.value("apiSecret", "");
-            bool testnet = in.value("testnet", false);
-
-            if (apiKey.empty() || apiSecret.empty()) {
-                out["error"] = "missing_keys";
-                res.set_content(out.dump(), "application/json");
-                return;
-            }
-
-            if (!db::save_user_api_keys(user_id, apiKey, apiSecret, testnet)) {
-                out["error"] = "database_error";
-                res.set_content(out.dump(), "application/json");
-                return;
-            }
-
-            out["ok"] = true;
-            res.set_content(out.dump(), "application/json");
-
-        } catch(...) {
-            out["error"] = "exception";
-            res.set_content(out.dump(), "application/json");
-        }
-    });
-
     // GET /api/robot/balance - требует JWT
-    srv.Get("/api/robot/balance", [&](const httplib::Request& req, httplib::Response& res){
+    svr.Get("/api/robot/balance", [](const httplib::Request& req, httplib::Response& res){
         json out{{"ok", false}, {"balance", 0}, {"available", 0}};
 
         int user_id;
@@ -98,7 +69,7 @@ void register_robot_routes(httplib::Server& srv) {
     });
 
     // GET /api/robot/position - требует JWT
-    srv.Get("/api/robot/position", [&](const httplib::Request& req, httplib::Response& res){
+    svr.Get("/api/robot/position", [](const httplib::Request& req, httplib::Response& res){
         json out{{"ok", false}, {"position", nullptr}};
 
         int user_id;
@@ -128,7 +99,7 @@ void register_robot_routes(httplib::Server& srv) {
     });
 
     // GET /api/robot/config - требует JWT
-    srv.Get("/api/robot/config", [&](const httplib::Request& req, httplib::Response& res){
+    svr.Get("/api/robot/config", [](const httplib::Request& req, httplib::Response& res){
         json out{{"ok", false}};
 
         int user_id;
@@ -144,7 +115,7 @@ void register_robot_routes(httplib::Server& srv) {
     });
 
     // POST /api/robot/config - требует JWT
-    srv.Post("/api/robot/config", [&](const httplib::Request& req, httplib::Response& res){
+    svr.Post("/api/robot/config", [](const httplib::Request& req, httplib::Response& res){
         json out{{"ok", false}};
 
         int user_id;
@@ -155,7 +126,7 @@ void register_robot_routes(httplib::Server& srv) {
         try {
             json config = json::parse(req.body);
             bool success = db::save_user_config(user_id, config);
-            
+
             out["ok"] = success;
             if (success) {
                 std::cout << "[ROBOT_CONFIG] Saved for user_id=" << user_id << std::endl;
@@ -168,7 +139,9 @@ void register_robot_routes(httplib::Server& srv) {
     });
 
     // GET /api/robot/pnl - требует JWT
-    srv.Get("/api/robot/pnl", [&](const httplib::Request& req, httplib::Response& res){
+    svr.Get("/api/robot/pnl", [](const httplib::Request& req, httplib::Response& res){
+        std::cout << "[DEBUG] /api/robot/pnl called" << std::endl;
+        
         int user_id;
         if (!jwt_middleware::require_auth(req, res, user_id)) {
             return;
@@ -176,7 +149,7 @@ void register_robot_routes(httplib::Server& srv) {
 
         json pnl = db::get_user_pnl(user_id);
         json out{
-            {"ok", true}, 
+            {"ok", true},
             {"today", pnl.value("today", 0.0)},
             {"total", pnl.value("total", 0.0)},
             {"unrealized", pnl.value("unrealized", 0.0)}
@@ -186,8 +159,9 @@ void register_robot_routes(httplib::Server& srv) {
     });
 
     // POST /api/robot/start - требует JWT
-    srv.Post("/api/robot/start", [&](const httplib::Request& req, httplib::Response& res){
+    svr.Post("/api/robot/start", [](const httplib::Request& req, httplib::Response& res){
         json out{{"ok", false}};
+        std::cout << "[DEBUG] /api/robot/start called" << std::endl;
 
         int user_id;
         if (!jwt_middleware::require_auth(req, res, user_id)) {
@@ -203,7 +177,7 @@ void register_robot_routes(httplib::Server& srv) {
             }
 
             json cfg_json = db::get_user_config(user_id);
-            
+
             robot::RobotConfig cfg;
             cfg.symbol = cfg_json.value("symbol", "AIAUSDT");
             cfg.leverage = cfg_json.value("leverage", 10);
@@ -226,7 +200,7 @@ void register_robot_routes(httplib::Server& srv) {
     });
 
     // POST /api/robot/stop - требует JWT
-    srv.Post("/api/robot/stop", [&](const httplib::Request& req, httplib::Response& res){
+    svr.Post("/api/robot/stop", [](const httplib::Request& req, httplib::Response& res){
         int user_id;
         if (!jwt_middleware::require_auth(req, res, user_id)) {
             return;
@@ -236,4 +210,6 @@ void register_robot_routes(httplib::Server& srv) {
         json out{{"ok", true}, {"running", false}};
         res.set_content(out.dump(), "application/json");
     });
+
+    std::cout << "[DEBUG] register_robot_routes() completed" << std::endl;
 }

@@ -1,14 +1,14 @@
 #include "json.hpp"
-#include <httplib.h>
+#include "httplib.h"
 #include "../robot/jwt_middleware.cpp"
 #include "../robot/db_helper.cpp"
 
 using json = nlohmann::json;
 
-void register_trades_routes(httplib::Server& srv) {
+void register_trades_routes(httplib::Server& svr) {
 
     // GET /api/trades - получить историю сделок пользователя
-    srv.Get("/api/trades", [&](const httplib::Request& req, httplib::Response& res){
+    svr.Get("/api/trades", [&](const httplib::Request& req, httplib::Response& res){
         int user_id;
         if (!jwt_middleware::require_auth(req, res, user_id)) {
             return;
@@ -35,7 +35,7 @@ void register_trades_routes(httplib::Server& srv) {
     });
 
     // GET /api/journal - алиас для /api/trades (для совместимости)
-    srv.Get("/api/journal", [&](const httplib::Request& req, httplib::Response& res){
+    svr.Get("/api/journal", [&](const httplib::Request& req, httplib::Response& res){
         int user_id;
         if (!jwt_middleware::require_auth(req, res, user_id)) {
             return;

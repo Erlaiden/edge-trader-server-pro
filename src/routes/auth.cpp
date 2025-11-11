@@ -1,5 +1,5 @@
 #include "json.hpp"
-#include <httplib.h>
+#include "httplib.h"
 #include <random>
 #include <map>
 #include <mutex>
@@ -28,9 +28,9 @@ static bool send_email(const std::string& to, const std::string& code) {
     return true;
 }
 
-void register_auth_routes(httplib::Server& srv) {
+void register_auth_routes(httplib::Server& svr) {
     
-    srv.Post("/api/auth/send-code", [&](const httplib::Request& req, httplib::Response& res){
+    svr.Post("/api/auth/send-code", [](const httplib::Request& req, httplib::Response& res){
         json out{{"ok", false}};
         
         try {
@@ -68,7 +68,7 @@ void register_auth_routes(httplib::Server& srv) {
         }
     });
     
-    srv.Post("/api/auth/verify-code", [&](const httplib::Request& req, httplib::Response& res){
+    svr.Post("/api/auth/verify-code", [](const httplib::Request& req, httplib::Response& res){
         json out{{"ok", false}};
         
         try {
@@ -121,7 +121,7 @@ void register_auth_routes(httplib::Server& srv) {
         }
     });
     
-    srv.Post("/api/auth/register", [&](const httplib::Request& req, httplib::Response& res){
+    svr.Post("/api/auth/register", [](const httplib::Request& req, httplib::Response& res){
         json out{{"ok", false}};
         
         try {

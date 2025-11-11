@@ -1,13 +1,13 @@
 #include "../json.hpp"
-#include <httplib.h>
+#include "httplib.h"
 #include "../robot/jwt_middleware.cpp"
 #include "../robot/db_helper.cpp"
 
 using json = nlohmann::json;
 
-void register_robot_keys_routes(httplib::Server& srv) {
+void register_robot_keys_routes(httplib::Server& svr) {
     
-    srv.Post("/api/robot/keys", [&](const httplib::Request& req, httplib::Response& res){
+    svr.Post("/api/robot/keys", [](const httplib::Request& req, httplib::Response& res){
         json out{{"ok", false}};
         
         int user_id;
@@ -52,7 +52,7 @@ void register_robot_keys_routes(httplib::Server& srv) {
         }
     });
     
-    srv.Get("/api/robot/keys", [&](const httplib::Request& req, httplib::Response& res){
+    svr.Get("/api/robot/keys", [](const httplib::Request& req, httplib::Response& res){
         json out{{"ok", false}};
         
         int user_id;
