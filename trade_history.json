@@ -164,6 +164,39 @@
       "symbol": "XNOUSDT",
       "threshold": 0.0,
       "timestamp": "1762950494"
+    },
+    {
+      "confidence": 0.0,
+      "entry_price": 1.5962,
+      "exit_price": 1.6074,
+      "is_win": false,
+      "pnl_percent": null,
+      "signal": "LONG",
+      "symbol": "XNOUSDT",
+      "threshold": 0.0,
+      "timestamp": "1762953785"
+    },
+    {
+      "confidence": 0.0,
+      "entry_price": 1.6074,
+      "exit_price": 1.6074,
+      "is_win": false,
+      "pnl_percent": 0.0,
+      "signal": "LONG",
+      "symbol": "XNOUSDT",
+      "threshold": 0.0,
+      "timestamp": "1762953795"
+    },
+    {
+      "confidence": 0.0,
+      "entry_price": 1.6074,
+      "exit_price": 1.6074,
+      "is_win": false,
+      "pnl_percent": 0.0,
+      "signal": "LONG",
+      "symbol": "XNOUSDT",
+      "threshold": 0.0,
+      "timestamp": "1762953809"
     }
   ]
 }
