@@ -15,6 +15,7 @@
 #include "../market/support_resistance.h"
 #include <fstream>
 #include "../market/funding_rate.h"
+#include "../market/order_book.h"
 #include <iostream>
 #include "../market/volatility_regime.h"
 #include <atomic>
@@ -401,6 +402,15 @@ void register_infer_routes(httplib::Server& srv) {
             // 💸 FUNDING RATE ANALYSIS
             // =====================================================================
             
+            // Order Book Analysis
+            auto orderbook = etai::get_order_book(symbol, 50);
+            double orderbook_boost = 0.0;
+            if (orderbook.data_available) {
+                orderbook_boost = etai::apply_orderbook_boost(orderbook, sig);
+                confidence += orderbook_boost;
+            }
+            
+            // Funding Rate Analysis
             auto funding_data = etai::get_funding_rate(symbol);
             
             if (funding_data.data_available) {
@@ -594,6 +604,10 @@ void register_infer_routes(httplib::Server& srv) {
                 {"sr_support", sr_analysis.nearest_support},
                 {"sr_resistance", sr_analysis.nearest_resistance},
                 {"funding_available", funding_data.data_available},
+                {"orderbook_available", orderbook.data_available},
+                {"orderbook_imbalance", orderbook.imbalance},
+                {"orderbook_signal", orderbook.signal},
+                {"orderbook_boost", orderbook_boost},
                 {"funding_rate", funding_data.funding_rate},
                 {"funding_signal", funding_data.signal},
                 {"candle_pattern", candle_signal.pattern_name},
