@@ -474,6 +474,7 @@ json ppo_rl_infer(const arma::mat& raw15, const json& model) {
     out["ok"] = true;
     out["signal"] = signal;
     out["score15"] = (long_prob - short_prob);  // Range: [-1, 1]
+    std::cout << "[PPO_RL_INFER] long_prob=" << long_prob << " short_prob=" << short_prob << " signal=" << signal << "\n";
     out["long_prob"] = long_prob;
     out["short_prob"] = short_prob;
     out["confidence"] = confidence;

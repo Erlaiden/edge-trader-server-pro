@@ -657,6 +657,8 @@ void register_infer_routes(httplib::Server& srv) {
                 {"ma_len", ma_len},
                 {"signal", sig},
                 {"score15", score15},
+                {"long_prob", jnum(inf, "long_prob", 0.0)},
+                {"short_prob", jnum(inf, "short_prob", 0.0)},
                 {"market_mode", marketMode},
                 {"confidence", confidence},
                 {"adaptive_threshold", adaptive_threshold},
