@@ -31,6 +31,8 @@ public:
     ForwardCache forward_cached(const vec& x);
     NNGradients backward(const ForwardCache& cache, const vec& d_out);
     void update_weights(const NNGradients& grads, double lr);
+    json to_json() const;
+    void from_json(const json& j);
 };
 
 // Actor

@@ -196,6 +196,42 @@ Rollout collect_rollout(TradingEnv& env, Actor& actor, Critic& critic, int rollo
 
 // ============================================================================
 // PPO Training (stub - will be completed)
+
+// ============================================================================
+// PPO Update - Actor and Critic
+// ============================================================================
+
+void update_ppo(Actor& actor, Critic& critic, const Rollout& rollout,
+                const arma::vec& advantages, const arma::vec& returns,
+                const PPOConfig& config) {
+    int n = rollout.states.n_rows;
+    for (int epoch = 0; epoch < config.epochs_per_update; epoch++) {
+        double total_actor_loss = 0.0, total_critic_loss = 0.0;
+        for (int i = 0; i < n; i++) {
+            arma::vec state = rollout.states.row(i).t();
+            int action = rollout.actions(i);
+            double old_log_prob = rollout.log_probs(i);
+            double advantage = advantages(i);
+            double return_val = returns(i);
+            arma::vec probs = actor.get_action_probs(state);
+            double ratio = std::exp(std::log(probs(action) + 1e-10) - old_log_prob);
+            double actor_loss = -std::min(ratio * advantage, std::clamp(ratio, 1.0 - config.clip_epsilon, 1.0 + config.clip_epsilon) * advantage);
+            arma::vec d_logits(probs.n_elem, arma::fill::zeros);
+            d_logits(action) = -advantage * ratio;
+            ForwardCache cache = actor.net.forward_cached(state);
+            NNGradients grads = actor.net.backward(cache, d_logits);
+            actor.net.update_weights(grads, config.learning_rate);
+            double value_pred = critic.get_value(state);
+            double critic_loss = std::pow(return_val - value_pred, 2);
+            total_critic_loss += critic_loss;
+            arma::vec d_value(1); d_value(0) = -2.0 * (return_val - value_pred);
+            ForwardCache critic_cache = critic.net.forward_cached(state);
+            NNGradients critic_grads = critic.net.backward(critic_cache, d_value);
+            critic.net.update_weights(critic_grads, config.learning_rate);
+        }
+        if (epoch % 2 == 0) std::cout << "[PPO] Epoch " << epoch << " | Actor: " << (total_actor_loss / n) << " | Critic: " << (total_critic_loss / n) << "\n";
+    }
+}
 // ============================================================================
 
 json trainPPO_RL(
@@ -206,22 +242,46 @@ json trainPPO_RL(
     int total_timesteps,
     double tp, double sl, int ma_len,
     const PPOConfig& config) {
-    
     json out = json::object();
+    std::cout << "[PPO_RL] Starting training: " << total_timesteps << " timesteps\n";
     
-    std::cout << "[PPO_RL] Training with total_timesteps=" << total_timesteps << "\n";
-    std::cout << "[PPO_RL] Config: lr=" << config.learning_rate 
-              << " gamma=" << config.gamma 
-              << " clip=" << config.clip_epsilon << "\n";
+    // TODO: Use real feature matrix from build_feature_matrix()
+    arma::mat features = arma::randn(1000, 32);
+    arma::vec future_returns = arma::randn(1000) * 0.01;
+    
+    // Normalize
+    arma::vec mu = arma::mean(features, 0).t();
+    arma::vec sd = arma::stddev(features, 0, 0).t();
+    for (arma::uword j = 0; j < features.n_cols; j++) {
+        double s = (std::isfinite(sd(j)) && sd(j) > 1e-12) ? sd(j) : 1.0;
+        features.col(j) = (features.col(j) - mu(j)) / s;
+    }
+    
+    TradingEnv env(features, future_returns, tp, sl);
+    Actor actor(features.n_cols, 64, 32);
+    Critic critic(features.n_cols, 64, 32);
+    
+    int num_updates = total_timesteps / config.rollout_steps;
+    double best_reward = -1e100;
+    
+    for (int update = 0; update < num_updates; update++) {
+        Rollout rollout = collect_rollout(env, actor, critic, config.rollout_steps);
+        arma::vec advantages = compute_gae(rollout.rewards, rollout.values, rollout.dones, config.gamma, config.lambda_gae);
+        arma::vec returns = advantages + rollout.values;
+        double adv_mean = arma::mean(advantages);
+        double adv_std = arma::stddev(advantages);
+        if (adv_std > 1e-8) advantages = (advantages - adv_mean) / (adv_std + 1e-8);
+        update_ppo(actor, critic, rollout, advantages, returns, config);
+        double avg_reward = arma::mean(rollout.rewards);
+        if (avg_reward > best_reward) best_reward = avg_reward;
+        if (update % 10 == 0) std::cout << "[PPO_RL] Update " << update << "/" << num_updates << " | Reward: " << avg_reward << "\n";
+    }
     
     out["ok"] = true;
     out["algorithm"] = "PPO_RL";
-    out["total_timesteps"] = total_timesteps;
-    out["message"] = "PPO with gradients - ready for training loop";
     out["best_thr"] = 0.5;
     out["metrics"] = json::object();
-    out["metrics"]["val_accuracy"] = 0.0;
-    out["metrics"]["val_reward"] = 0.0;
+    out["metrics"]["best_reward"] = best_reward;
     
     return out;
 }

@@ -69,5 +69,12 @@ inline json make_train_reply(const json& trainer_json,
         r["sd_len"]   = 0;
     }
 
+    // Copy PPO_RL weights if present
+    if (trainer_json.contains("actor_weights")) {
+        r["actor_weights"] = trainer_json["actor_weights"];
+    }
+    if (trainer_json.contains("critic_weights")) {
+        r["critic_weights"] = trainer_json["critic_weights"];
+    }
     return r;
 }

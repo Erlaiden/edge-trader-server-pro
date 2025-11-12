@@ -1,5 +1,6 @@
 #include "ppo_rl.h"
 #include "trading_env.h"
+#include "features/features.h"
 #include <cmath>
 
 namespace etai {
@@ -79,6 +80,49 @@ void SimpleNN::update_weights(const NNGradients& grads, double lr) {
     b2 -= lr * grads.db2;
     W3 -= lr * grads.dW3;
     b3 -= lr * grads.db3;
+}
+
+json SimpleNN::to_json() const {
+    json j;
+    j["W1"] = json::array();
+    j["W2"] = json::array();
+    j["W3"] = json::array();
+    j["b1"] = json::array();
+    j["b2"] = json::array();
+    j["b3"] = json::array();
+    
+    for (arma::uword i = 0; i < W1.n_elem; i++) j["W1"].push_back(W1(i));
+    for (arma::uword i = 0; i < W2.n_elem; i++) j["W2"].push_back(W2(i));
+    for (arma::uword i = 0; i < W3.n_elem; i++) j["W3"].push_back(W3(i));
+    for (arma::uword i = 0; i < b1.n_elem; i++) j["b1"].push_back(b1(i));
+    for (arma::uword i = 0; i < b2.n_elem; i++) j["b2"].push_back(b2(i));
+    for (arma::uword i = 0; i < b3.n_elem; i++) j["b3"].push_back(b3(i));
+    
+    j["W1_shape"] = json::array({(int)W1.n_rows, (int)W1.n_cols});
+    j["W2_shape"] = json::array({(int)W2.n_rows, (int)W2.n_cols});
+    j["W3_shape"] = json::array({(int)W3.n_rows, (int)W3.n_cols});
+    
+    return j;
+}
+
+void SimpleNN::from_json(const json& j) {
+    auto w1_shape = j["W1_shape"];
+    auto w2_shape = j["W2_shape"];
+    auto w3_shape = j["W3_shape"];
+    
+    W1.set_size(w1_shape[0].get<int>(), w1_shape[1].get<int>());
+    W2.set_size(w2_shape[0].get<int>(), w2_shape[1].get<int>());
+    W3.set_size(w3_shape[0].get<int>(), w3_shape[1].get<int>());
+    b1.set_size(w1_shape[0].get<int>());
+    b2.set_size(w2_shape[0].get<int>());
+    b3.set_size(w3_shape[0].get<int>());
+    
+    for (arma::uword i = 0; i < W1.n_elem; i++) W1(i) = j["W1"][i].get<double>();
+    for (arma::uword i = 0; i < W2.n_elem; i++) W2(i) = j["W2"][i].get<double>();
+    for (arma::uword i = 0; i < W3.n_elem; i++) W3(i) = j["W3"][i].get<double>();
+    for (arma::uword i = 0; i < b1.n_elem; i++) b1(i) = j["b1"][i].get<double>();
+    for (arma::uword i = 0; i < b2.n_elem; i++) b2(i) = j["b2"][i].get<double>();
+    for (arma::uword i = 0; i < b3.n_elem; i++) b3(i) = j["b3"][i].get<double>();
 }
 
 // ============================================================================
@@ -245,9 +289,63 @@ json trainPPO_RL(
     json out = json::object();
     std::cout << "[PPO_RL] Starting training: " << total_timesteps << " timesteps\n";
     
-    // TODO: Use real feature matrix from build_feature_matrix()
-    arma::mat features = arma::randn(1000, 32);
-    arma::vec future_returns = arma::randn(1000) * 0.01;
+    // Build real feature matrix from OHLCV data
+    if (raw15.n_rows < 300 || raw15.n_cols < 6) {
+        out["ok"] = false;
+        out["error"] = "insufficient_data";
+        return out;
+    }
+
+    arma::mat F = build_feature_matrix(raw15);
+    const arma::uword N = F.n_rows;
+    const arma::uword D = F.n_cols;
+    
+    std::cout << "[PPO_RL] Feature matrix: " << N << " rows x " << D << " cols\n";
+
+    // Compute future returns
+    arma::vec close = raw15.col(4);
+    arma::vec r(N, arma::fill::zeros);
+    for (arma::uword i = 0; i + 1 < N; ++i) {
+        double c0 = close(i), c1 = close(i + 1);
+        r(i) = (c0 > 0.0) ? (c1 / c0 - 1.0) : 0.0;
+    }
+    arma::vec future_returns = arma::shift(r, -1);
+    future_returns(N - 1) = 0.0;
+
+    // Filter by TP/SL thresholds
+    double thr_pos = std::max(1e-4, std::min(tp, 1e-1));
+    double thr_neg = std::max(1e-4, std::min(sl, 1e-1));
+    
+    std::vector<arma::uword> idx;
+    idx.reserve(N);
+    for (arma::uword i = 0; i < N; ++i) {
+        double fr = future_returns(i);
+        if (fr >= thr_pos || fr <= -thr_neg) {
+            idx.push_back(i);
+        }
+    }
+
+    const arma::uword M = idx.size();
+    std::cout << "[PPO_RL] Filtered " << M << " samples from " << N << " (TP=" << thr_pos << ", SL=" << thr_neg << ")\n";
+    
+    if (M < 200) {
+        out["ok"] = false;
+        out["error"] = "not_enough_labeled";
+        out["M_labeled"] = (int)M;
+        out["N_rows"] = (int)N;
+        return out;
+    }
+
+    // Use filtered samples
+    arma::mat features(M, D, arma::fill::zeros);
+    arma::vec filtered_returns(M, arma::fill::zeros);
+    for (arma::uword k = 0; k < M; ++k) {
+        arma::uword i = idx[k];
+        features.row(k) = F.row(i);
+        filtered_returns(k) = future_returns(i);
+    }
+    
+    future_returns = filtered_returns;
     
     // Normalize
     arma::vec mu = arma::mean(features, 0).t();
@@ -280,8 +378,27 @@ json trainPPO_RL(
     out["ok"] = true;
     out["algorithm"] = "PPO_RL";
     out["best_thr"] = 0.5;
+    
+    // Critical fields for model validation
+    out["version"] = 10;  // FEAT_VERSION (32 features with MFLOW)
+    out["feat_dim"] = (int)D;
+    out["tp"] = tp;
+    out["sl"] = sl;
+    
+    // Training results
     out["metrics"] = json::object();
     out["metrics"]["best_reward"] = best_reward;
+    out["metrics"]["M_labeled"] = (int)M;
+    out["metrics"]["N_rows"] = (int)N;
+    out["metrics"]["version"] = 10;
+    out["metrics"]["feat_dim"] = (int)D;
+    out["metrics"]["tp"] = tp;
+    out["metrics"]["sl"] = sl;
+    // Save Actor and Critic weights
+    out["actor_weights"] = actor.net.to_json();
+    out["critic_weights"] = critic.net.to_json();
+    
+    std::cout << "[PPO_RL] Weights saved to output JSON\n";
     
     return out;
 }
