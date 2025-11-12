@@ -1,0 +1,158 @@
+{
+  "trades": [
+    {
+      "confidence": 0.0,
+      "entry_price": 0.3343,
+      "exit_price": 0.3281,
+      "is_win": true,
+      "pnl_percent": 1.8546215973676288,
+      "signal": "SHORT",
+      "symbol": "LSKUSDT",
+      "threshold": 0.0,
+      "timestamp": "1762910868"
+    },
+    {
+      "confidence": 0.0,
+      "entry_price": 0.3399,
+      "exit_price": 0.3281,
+      "is_win": true,
+      "pnl_percent": 3.4716092968520087,
+      "signal": "SHORT",
+      "symbol": "LSKUSDT",
+      "threshold": 0.0,
+      "timestamp": "1762911097"
+    },
+    {
+      "confidence": 0.0,
+      "entry_price": 0.3422,
+      "exit_price": 0.3281,
+      "is_win": true,
+      "pnl_percent": 4.120397428404441,
+      "signal": "SHORT",
+      "symbol": "LSKUSDT",
+      "threshold": 0.0,
+      "timestamp": "1762912319"
+    },
+    {
+      "confidence": 0.0,
+      "entry_price": 0.3545,
+      "exit_price": 0.3281,
+      "is_win": true,
+      "pnl_percent": 7.4471086036671315,
+      "signal": "SHORT",
+      "symbol": "LSKUSDT",
+      "threshold": 0.0,
+      "timestamp": "1762912367"
+    },
+    {
+      "confidence": 0.0,
+      "entry_price": 0.3618,
+      "exit_price": 0.3281,
+      "is_win": true,
+      "pnl_percent": 9.314538419016033,
+      "signal": "SHORT",
+      "symbol": "LSKUSDT",
+      "threshold": 0.0,
+      "timestamp": "1762912625"
+    },
+    {
+      "confidence": 0.0,
+      "entry_price": 0.3375,
+      "exit_price": 0.3281,
+      "is_win": true,
+      "pnl_percent": 2.7851851851851905,
+      "signal": "SHORT",
+      "symbol": "LSKUSDT",
+      "threshold": 0.0,
+      "timestamp": "1762912673"
+    },
+    {
+      "confidence": 0.0,
+      "entry_price": 0.3255,
+      "exit_price": 0.3281,
+      "is_win": false,
+      "pnl_percent": -0.7987711213517639,
+      "signal": "SHORT",
+      "symbol": "LSKUSDT",
+      "threshold": 0.0,
+      "timestamp": "1762912931"
+    },
+    {
+      "confidence": 0.0,
+      "entry_price": 0.3353,
+      "exit_price": 0.3281,
+      "is_win": true,
+      "pnl_percent": 2.1473307485833537,
+      "signal": "SHORT",
+      "symbol": "LSKUSDT",
+      "threshold": 0.0,
+      "timestamp": "1762915330"
+    },
+    {
+      "confidence": 0.0,
+      "entry_price": 0.325,
+      "exit_price": 0.3281,
+      "is_win": false,
+      "pnl_percent": -0.9538461538461511,
+      "signal": "SHORT",
+      "symbol": "LSKUSDT",
+      "threshold": 0.0,
+      "timestamp": "1762916058"
+    },
+    {
+      "confidence": 0.0,
+      "entry_price": 0.3287,
+      "exit_price": 0.3281,
+      "is_win": true,
+      "pnl_percent": 0.182537268025552,
+      "signal": "SHORT",
+      "symbol": "LSKUSDT",
+      "threshold": 0.0,
+      "timestamp": "1762917389"
+    },
+    {
+      "confidence": 0.0,
+      "entry_price": 0.332,
+      "exit_price": 0.3363,
+      "is_win": false,
+      "pnl_percent": -1.2951807228915573,
+      "signal": "SHORT",
+      "symbol": "LSKUSDT",
+      "threshold": 0.0,
+      "timestamp": "1762918117"
+    },
+    {
+      "confidence": 0.0,
+      "entry_price": 0.332,
+      "exit_price": 0.3363,
+      "is_win": false,
+      "pnl_percent": -1.2951807228915573,
+      "signal": "SHORT",
+      "symbol": "LSKUSDT",
+      "threshold": 0.0,
+      "timestamp": "1762918118"
+    },
+    {
+      "confidence": 0.0,
+      "entry_price": 0.3458,
+      "exit_price": 0.3453,
+      "is_win": true,
+      "pnl_percent": 0.14459224985540786,
+      "signal": "SHORT",
+      "symbol": "LSKUSDT",
+      "threshold": 0.0,
+      "timestamp": "1762925480"
+    },
+    {
+      "confidence": 0.0,
+      "entry_price": 0.3563,
+      "exit_price": 0.3453,
+      "is_win": true,
+      "pnl_percent": 3.08728599494808,
+      "signal": "SHORT",
+      "symbol": "LSKUSDT",
+      "threshold": 0.0,
+      "timestamp": "1762925543"
+    }
+  ]
+}
