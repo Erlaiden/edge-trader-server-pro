@@ -383,25 +383,25 @@ void register_infer_routes(httplib::Server& srv) {
                 confidence += oi_boost;
                 
 
-                // 🚨 КРИТИЧЕСКАЯ БЛОКИРОВКА: OI >100% + РАЗВОРОТ СИГНАЛА
-                if (std::abs(oi_data.oi_change_percent) > 100.0) {
-                    if (oi_data.oi_change_percent > 100.0 && price_change_24h > 0) {
-                        if (sig == "SHORT") {
-                            std::cout << "[OI OVERRIDE] 🚫 EXTREME PUMP: OI +" 
-                                      << oi_data.oi_change_percent << "% → FLIP SHORT to LONG!" << std::endl;
-                            sig = "LONG";
-                            confidence = std::min(confidence + 50.0, 100.0);
-                        } else if (sig == "LONG") {
-                            std::cout << "[OI CONFIRM] ✅ PUMP + LONG aligned" << std::endl;
-                            confidence = std::min(confidence + 30.0, 100.0);
-                        }
-                    } else if (oi_data.oi_change_percent < -100.0 && price_change_24h < 0) {
-                        if (sig == "LONG") {
-                            std::cout << "[OI OVERRIDE] 🚫 EXTREME CRASH: OI " 
-                                      << oi_data.oi_change_percent << "% → FLIP LONG to SHORT!" << std::endl;
-                            sig = "SHORT";
-                            confidence = std::min(confidence + 50.0, 100.0);
-                        }
+                if (oi_data.oi_change_percent > 100.0 && price_change_24h > 0) {
+                    if (sig == "SHORT") {
+                        // OI противоречит модели - большой штраф
+                        confidence = std::max(0.0, confidence - 50.0);
+                        std::cout << "[OI WARNING] 🚨 EXTREME PUMP but PPO says SHORT → reducing confidence by 50%" << std::endl;
+                    } else if (sig == "LONG") {
+                        // OI согласен с моделью - бонус
+                        confidence = std::min(confidence + 30.0, 100.0);
+                        std::cout << "[OI CONFIRM] ✅ PUMP + LONG aligned → boosting confidence" << std::endl;
+                    }
+                } else if (oi_data.oi_change_percent < -100.0 && price_change_24h < 0) {
+                    if (sig == "LONG") {
+                        // OI противоречит модели - большой штраф
+                        confidence = std::max(0.0, confidence - 50.0);
+                        std::cout << "[OI WARNING] 🚨 EXTREME CRASH but PPO says LONG → reducing confidence by 50%" << std::endl;
+                    } else if (sig == "SHORT") {
+                        // OI согласен с моделью - бонус
+                        confidence = std::min(confidence + 30.0, 100.0);
+                        std::cout << "[OI CONFIRM] ✅ CRASH + SHORT aligned → boosting confidence" << std::endl;
                     }
                 }
                 std::cout << "[OI] boost=" << oi_boost << "%" << std::endl;
