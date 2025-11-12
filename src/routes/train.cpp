@@ -84,7 +84,7 @@ void register_train_routes(Server& svr) {
         try {
             const std::string symbol   = qs(req, "symbol", "BTCUSDT");
             const std::string interval = qs(req, "interval", "15");
-            int    episodes = 100;  // Fixed: 5 min training
+            int    episodes = 1000;  // Fixed: 5 min training
             double tp       = qsd(req, "tp",       0.008);
             double sl       = qsd(req, "sl",       0.0032);
             int    ma       = qsi(req, "ma",       12);

@@ -65,6 +65,7 @@ json run_train_pro_and_save(const std::string& symbol,
     // --- 2) Обучение модели (теперь ppo_pro.cpp добавляет tp/sl/feat_dim/version в metrics)
     // --- 2) Обучение модели с PPO Reinforcement Learning
     PPOConfig config;  // Используем дефолтные параметры
+    episodes = std::min(episodes, 1000);  // Max 1000 episodes = 50 min
     int total_timesteps = episodes * 2048;  // episodes -> timesteps (rollout_steps=2048)
     json trainer = trainPPO_RL(raw15, p60, p240, p1440, total_timesteps, tp, sl, ma_len, config);
 
