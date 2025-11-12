@@ -371,6 +371,28 @@ void register_infer_routes(httplib::Server& srv) {
                 double oi_boost = etai::analyze_oi_with_price(oi_data, price_change_24h, sig);
                 confidence += oi_boost;
                 
+
+                // 🚨 КРИТИЧЕСКАЯ БЛОКИРОВКА: OI >100% + РАЗВОРОТ СИГНАЛА
+                if (std::abs(oi_data.oi_change_percent) > 100.0) {
+                    if (oi_data.oi_change_percent > 100.0 && price_change_24h > 0) {
+                        if (sig == "SHORT") {
+                            std::cout << "[OI OVERRIDE] 🚫 EXTREME PUMP: OI +" 
+                                      << oi_data.oi_change_percent << "% → FLIP SHORT to LONG!" << std::endl;
+                            sig = "LONG";
+                            confidence = std::min(confidence + 50.0, 100.0);
+                        } else if (sig == "LONG") {
+                            std::cout << "[OI CONFIRM] ✅ PUMP + LONG aligned" << std::endl;
+                            confidence = std::min(confidence + 30.0, 100.0);
+                        }
+                    } else if (oi_data.oi_change_percent < -100.0 && price_change_24h < 0) {
+                        if (sig == "LONG") {
+                            std::cout << "[OI OVERRIDE] 🚫 EXTREME CRASH: OI " 
+                                      << oi_data.oi_change_percent << "% → FLIP LONG to SHORT!" << std::endl;
+                            sig = "SHORT";
+                            confidence = std::min(confidence + 50.0, 100.0);
+                        }
+                    }
+                }
                 std::cout << "[OI] boost=" << oi_boost << "%" << std::endl;
             }
             

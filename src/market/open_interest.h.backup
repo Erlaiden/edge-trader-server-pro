@@ -194,12 +194,7 @@ inline double analyze_oi_with_price(
         }
     }
     
-    // 5. Экстремальные изменения OI (>20%) - осторожность!
-    else if (std::abs(oi.oi_change_percent) > 20.0) {
-        boost = -10.0;  // Штраф за экстремальную нестабильность
-        std::cout << "[OI+PRICE] ⚠️ EXTREME OI change: " << oi.oi_change_percent 
-                  << "% - market unstable!" << std::endl;
-    }
+
     
     return boost;
 }
