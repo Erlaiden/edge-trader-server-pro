@@ -17,6 +17,8 @@ set(SRC_CORE
     src/rewardv2_accessors.cpp
     src/main.cpp
     src/ppo_pro.cpp
+    src/ppo_rl.cpp
+    src/trading_env.cpp
     src/ppo.cpp
     src/optim/adam.cpp
     src/utils_data.cpp
