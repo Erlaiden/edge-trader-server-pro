@@ -53,6 +53,7 @@ inline void enable_cors_and_errors(httplib::Server& svr){
 
 int main(int argc, char** argv) {
     int port = 3000;
+    chdir("/opt/edge-trader-server");
     if (argc > 1) port = std::atoi(argv[1]);
 
     etai::init_model_atoms_from_disk(

@@ -77,7 +77,7 @@ void register_symbol_routes(httplib::Server& srv) {
   etaiq::ensure_worker();
 
   // Read-only статус данных
-  srv.Get("/api/symbol/status", [](const httplib::Request& req, httplib::Response& res) {
+  srv.Get("/api/symbol/health", [](const httplib::Request& req, httplib::Response& res) {
     const std::string symbol   = normalize_symbol(qp(req, "symbol", "BTCUSDT"));
     const std::string interval = normalize_interval(qp(req, "interval", "15"));
     const int months           = clamp_months(qp(req, "months", "6"));

@@ -1,3 +1,4 @@
+#include <filesystem>
 #include "train_logic.h"
 #include "server_accessors.h"
 #include "ppo_pro.h"
@@ -121,6 +122,7 @@ json run_train_pro_and_save(const std::string& symbol,
 
     // --- 5) Сохранение модели на диск (только если валидна)
     const std::string model_path = "cache/models/" + symbol + "_" + interval + "_ppo_pro.json";
+        std::filesystem::create_directories("cache/models");
     {
         std::ofstream f(model_path);
         if (!f) {

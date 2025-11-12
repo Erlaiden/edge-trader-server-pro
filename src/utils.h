@@ -41,7 +41,7 @@ inline std::string canonical_interval(std::string interval) {
 }
 
 inline std::string cache_file(const std::string& symbol, const std::string& interval) {
-  return "cache/clean/" + symbol + "_" + canonical_interval(interval) + ".csv";
+  return "cache/" + symbol + "_" + canonical_interval(interval) + ".csv";
 }
 
 inline std::string join_csv(const std::vector<std::string>& cols) {
