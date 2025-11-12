@@ -6,6 +6,7 @@
 #include <iostream>
 #include <atomic>
 #include <map>
+#include "../market/dynamic_calibration.h"
 
 using json = nlohmann::json;
 
@@ -177,6 +178,39 @@ void trading_loop(const std::string& apiKey, const std::string& apiSecret) {
 
                         db::update_trade(track.trade_id, exit_price, pnl, "closed", "position_closed");
                         std::cout << "[ROBOT_LOOP] Trade closed: id=" << track.trade_id << " exit=" << exit_price << " pnl=" << pnl << std::endl;
+                        
+                        // =====================================================================
+                        // 📊 AUTO-CALIBRATION: Record trade result
+                        // =====================================================================
+                        try {
+                            double pnl_percent = (pnl / (track.entry_price * track.qty)) * 100.0;
+                            
+                            etai::TradeResult trade_result;
+                            trade_result.timestamp = std::to_string(std::time(nullptr));
+                            trade_result.symbol = config.symbol;
+                            trade_result.signal = track.side == "Buy" ? "LONG" : "SHORT";
+                            trade_result.entry_price = track.entry_price;
+                            trade_result.exit_price = exit_price;
+                            trade_result.pnl_percent = pnl_percent;
+                            trade_result.is_win = pnl > 0;
+                            trade_result.confidence = 0.0;  // TODO: сохранять при открытии
+                            trade_result.threshold = 0.0;   // TODO: сохранять при открытии
+                            
+                            etai::g_calibrator.add_trade(trade_result);
+                            
+                            std::cout << "[CALIBRATION] ✅ Trade recorded: " << trade_result.signal 
+                                      << " PnL=" << pnl_percent << "% Win=" << trade_result.is_win 
+                                      << " | Total: " << etai::g_calibrator.get_trade_count() << " trades" << std::endl;
+                            
+                            // Показываем статистику если достаточно сделок
+                            if (etai::g_calibrator.get_trade_count() >= 5) {
+                                auto stats = etai::g_calibrator.get_stats();
+                                std::cout << "[CALIBRATION] 📊 Win Rate: " << (stats["win_rate"].get<double>() * 100) 
+                                          << "% | Avg PnL: " << stats["avg_pnl"].get<double>() << "%" << std::endl;
+                            }
+                        } catch (const std::exception& e) {
+                            std::cerr << "[CALIBRATION] ❌ Error: " << e.what() << std::endl;
+                        }
                     }
 
                     position_tracker.erase(config.symbol);
