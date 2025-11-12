@@ -241,22 +241,12 @@ void register_infer_routes(httplib::Server& srv) {
 
             arma::mat raw15 = cached.M15.t();
 
-            bool use_ppo_rl = cached.model.contains("actor_weights");
             json inf;
             bool policy_success = false;
+
             for (int attempt = 0; attempt < 3 && !policy_success; ++attempt) {
                 try {
-                    if (use_ppo_rl) {
-                        inf = etai::ppo_rl_infer(raw15, cached.model);
-                        if (jbool(inf, "ok", false)) {
-                            inf["htf"] = json::object();
-                            inf["htf"]["60"] = json{{"agree", true}, {"score", 0.0}, {"strong", false}};
-                            inf["htf"]["240"] = json{{"agree", true}, {"score", 0.0}, {"strong", false}};
-                            inf["htf"]["1440"] = json{{"agree", true}, {"score", 0.0}, {"strong", false}};
-                        }
-                    } else {
-                        inf = etai::infer_with_policy_mtf(raw15, cached.model, p60, 12, p240, 12, p1440, 12);
-                    }
+                    inf = etai::infer_with_policy_mtf(raw15, cached.model, p60, 12, p240, 12, p1440, 12);
 
                     if (jbool(inf, "ok", false) &&
                         jint(inf, "feat_dim_used", 0) > 0 &&

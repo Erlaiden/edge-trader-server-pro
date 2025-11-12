@@ -74,4 +74,6 @@ json trainPPO_RL(
     const PPOConfig& config
 );
 
+json ppo_rl_infer(const arma::mat& raw15, const json& model);
+
 } // namespace etai

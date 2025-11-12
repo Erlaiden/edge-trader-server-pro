@@ -403,4 +403,83 @@ json trainPPO_RL(
     return out;
 }
 
+
+// ============================================================================
+// PPO_RL Inference Function
+// ============================================================================
+
+json ppo_rl_infer(const arma::mat& raw15, const json& model) {
+    std::cout << "[PPO_RL_INFER] Using Actor network for inference\n";
+    json out = json::object();
+    
+    // Check if model has actor weights
+    if (!model.contains("actor_weights")) {
+        out["ok"] = false;
+        out["error"] = "no_actor_weights";
+        return out;
+    }
+    
+    int feat_dim = model.value("feat_dim", 0);
+    if (feat_dim <= 0) {
+        out["ok"] = false;
+        out["error"] = "invalid_feat_dim";
+        return out;
+    }
+    
+    // Build features from raw OHLCV
+    arma::mat F = build_feature_matrix(raw15);
+    if (F.n_rows < 1 || (int)F.n_cols != feat_dim) {
+        out["ok"] = false;
+        out["error"] = "feature_mismatch";
+        return out;
+    }
+    
+    // Normalize features (using simple z-score for now)
+    arma::vec mu = arma::mean(F, 0).t();
+    arma::vec sd = arma::stddev(F, 0, 0).t();
+    for (arma::uword j = 0; j < F.n_cols; j++) {
+        double s = (std::isfinite(sd(j)) && sd(j) > 1e-12) ? sd(j) : 1.0;
+        F.col(j) = (F.col(j) - mu(j)) / s;
+    }
+    
+    // Load Actor weights
+    Actor actor(feat_dim, 64, 32);
+    try {
+        actor.net.from_json(model["actor_weights"]);
+    } catch (const std::exception& e) {
+        out["ok"] = false;
+        out["error"] = "actor_load_failed";
+        return out;
+    }
+    
+    // Get action probabilities for last state
+    arma::vec state = F.row(F.n_rows - 1).t();
+    arma::vec probs = actor.get_action_probs(state);
+    
+    // probs[0] = LONG probability, probs[1] = SHORT probability
+    double long_prob = probs(0);
+    double short_prob = probs(1);
+    
+    // Determine signal
+    std::string signal;
+    double confidence;
+    if (long_prob > short_prob) {
+        signal = "LONG";
+        confidence = long_prob * 100.0;
+    } else {
+        signal = "SHORT";
+        confidence = short_prob * 100.0;
+    }
+    
+    out["ok"] = true;
+    out["signal"] = signal;
+    out["score15"] = (long_prob - short_prob);  // Range: [-1, 1]
+    out["long_prob"] = long_prob;
+    out["short_prob"] = short_prob;
+    out["confidence"] = confidence;
+    out["feat_dim_used"] = feat_dim;
+    
+    return out;
+}
+
 } // namespace etai
