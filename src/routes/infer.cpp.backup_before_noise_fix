@@ -299,7 +299,7 @@ void register_infer_routes(httplib::Server& srv) {
                     htf_modifier = std::min(25.0, std::fabs(netHTF) * 8.0);
                 } else {
                     // HTF противоречит - небольшой штраф, но не обнуляем
-                    htf_modifier = 0.0; // DISABLED: htf_modifier = -std::min(15.0, std::fabs(netHTF) * 5.0);
+                    htf_modifier = -std::min(15.0, std::fabs(netHTF) * 5.0);
                 }
             }
             
@@ -319,23 +319,23 @@ void register_infer_routes(httplib::Server& srv) {
             
             // Применяем volume boost/penalty к confidence
             if (sig == "LONG" && (volume_signal.signal == "strong_buy" || volume_signal.signal == "accumulation")) {
-                // DISABLED: confidence += volume_signal.confidence_boost;
+                confidence += volume_signal.confidence_boost;
                 std::cout << "[VOLUME] ✅ LONG confirmed by volume!" << std::endl;
             }
             else if (sig == "SHORT" && (volume_signal.signal == "strong_sell" || volume_signal.signal == "distribution")) {
-                // DISABLED: confidence += volume_signal.confidence_boost;
+                confidence += volume_signal.confidence_boost;
                 std::cout << "[VOLUME] ✅ SHORT confirmed by volume!" << std::endl;
             }
             else if (sig == "LONG" && volume_signal.signal == "strong_sell") {
-                // DISABLED: confidence -= 15.0;
+                confidence -= 15.0;
                 std::cout << "[VOLUME] ⚠️ WARNING: LONG but volume shows SELL pressure!" << std::endl;
             }
             else if (sig == "SHORT" && volume_signal.signal == "strong_buy") {
-                // DISABLED: confidence -= 15.0;
+                confidence -= 15.0;
                 std::cout << "[VOLUME] ⚠️ WARNING: SHORT but volume shows BUY pressure!" << std::endl;
             }
             else if (volume_signal.signal == "low_volume_warning") {
-                // DISABLED: confidence += volume_signal.confidence_boost;
+                confidence += volume_signal.confidence_boost;
                 std::cout << "[VOLUME] ⚠️ Low volume - suspicious move!" << std::endl;
             }
             
@@ -405,15 +405,15 @@ void register_infer_routes(httplib::Server& srv) {
             auto sr_analysis = etai::analyze_support_resistance(cached.M15, 50);
             
             if (sr_analysis.position == "near_support" && sig == "LONG") {
-                // DISABLED: confidence += sr_analysis.confidence_boost;
+                confidence += sr_analysis.confidence_boost;
                 std::cout << "[S/R] LONG from support +" << sr_analysis.confidence_boost << "%" << std::endl;
             }
             else if (sr_analysis.position == "near_resistance" && sig == "SHORT") {
-                // DISABLED: confidence += std::abs(sr_analysis.confidence_boost);
+                confidence += std::abs(sr_analysis.confidence_boost);
                 std::cout << "[S/R] SHORT from resistance +" << std::abs(sr_analysis.confidence_boost) << "%" << std::endl;
             }
             else if (sr_analysis.position == "near_resistance" && sig == "LONG") {
-                // DISABLED: confidence += sr_analysis.confidence_boost;
+                confidence += sr_analysis.confidence_boost;
                 std::cout << "[S/R] LONG into resistance " << sr_analysis.confidence_boost << "%" << std::endl;
             }
             
@@ -457,27 +457,27 @@ void register_infer_routes(httplib::Server& srv) {
                 
                 // Применяем candle boost если направление совпадает
                 if (sig == "LONG" && candle_signal.signal == "bullish") {
-                    // DISABLED: confidence += candle_signal.confidence_boost;
+                    confidence += candle_signal.confidence_boost;
                     
                     if (candle_signal.is_reversal) {
                         std::cout << "[CANDLE] 🔥 BULLISH REVERSAL pattern detected!" << std::endl;
                     }
                 }
                 else if (sig == "SHORT" && candle_signal.signal == "bearish") {
-                    // DISABLED: confidence += candle_signal.confidence_boost;
+                    confidence += candle_signal.confidence_boost;
                     
                     if (candle_signal.is_reversal) {
                         std::cout << "[CANDLE] 🔥 BEARISH REVERSAL pattern detected!" << std::endl;
                     }
                 }
                 else if (candle_signal.signal == "neutral") {
-                    // DISABLED: confidence += candle_signal.confidence_boost;  // Обычно штраф для DOJI
+                    confidence += candle_signal.confidence_boost;  // Обычно штраф для DOJI
                     std::cout << "[CANDLE] ⚠️ Indecision - " << candle_signal.pattern_name << std::endl;
                 }
                 else if ((sig == "LONG" && candle_signal.signal == "bearish") ||
                          (sig == "SHORT" && candle_signal.signal == "bullish")) {
                     // Конфликт сигналов
-                    // DISABLED: confidence -= 10.0;
+                    confidence -= 10.0;
                     std::cout << "[CANDLE] ⚠️ Conflict: model says " << sig 
                               << " but candle is " << candle_signal.signal << std::endl;
                 }
