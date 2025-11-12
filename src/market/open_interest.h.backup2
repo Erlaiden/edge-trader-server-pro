@@ -194,27 +194,11 @@ inline double analyze_oi_with_price(
         }
     }
     
-    // 5. КРИТИЧЕСКИ ЭКСТРЕМАЛЬНЫЕ изменения OI (>100%) - БЛОКИРОВКА!
-    else if (std::abs(oi.oi_change_percent) > 100.0) {
-        if (oi.oi_change_percent > 100.0) {
-            if (price_change_24h > 0) {
-                if (signal == "LONG") {
-                    boost = 30.0;
-                    std::cout << "[OI+PRICE] 🔥 EXTREME PUMP: OI +" << oi.oi_change_percent << "%" << std::endl;
-                } else {
-                    boost = -50.0;
-                    std::cout << "[OI+PRICE] 🚫 BLOCKING SHORT: OI +" << oi.oi_change_percent << "%" << std::endl;
-                }
-            } else {
-                boost = -30.0;
-                std::cout << "[OI+PRICE] ⚠️ ANOMALY: OI +" << oi.oi_change_percent << "%" << std::endl;
-            }
-        }
-    }
-    // 6. Высокие изменения OI (20-100%)
+    // 5. Экстремальные изменения OI (>20%) - осторожность!
     else if (std::abs(oi.oi_change_percent) > 20.0) {
-        boost = -15.0;
-        std::cout << "[OI+PRICE] ⚠️ HIGH OI: " << oi.oi_change_percent << "%" << std::endl;
+        boost = -10.0;  // Штраф за экстремальную нестабильность
+        std::cout << "[OI+PRICE] ⚠️ EXTREME OI change: " << oi.oi_change_percent 
+                  << "% - market unstable!" << std::endl;
     }
     
     return boost;
