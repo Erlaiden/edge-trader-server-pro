@@ -92,7 +92,6 @@ void register_robot_routes(httplib::Server& svr) {
             out["ok"] = true;
             out["position"] = pos;
             res.set_content(out.dump(), "application/json");
-
         } catch(...) {
             res.set_content(out.dump(), "application/json");
         }
@@ -108,7 +107,6 @@ void register_robot_routes(httplib::Server& svr) {
         }
 
         json config = db::get_user_config(user_id);
-
         out["ok"] = true;
         out["config"] = config;
         res.set_content(out.dump(), "application/json");
@@ -141,7 +139,7 @@ void register_robot_routes(httplib::Server& svr) {
     // GET /api/robot/pnl - требует JWT
     svr.Get("/api/robot/pnl", [](const httplib::Request& req, httplib::Response& res){
         std::cout << "[DEBUG] /api/robot/pnl called" << std::endl;
-        
+
         int user_id;
         if (!jwt_middleware::require_auth(req, res, user_id)) {
             return;
@@ -184,7 +182,8 @@ void register_robot_routes(httplib::Server& svr) {
             cfg.balance_percent = cfg_json.value("balancePercent", 90.0);
             cfg.tp_percent = cfg_json.value("tpPercent", 2.0);
             cfg.sl_percent = cfg_json.value("slPercent", 1.0);
-            cfg.min_confidence = cfg_json.value("minConfidence", 60.0);
+            // ВАЖНО: по умолчанию порог уверенности берём мягкий (25%), дальше его можно крутить из приложения
+            cfg.min_confidence = cfg_json.value("minConfidence", 25.0);
             cfg.check_interval_sec = cfg_json.value("checkInterval", 60);
             cfg.auto_trade = cfg_json.value("autoTrade", false);
 

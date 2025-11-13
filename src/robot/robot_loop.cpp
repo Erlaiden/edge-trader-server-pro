@@ -6,6 +6,7 @@
 #include <iostream>
 #include <atomic>
 #include <map>
+#include <algorithm> // std::max
 #include "../market/dynamic_calibration.h"
 
 using json = nlohmann::json;
@@ -14,9 +15,11 @@ namespace robot {
 
 extern double get_balance(const std::string& apiKey, const std::string& apiSecret);
 extern json get_position(const std::string& apiKey, const std::string& apiSecret, const std::string& symbol);
+
 extern bool open_trade(const std::string& apiKey, const std::string& apiSecret,
                       const std::string& symbol, const std::string& side, double qty,
                       double tp_percent, double sl_percent, int leverage);
+
 extern bool update_stop_loss(const std::string& apiKey, const std::string& apiSecret,
                              const std::string& symbol, double new_sl_price);
 
@@ -68,7 +71,6 @@ void trading_loop(const std::string& apiKey, const std::string& apiSecret) {
 
             if (!position.is_null()) {
                 // ПОЗИЦИЯ СУЩЕСТВУЕТ
-
                 std::string side = position.value("side", "");
                 double entry_price = std::stod(position.value("avgPrice", "0"));
                 double current_price = std::stod(position.value("markPrice", "0"));
@@ -91,7 +93,6 @@ void trading_loop(const std::string& apiKey, const std::string& apiSecret) {
                     }
 
                     track.breakeven_applied = false;
-
                     track.trade_id = db::get_open_trade_id(current_user_id, config.symbol);
 
                     position_tracker[config.symbol] = track;
@@ -105,7 +106,6 @@ void trading_loop(const std::string& apiKey, const std::string& apiSecret) {
 
                 // BREAKEVEN ЛОГИКА
                 if (!track.breakeven_applied && track.tp_price > 0 && track.entry_price > 0) {
-
                     double distance_to_tp = 0.0;
                     double progress_percent = 0.0;
 
@@ -123,7 +123,6 @@ void trading_loop(const std::string& apiKey, const std::string& apiSecret) {
                               << " progress=" << (int)progress_percent << "% to TP" << std::endl;
 
                     if (progress_percent >= config.breakeven_trigger_percent) {
-
                         double new_sl = 0.0;
 
                         if (track.side == "Buy") {
@@ -156,11 +155,9 @@ void trading_loop(const std::string& apiKey, const std::string& apiSecret) {
 
                 std::this_thread::sleep_for(std::chrono::seconds(config.check_interval_sec));
                 continue;
-
             } else {
                 // НЕТ ПОЗИЦИИ
                 if (position_tracker.find(config.symbol) != position_tracker.end()) {
-
                     PositionTracking& track = position_tracker[config.symbol];
 
                     std::cout << "[ROBOT_LOOP] Position closed, clearing tracking" << std::endl;
@@ -177,14 +174,15 @@ void trading_loop(const std::string& apiKey, const std::string& apiSecret) {
                         }
 
                         db::update_trade(track.trade_id, exit_price, pnl, "closed", "position_closed");
-                        std::cout << "[ROBOT_LOOP] Trade closed: id=" << track.trade_id << " exit=" << exit_price << " pnl=" << pnl << std::endl;
-                        
+                        std::cout << "[ROBOT_LOOP] Trade closed: id=" << track.trade_id
+                                  << " exit=" << exit_price << " pnl=" << pnl << std::endl;
+
                         // =====================================================================
                         // 📊 AUTO-CALIBRATION: Record trade result
                         // =====================================================================
                         try {
                             double pnl_percent = (pnl / (track.entry_price * track.qty)) * 100.0;
-                            
+
                             etai::TradeResult trade_result;
                             trade_result.timestamp = std::to_string(std::time(nullptr));
                             trade_result.symbol = config.symbol;
@@ -195,17 +193,17 @@ void trading_loop(const std::string& apiKey, const std::string& apiSecret) {
                             trade_result.is_win = pnl > 0;
                             trade_result.confidence = 0.0;  // TODO: сохранять при открытии
                             trade_result.threshold = 0.0;   // TODO: сохранять при открытии
-                            
+
                             etai::g_calibrator.add_trade(trade_result);
-                            
-                            std::cout << "[CALIBRATION] ✅ Trade recorded: " << trade_result.signal 
-                                      << " PnL=" << pnl_percent << "% Win=" << trade_result.is_win 
+
+                            std::cout << "[CALIBRATION] ✅ Trade recorded: " << trade_result.signal
+                                      << " PnL=" << pnl_percent << "% Win=" << trade_result.is_win
                                       << " | Total: " << etai::g_calibrator.get_trade_count() << " trades" << std::endl;
-                            
-                            // Показываем статистику если достаточно сделок
+
                             if (etai::g_calibrator.get_trade_count() >= 5) {
                                 auto stats = etai::g_calibrator.get_stats();
-                                std::cout << "[CALIBRATION] 📊 Win Rate: " << (stats["win_rate"].get<double>() * 100) 
+                                std::cout << "[CALIBRATION] 📊 Win Rate: "
+                                          << (stats["win_rate"].get<double>() * 100)
                                           << "% | Avg PnL: " << stats["avg_pnl"].get<double>() << "%" << std::endl;
                             }
                         } catch (const std::exception& e) {
@@ -227,41 +225,43 @@ void trading_loop(const std::string& apiKey, const std::string& apiSecret) {
 
             std::string signal_type = signal.value("signal", "NEUTRAL");
             double confidence = signal.value("confidence", 0.0);
-            
+
             // 🤖 АДАПТИВНАЯ СИСТЕМА TP/SL (АВТОПИЛОТ)
             double atr = signal.value("atr", 0.0);
             double last_close = signal.value("last_close", 0.0);
-            
+
             double dynamic_tp, dynamic_sl;
-            
+
             if (atr > 0 && last_close > 0) {
-                // ATR в процентах от цены
                 double atr_percent = (atr / last_close) * 100.0;
-                
-                // 🎯 TP = 3x ATR (агрессивная прибыль, адаптируется к волатильности)
-                // 🛡️ SL = 2x ATR (широкий стоп, даёт рынку "дышать")
+
                 dynamic_tp = atr_percent * 3.0;
                 dynamic_sl = atr_percent * 2.0;
-                
-                // Границы безопасности
-                if (dynamic_tp < 1.5) dynamic_tp = 1.5;  // минимум 1.5%
-                if (dynamic_sl < 1.0) dynamic_sl = 1.0;  // минимум 1%
-                if (dynamic_tp > 8.0) dynamic_tp = 8.0;  // максимум 8%
-                if (dynamic_sl > 4.0) dynamic_sl = 4.0;  // максимум 4%
-                
-                std::cout << "[AUTO_TPSL] 🎯 ATR=" << std::fixed << std::setprecision(2) 
-                          << atr_percent << "% → TP=" << dynamic_tp 
+
+                if (dynamic_tp < 1.5) dynamic_tp = 1.5;
+                if (dynamic_sl < 1.0) dynamic_sl = 1.0;
+                if (dynamic_tp > 8.0) dynamic_tp = 8.0;
+                if (dynamic_sl > 4.0) dynamic_sl = 4.0;
+
+                std::cout << "[AUTO_TPSL] 🎯 ATR=" << std::fixed << std::setprecision(2)
+                          << atr_percent << "% → TP=" << dynamic_tp
                           << "% (3×ATR) | SL=" << dynamic_sl << "% (2×ATR)" << std::endl;
             } else {
-                // Fallback если ATR недоступен
-                dynamic_tp = 2.5;  // 2.5% по умолчанию
-                dynamic_sl = 1.5;  // 1.5% по умолчанию
+                dynamic_tp = 2.5;
+                dynamic_sl = 1.5;
                 std::cout << "[AUTO_TPSL] ⚠️  No ATR data, using safe defaults: TP=2.5% SL=1.5%" << std::endl;
             }
-            
+
+            // КАЛИБРОВАННЫЙ ПОРОГ ДЛЯ РОБОТА
+            double calibrated_threshold = signal.value("calibrated_threshold", config.min_confidence);
+            double effective_threshold = std::max(config.min_confidence, calibrated_threshold);
 
             std::cout << "[ROBOT_LOOP] Signal: " << signal_type
-                      << " confidence=" << confidence << "% price=" << last_close << std::endl;
+                      << " confidence=" << confidence
+                      << "% price=" << last_close
+                      << " thr_base=" << config.min_confidence
+                      << "% thr_calib=" << calibrated_threshold
+                      << "% thr_eff=" << effective_threshold << "%" << std::endl;
 
             if (signal_type == "NEUTRAL") {
                 std::cout << "[ROBOT_LOOP] Signal: HOLD" << std::endl;
@@ -269,8 +269,10 @@ void trading_loop(const std::string& apiKey, const std::string& apiSecret) {
                 continue;
             }
 
-            if (confidence < config.min_confidence) {
-                std::cout << "[ROBOT_LOOP] Low confidence: " << confidence << "%" << std::endl;
+            if (confidence < effective_threshold) {
+                std::cout << "[ROBOT_LOOP] Low confidence: " << confidence
+                          << "% < thr=" << effective_threshold << "% (base="
+                          << config.min_confidence << "% calib=" << calibrated_threshold << "%)" << std::endl;
                 std::this_thread::sleep_for(std::chrono::seconds(config.check_interval_sec));
                 continue;
             }
@@ -313,12 +315,11 @@ void trading_loop(const std::string& apiKey, const std::string& apiSecret) {
             std::cout << "[ROBOT_LOOP]    TP: " << dynamic_tp << "% SL: " << dynamic_sl << "%" << std::endl;
 
             bool success = open_trade(apiKey, apiSecret, config.symbol, side, qty,
-                                     dynamic_tp, dynamic_sl, config.leverage);
+                                      dynamic_tp, dynamic_sl, config.leverage);
 
             if (success) {
                 std::cout << "[ROBOT_LOOP] ✅ Trade opened successfully!" << std::endl;
 
-                // Получаем реальную позицию чтобы сохранить правильные TP/SL
                 auto new_position = get_position(apiKey, apiSecret, config.symbol);
                 double real_entry = last_close;
                 double real_tp = 0.0;
@@ -328,7 +329,7 @@ void trading_loop(const std::string& apiKey, const std::string& apiSecret) {
                     real_entry = std::stod(new_position.value("avgPrice", std::to_string(last_close)));
                     std::string tp_str = new_position.value("takeProfit", "");
                     std::string sl_str = new_position.value("stopLoss", "");
-                    
+
                     if (!tp_str.empty() && tp_str != "0") {
                         real_tp = std::stod(tp_str);
                     }
@@ -337,11 +338,9 @@ void trading_loop(const std::string& apiKey, const std::string& apiSecret) {
                     }
                 }
 
-                // Сохраняем в БД
                 int trade_id = db::save_trade(current_user_id, config.symbol, side, qty,
-                                               real_entry, real_tp, real_sl);
+                                              real_entry, real_tp, real_sl);
 
-                // Инициализируем tracking
                 PositionTracking track;
                 track.user_id = current_user_id;
                 track.trade_id = trade_id;
@@ -354,7 +353,6 @@ void trading_loop(const std::string& apiKey, const std::string& apiSecret) {
                 position_tracker[config.symbol] = track;
 
                 std::cout << "[ROBOT_LOOP] 📝 Saved to DB with trade_id=" << trade_id << std::endl;
-
             } else {
                 std::cout << "[ROBOT_LOOP] ❌ Trade failed" << std::endl;
             }
@@ -375,13 +373,11 @@ bool start(const std::string& apiKey, const std::string& apiSecret, const RobotC
         std::cout << "[ROBOT_LOOP] Already running" << std::endl;
         return false;
     }
-
     config = cfg;
     current_user_id = user_id;
     robot_running = true;
     robot_thread = new std::thread(trading_loop, apiKey, apiSecret);
     robot_thread->detach();
-
     return true;
 }
 

@@ -20,6 +20,7 @@
 #include <iostream>
 #include "../market/volatility_regime.h"
 #include <atomic>
+#include "../market/dynamic_calibration.h"
 
 using json = nlohmann::json;
 
@@ -81,7 +82,6 @@ static inline double atr14_from_M(const arma::mat& M) {
     double alpha = 1.0/14.0;
     double ema = 0.0;
     bool init=false;
-
     for (size_t i = N-15; i < N; ++i) {
         double hi = (double)M.row(2)(i);
         double lo = (double)M.row(3)(i);
@@ -122,6 +122,7 @@ void register_infer_routes(httplib::Server& srv) {
     srv.Get("/api/infer/feat_cols", [&](const httplib::Request& req, httplib::Response& res){
         std::string symbol   = qp(req, "symbol", "BTCUSDT");
         std::string interval = qp(req, "interval", "15");
+
         arma::mat raw;
         json out{{"ok", false}};
         if (!etai::load_raw_ohlcv(symbol, interval, raw)) {
@@ -129,21 +130,23 @@ void register_infer_routes(httplib::Server& srv) {
             res.set_content(out.dump(), "application/json");
             return;
         }
+
         arma::mat F = etai::build_feature_matrix(raw);
-        out["ok"] = true;
-        out["raw_rows"] = (int)raw.n_rows;
-        out["raw_cols"] = (int)raw.n_cols;
-        out["F_rows"]   = (int)F.n_rows;
-        out["F_cols"]   = (int)F.n_cols;
+
+        out["ok"]      = true;
+        out["raw_rows"]= (int)raw.n_rows;
+        out["raw_cols"]= (int)raw.n_cols;
+        out["F_rows"]  = (int)F.n_rows;
+        out["F_cols"]  = (int)F.n_cols;
         res.set_content(out.dump(), "application/json");
     });
 
     srv.Get("/api/infer/stats", [&](const httplib::Request&, httplib::Response& res){
         json out{
-            {"cache_hits", (unsigned long long)CACHE_HITS.load()},
-            {"cache_misses", (unsigned long long)CACHE_MISSES.load()},
+            {"cache_hits",      (unsigned long long)CACHE_HITS.load()},
+            {"cache_misses",    (unsigned long long)CACHE_MISSES.load()},
             {"policy_failures", (unsigned long long)POLICY_FAILURES.load()},
-            {"total_requests", (unsigned long long)REQUEST_COUNTER.load()}
+            {"total_requests",  (unsigned long long)REQUEST_COUNTER.load()}
         };
         res.set_content(out.dump(), "application/json");
     });
@@ -200,26 +203,25 @@ void register_infer_routes(httplib::Server& srv) {
                     return;
                 }
 
-                cached.M15 = etai::load_cached_matrix(symbol, interval);
+                cached.M15   = etai::load_cached_matrix(symbol, interval);
                 if (cached.M15.n_elem == 0) {
                     json out{{"ok",false},{"error","no_cached_data"}};
                     res.set_content(out.dump(), "application/json");
                     return;
                 }
 
-                cached.M60 = etai::load_cached_matrix(symbol, "60");
-                cached.M240 = etai::load_cached_matrix(symbol, "240");
+                cached.M60   = etai::load_cached_matrix(symbol, "60");
+                cached.M240  = etai::load_cached_matrix(symbol, "240");
                 cached.M1440 = etai::load_cached_matrix(symbol, "1440");
 
                 cached.loaded_at = std::chrono::steady_clock::now();
                 etai::get_infer_cache().put(symbol, interval, cached);
             }
 
-            int version = jint(cached.model, "version", 0);
-            int feat_dim = jint(cached.model, "feat_dim", 0);
+            int version   = jint(cached.model, "version", 0);
+            int feat_dim  = jint(cached.model, "feat_dim", 0);
             double best_thr = jnum(cached.model, "best_thr", 0.5);
-            int ma_len = jint(cached.model, "ma_len", 12);
-
+            int ma_len    = jint(cached.model, "ma_len", 12);
             double model_tp = jnum(cached.model, "tp", 0.02);
             double model_sl = jnum(cached.model, "sl", 0.01);
 
@@ -229,14 +231,13 @@ void register_infer_routes(httplib::Server& srv) {
                 return;
             }
 
-            double atr = atr14_from_M(cached.M15);
+            double atr     = atr14_from_M(cached.M15);
             double avg_atr = avg_atr_from_M(cached.M15);
 
             arma::mat M60_t, M240_t, M1440_t;
             const arma::mat *p60 = nullptr, *p240 = nullptr, *p1440 = nullptr;
-
-            if (cached.M60.n_elem) { M60_t = cached.M60.t(); p60 = &M60_t; }
-            if (cached.M240.n_elem) { M240_t = cached.M240.t(); p240 = &M240_t; }
+            if (cached.M60.n_elem)   { M60_t   = cached.M60.t();   p60   = &M60_t;   }
+            if (cached.M240.n_elem)  { M240_t  = cached.M240.t();  p240  = &M240_t;  }
             if (cached.M1440.n_elem) { M1440_t = cached.M1440.t(); p1440 = &M1440_t; }
 
             arma::mat raw15 = cached.M15.t();
@@ -250,8 +251,8 @@ void register_infer_routes(httplib::Server& srv) {
                         inf = etai::ppo_rl_infer(raw15, cached.model);
                         if (jbool(inf, "ok", false)) {
                             inf["htf"] = json::object();
-                            inf["htf"]["60"] = json{{"agree", true}, {"score", 0.0}, {"strong", false}};
-                            inf["htf"]["240"] = json{{"agree", true}, {"score", 0.0}, {"strong", false}};
+                            inf["htf"]["60"]   = json{{"agree", true}, {"score", 0.0}, {"strong", false}};
+                            inf["htf"]["240"]  = json{{"agree", true}, {"score", 0.0}, {"strong", false}};
                             inf["htf"]["1440"] = json{{"agree", true}, {"score", 0.0}, {"strong", false}};
                         }
                     } else {
@@ -278,7 +279,7 @@ void register_infer_routes(httplib::Server& srv) {
             }
 
             std::string sig = jstr(inf, "signal", "NEUTRAL");
-            double score15 = jnum(inf, "score15", 0.0);
+            double score15  = jnum(inf, "score15", 0.0);
 
             LAST_INFER_TS.store((long long)time(nullptr)*1000, std::memory_order_relaxed);
 
@@ -289,67 +290,59 @@ void register_infer_routes(httplib::Server& srv) {
             // =====================================================================
             // 🚀 НОВАЯ УМНАЯ ЛОГИКА РАСЧЕТА CONFIDENCE
             // =====================================================================
-            
+
             // 1. Базовая уверенность от силы сигнала модели (независимо от порога!)
             double signal_strength = std::fabs(score15);
             double base_confidence = signal_strength * 100.0;  // 0.28 -> 28%
-            
+
             // 2. Учитываем если сигнал сильнее обычного
             if (signal_strength > 0.3) {
                 base_confidence += (signal_strength - 0.3) * 150.0;  // Бонус за силу >0.3
             }
-            
+
             // 3. Бонус/штраф от HTF согласованности
             double htf_modifier = 0.0;
             if (netHTF != 0) {
-                // Проверяем согласован ли HTF с сигналом модели
                 bool htf_agrees = (score15 > 0 && netHTF > 0) || (score15 < 0 && netHTF < 0);
-                
+
                 if (htf_agrees) {
-                    // HTF согласен - сильный бонус
                     htf_modifier = std::min(25.0, std::fabs(netHTF) * 8.0);
                 } else {
-                    // HTF противоречит - небольшой штраф, но не обнуляем
-                    htf_modifier = 0.0; // DISABLED: htf_modifier = -std::min(15.0, std::fabs(netHTF) * 5.0);
+                    // Штраф отключён, чтобы HTF не душил робота
+                    htf_modifier = 0.0;
                 }
             }
-            
+
             double confidence = base_confidence + htf_modifier;
             confidence = std::max(0.0, std::min(100.0, confidence));
 
             // =====================================================================
             // 📊 VOLUME ANALYSIS - критично для скальпинга!
             // =====================================================================
-            
+
             auto volume_signal = etai::analyze_volume(cached.M15, 20);
-            
-            std::cout << "[VOLUME] signal=" << volume_signal.signal 
-                      << " ratio=" << volume_signal.volume_ratio 
+
+            std::cout << "[VOLUME] signal=" << volume_signal.signal
+                      << " ratio=" << volume_signal.volume_ratio
                       << " OBV=" << volume_signal.obv
                       << " boost=" << volume_signal.confidence_boost << "%" << std::endl;
-            
-            // Применяем volume boost/penalty к confidence
+
             if (sig == "LONG" && (volume_signal.signal == "strong_buy" || volume_signal.signal == "accumulation")) {
-                // DISABLED: confidence += volume_signal.confidence_boost;
                 std::cout << "[VOLUME] ✅ LONG confirmed by volume!" << std::endl;
             }
             else if (sig == "SHORT" && (volume_signal.signal == "strong_sell" || volume_signal.signal == "distribution")) {
-                // DISABLED: confidence += volume_signal.confidence_boost;
                 std::cout << "[VOLUME] ✅ SHORT confirmed by volume!" << std::endl;
             }
             else if (sig == "LONG" && volume_signal.signal == "strong_sell") {
-                // DISABLED: confidence -= 15.0;
                 std::cout << "[VOLUME] ⚠️ WARNING: LONG but volume shows SELL pressure!" << std::endl;
             }
             else if (sig == "SHORT" && volume_signal.signal == "strong_buy") {
-                // DISABLED: confidence -= 15.0;
                 std::cout << "[VOLUME] ⚠️ WARNING: SHORT but volume shows BUY pressure!" << std::endl;
             }
             else if (volume_signal.signal == "low_volume_warning") {
-                // DISABLED: confidence += volume_signal.confidence_boost;
                 std::cout << "[VOLUME] ⚠️ Low volume - suspicious move!" << std::endl;
             }
-            
+
             // Дивергенция
             bool has_divergence = etai::detect_volume_divergence(cached.M15, 10);
             if (has_divergence) {
@@ -358,16 +351,15 @@ void register_infer_routes(httplib::Server& srv) {
                     confidence += 12.0;
                 }
             }
-            
-            confidence = std::max(0.0, std::min(100.0, confidence));
 
+            confidence = std::max(0.0, std::min(100.0, confidence));
 
             // =====================================================================
             // 💰 OPEN INTEREST ANALYSIS
             // =====================================================================
-            
+
             auto oi_data = etai::get_open_interest(symbol, "1h");
-            
+
             if (oi_data.data_available) {
                 double price_24h_ago = 0.0;
                 if (cached.M15.n_cols >= 96) {
@@ -378,244 +370,205 @@ void register_infer_routes(httplib::Server& srv) {
                 if (price_24h_ago > 0) {
                     price_change_24h = ((current_price - price_24h_ago) / price_24h_ago) * 100.0;
                 }
-                
+
                 double oi_boost = etai::analyze_oi_with_price(oi_data, price_change_24h, sig);
                 confidence += oi_boost;
-                
 
                 if (oi_data.oi_change_percent > 100.0 && price_change_24h > 0) {
                     if (sig == "SHORT") {
-                        // OI противоречит модели - большой штраф
                         confidence = std::max(0.0, confidence - 50.0);
                         std::cout << "[OI WARNING] 🚨 EXTREME PUMP but PPO says SHORT → reducing confidence by 50%" << std::endl;
                     } else if (sig == "LONG") {
-                        // OI согласен с моделью - бонус
                         confidence = std::min(confidence + 30.0, 100.0);
                         std::cout << "[OI CONFIRM] ✅ PUMP + LONG aligned → boosting confidence" << std::endl;
                     }
                 } else if (oi_data.oi_change_percent < -100.0 && price_change_24h < 0) {
                     if (sig == "LONG") {
-                        // OI противоречит модели - большой штраф
                         confidence = std::max(0.0, confidence - 50.0);
                         std::cout << "[OI WARNING] 🚨 EXTREME CRASH but PPO says LONG → reducing confidence by 50%" << std::endl;
                     } else if (sig == "SHORT") {
-                        // OI согласен с моделью - бонус
                         confidence = std::min(confidence + 30.0, 100.0);
                         std::cout << "[OI CONFIRM] ✅ CRASH + SHORT aligned → boosting confidence" << std::endl;
                     }
                 }
                 std::cout << "[OI] boost=" << oi_boost << "%" << std::endl;
             }
-            
+
             confidence = std::max(0.0, std::min(100.0, confidence));
 
             // =====================================================================
             // 📊 SUPPORT/RESISTANCE ANALYSIS
             // =====================================================================
-            
+
             auto sr_analysis = etai::analyze_support_resistance(cached.M15, 50);
-            
+
             if (sr_analysis.position == "near_support" && sig == "LONG") {
-                // DISABLED: confidence += sr_analysis.confidence_boost;
                 std::cout << "[S/R] LONG from support +" << sr_analysis.confidence_boost << "%" << std::endl;
             }
             else if (sr_analysis.position == "near_resistance" && sig == "SHORT") {
-                // DISABLED: confidence += std::abs(sr_analysis.confidence_boost);
                 std::cout << "[S/R] SHORT from resistance +" << std::abs(sr_analysis.confidence_boost) << "%" << std::endl;
             }
             else if (sr_analysis.position == "near_resistance" && sig == "LONG") {
-                // DISABLED: confidence += sr_analysis.confidence_boost;
                 std::cout << "[S/R] LONG into resistance " << sr_analysis.confidence_boost << "%" << std::endl;
             }
-            
+
             confidence = std::max(0.0, std::min(100.0, confidence));
 
+            // =====================================================================
+            // 💸 FUNDING RATE / ORDERBOOK ANALYSIS
+            // =====================================================================
 
-            // =====================================================================
-            // 💸 FUNDING RATE ANALYSIS
-            // =====================================================================
-            
-            // Order Book Analysis
             auto orderbook = etai::get_order_book(symbol, 50);
             double orderbook_boost = 0.0;
             if (orderbook.data_available) {
                 orderbook_boost = etai::apply_orderbook_boost(orderbook, sig);
                 confidence += orderbook_boost;
             }
-            
-            // Funding Rate Analysis
+
             auto funding_data = etai::get_funding_rate(symbol);
-            
+
             if (funding_data.data_available) {
                 double funding_boost = etai::apply_funding_boost(funding_data, sig);
                 confidence += funding_boost;
                 std::cout << "[FUNDING] boost=" << funding_boost << "%" << std::endl;
             }
-            
+
             confidence = std::max(0.0, std::min(100.0, confidence));
 
             // =====================================================================
             // 🕯️ CANDLESTICK PATTERN ANALYSIS
             // =====================================================================
-            
+
             auto candle_signal = etai::analyze_candles(cached.M15);
-            
+
             if (candle_signal.pattern != etai::CandlePattern::NONE) {
                 std::cout << "[CANDLE] Pattern: " << candle_signal.pattern_name
                           << " | Signal: " << candle_signal.signal
                           << " | Strength: " << candle_signal.strength
                           << " | Boost: " << candle_signal.confidence_boost << "%" << std::endl;
-                
-                // Применяем candle boost если направление совпадает
+
                 if (sig == "LONG" && candle_signal.signal == "bullish") {
-                    // DISABLED: confidence += candle_signal.confidence_boost;
-                    
                     if (candle_signal.is_reversal) {
                         std::cout << "[CANDLE] 🔥 BULLISH REVERSAL pattern detected!" << std::endl;
                     }
                 }
                 else if (sig == "SHORT" && candle_signal.signal == "bearish") {
-                    // DISABLED: confidence += candle_signal.confidence_boost;
-                    
                     if (candle_signal.is_reversal) {
                         std::cout << "[CANDLE] 🔥 BEARISH REVERSAL pattern detected!" << std::endl;
                     }
                 }
                 else if (candle_signal.signal == "neutral") {
-                    // DISABLED: confidence += candle_signal.confidence_boost;  // Обычно штраф для DOJI
                     std::cout << "[CANDLE] ⚠️ Indecision - " << candle_signal.pattern_name << std::endl;
                 }
                 else if ((sig == "LONG" && candle_signal.signal == "bearish") ||
                          (sig == "SHORT" && candle_signal.signal == "bullish")) {
-                    // Конфликт сигналов
-                    // DISABLED: confidence -= 10.0;
-                    std::cout << "[CANDLE] ⚠️ Conflict: model says " << sig 
+                    std::cout << "[CANDLE] ⚠️ Conflict: model says " << sig
                               << " but candle is " << candle_signal.signal << std::endl;
                 }
             }
-            
+
             confidence = std::max(0.0, std::min(100.0, confidence));
 
-
-            
             // Логируем расчет
-            std::cout << "[CONFIDENCE] signal_strength=" << signal_strength 
-                      << " base=" << base_confidence 
-                      << " netHTF=" << netHTF 
+            std::cout << "[CONFIDENCE] signal_strength=" << signal_strength
+                      << " base=" << base_confidence
+                      << " netHTF=" << netHTF
                       << " htf_mod=" << htf_modifier
                       << " final=" << confidence << "%" << std::endl;
 
             // =====================================================================
             // 🎯 ОПРЕДЕЛЕНИЕ РЕЖИМА И АДАПТИВНОГО ПОРОГА
             // =====================================================================
-            
+
             json safe_htf = (inf.contains("htf") && inf["htf"].is_object()) ? inf["htf"] : json::object();
-            
+
             etai::MarketRegime regime = etai::detect_regime(safe_htf, cached.M15, atr, avg_atr);
             etai::RegimeParams params = etai::get_regime_params(regime);
             std::string regime_str = etai::regime_to_string(regime);
-            
+
             std::string marketMode = "adaptive";
-            if (score15 > 0.2) marketMode = "bullish";
+            if (score15 > 0.2)      marketMode = "bullish";
             else if (score15 < -0.2) marketMode = "bearish";
-            else marketMode = "neutral";
+            else                    marketMode = "neutral";
 
             std::string original_sig = sig;
             double original_conf = confidence;
-            
-            // =====================================================================
-            // 🔥 АДАПТИВНЫЙ ПОРОГ - зависит от режима и направления сигнала
-            // =====================================================================
-            
+
             double adaptive_threshold = params.min_confidence;
-            
+
             if (regime == etai::MarketRegime::RANGE_BOUND && params.use_mean_reversion) {
-                // ФЛЕТ: mean reversion
                 double channel_pos = etai::get_channel_position(cached.M15, atr);
-                
                 if ((channel_pos > 0.80 && sig == "SHORT") || (channel_pos < 0.20 && sig == "LONG")) {
-                    // Хорошая позиция для mean reversion - ОЧЕНЬ низкий порог
                     adaptive_threshold = 15.0;
                     std::cout << "[RANGE] Good mean reversion setup, threshold lowered to 20%" << std::endl;
                 } else if (channel_pos > 0.40 && channel_pos < 0.60) {
-                    // Середина канала - высокий порог
                     adaptive_threshold = 30.0;
                 } else {
                     adaptive_threshold = 22.0;
                 }
             } else if (regime == etai::MarketRegime::MANIPULATION) {
-                // Манипуляция - не торгуем
                 sig = "NEUTRAL";
                 confidence = 0.0;
                 adaptive_threshold = 100.0;
             } else {
-                // Тренды, коррекции, пробои
-                
-                // Определяем согласованность сигнала с режимом
                 bool signal_with_trend = false;
                 bool signal_against_trend = false;
-                
+
                 if (sig == "LONG") {
-                    signal_with_trend = (netHTF > 0);
+                    signal_with_trend    = (netHTF > 0);
                     signal_against_trend = (netHTF < -1);
                 } else if (sig == "SHORT") {
-                    signal_with_trend = (netHTF < 0);
+                    signal_with_trend    = (netHTF < 0);
                     signal_against_trend = (netHTF > 1);
                 }
-                
+
                 if (signal_with_trend) {
-                    // ПО ТРЕНДУ - агрессивный вход, низкий порог
-                    adaptive_threshold = params.min_confidence * 0.5;  // 35% -> 21%
+                    adaptive_threshold = params.min_confidence * 0.5;
                     std::cout << "[TREND] Signal with trend, threshold=" << adaptive_threshold << "%" << std::endl;
-                    
                 } else if (signal_against_trend) {
-                    // ПРОТИВ ТРЕНДА - осторожно, высокий порог
-                    adaptive_threshold = params.min_confidence * 1.2;  // 35% -> 52.5%
+                    adaptive_threshold = params.min_confidence * 1.2;
                     std::cout << "[COUNTER] Signal against trend, threshold=" << adaptive_threshold << "%" << std::endl;
-                    
                 } else {
-                    // НЕЙТРАЛЬНО - обычный порог
                     adaptive_threshold = params.min_confidence;
                 }
             }
-            
+
+            // Калиброванный порог по фактической истории робота
+            double calibrated_threshold = etai::g_calibrator.get_calibrated_threshold(adaptive_threshold);
+
             // =====================================================================
             // ✅ ФИНАЛЬНОЕ РЕШЕНИЕ
             // =====================================================================
-            
-            // Проверяем пороговое значение
-            if (confidence < adaptive_threshold) {
+
+            if (confidence < calibrated_threshold) {
                 sig = "NEUTRAL";
-                std::cout << "[FILTER] Confidence " << confidence 
-                          << "% below threshold " << adaptive_threshold 
-                          << "%, signal blocked" << std::endl;
+                std::cout << "[FILTER] Confidence " << confidence
+                          << "% below calibrated threshold " << calibrated_threshold
+                          << "% (base=" << adaptive_threshold << "%), signal blocked" << std::endl;
             }
-            
+
             // ИСКЛЮЧЕНИЕ: Если модель ОЧЕНЬ уверена (>70%) - торгуем в любом случае!
             if (confidence >= 70.0 && sig == "NEUTRAL" && original_sig != "NEUTRAL") {
-                sig = original_sig;  // Восстанавливаем сигнал
-                std::cout << "[OVERRIDE] High confidence " << confidence 
+                sig = original_sig;
+                std::cout << "[OVERRIDE] High confidence " << confidence
                           << "% overrides filters, signal: " << sig << std::endl;
             }
-            
-            // Логируем финальное решение
+
             if (sig != original_sig || std::fabs(confidence - original_conf) > 2.0) {
                 std::cerr << "[DECISION] Regime=" << regime_str
                           << " | Original: " << original_sig << " @ " << (int)original_conf << "%"
                           << " | Final: " << sig << " @ " << (int)confidence << "%"
-                          << " | Threshold: " << (int)adaptive_threshold << "%" << std::endl;
+                          << " | Threshold: " << (int)calibrated_threshold
+                          << "% (base " << (int)adaptive_threshold << "%)" << std::endl;
             }
 
-            // Обновляем счётчики
-            if (sig == "LONG") INFER_SIG_LONG.fetch_add(1, std::memory_order_relaxed);
-            else if (sig == "SHORT") INFER_SIG_SHORT.fetch_add(1, std::memory_order_relaxed);
-            else INFER_SIG_NEUTRAL.fetch_add(1, std::memory_order_relaxed);
+            if (sig == "LONG")      INFER_SIG_LONG.fetch_add(1, std::memory_order_relaxed);
+            else if (sig == "SHORT")INFER_SIG_SHORT.fetch_add(1, std::memory_order_relaxed);
+            else                    INFER_SIG_NEUTRAL.fetch_add(1, std::memory_order_relaxed);
 
-            // TP/SL из regime params
             double final_tp = params.tp_percent;
             double final_sl = params.sl_percent;
 
-            // Для пробоев - адаптивные уровни
             if (regime == etai::MarketRegime::BREAKOUT_UP || regime == etai::MarketRegime::BREAKOUT_DOWN) {
                 double atr_percent = (atr / (double)cached.M15.row(4)(cached.M15.n_cols-1));
                 double multiplier = std::min(atr_percent / 0.02, 3.0);
@@ -662,6 +615,7 @@ void register_infer_routes(httplib::Server& srv) {
                 {"market_mode", marketMode},
                 {"confidence", confidence},
                 {"adaptive_threshold", adaptive_threshold},
+                {"calibrated_threshold", calibrated_threshold},
                 {"netHTF", netHTF},
                 {"htf", safe_htf},
                 {"feat_dim_used", jint(inf, "feat_dim_used", 0)},
@@ -678,12 +632,11 @@ void register_infer_routes(httplib::Server& srv) {
                 {"model_base_sl", model_sl}
             };
 
-            // Добавляем цены для TP/SL
             if (cached.M15.n_rows >= 5 && cached.M15.n_cols >= 1) {
                 double last = (double)cached.M15.row(4)(cached.M15.n_cols - 1);
-                out["last_close"] = last;
-                out["tp_price_long"] = last * (1.0 + final_tp);
-                out["sl_price_long"] = last * (1.0 - final_sl);
+                out["last_close"]     = last;
+                out["tp_price_long"]  = last * (1.0 + final_tp);
+                out["sl_price_long"]  = last * (1.0 - final_sl);
                 out["tp_price_short"] = last * (1.0 - final_tp);
                 out["sl_price_short"] = last * (1.0 + final_sl);
 
