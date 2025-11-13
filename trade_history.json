@@ -2,116 +2,6 @@
   "trades": [
     {
       "confidence": 0.0,
-      "entry_price": 0.3343,
-      "exit_price": 0.3281,
-      "is_win": true,
-      "pnl_percent": 1.8546215973676288,
-      "signal": "SHORT",
-      "symbol": "LSKUSDT",
-      "threshold": 0.0,
-      "timestamp": "1762910868"
-    },
-    {
-      "confidence": 0.0,
-      "entry_price": 0.3399,
-      "exit_price": 0.3281,
-      "is_win": true,
-      "pnl_percent": 3.4716092968520087,
-      "signal": "SHORT",
-      "symbol": "LSKUSDT",
-      "threshold": 0.0,
-      "timestamp": "1762911097"
-    },
-    {
-      "confidence": 0.0,
-      "entry_price": 0.3422,
-      "exit_price": 0.3281,
-      "is_win": true,
-      "pnl_percent": 4.120397428404441,
-      "signal": "SHORT",
-      "symbol": "LSKUSDT",
-      "threshold": 0.0,
-      "timestamp": "1762912319"
-    },
-    {
-      "confidence": 0.0,
-      "entry_price": 0.3545,
-      "exit_price": 0.3281,
-      "is_win": true,
-      "pnl_percent": 7.4471086036671315,
-      "signal": "SHORT",
-      "symbol": "LSKUSDT",
-      "threshold": 0.0,
-      "timestamp": "1762912367"
-    },
-    {
-      "confidence": 0.0,
-      "entry_price": 0.3618,
-      "exit_price": 0.3281,
-      "is_win": true,
-      "pnl_percent": 9.314538419016033,
-      "signal": "SHORT",
-      "symbol": "LSKUSDT",
-      "threshold": 0.0,
-      "timestamp": "1762912625"
-    },
-    {
-      "confidence": 0.0,
-      "entry_price": 0.3375,
-      "exit_price": 0.3281,
-      "is_win": true,
-      "pnl_percent": 2.7851851851851905,
-      "signal": "SHORT",
-      "symbol": "LSKUSDT",
-      "threshold": 0.0,
-      "timestamp": "1762912673"
-    },
-    {
-      "confidence": 0.0,
-      "entry_price": 0.3255,
-      "exit_price": 0.3281,
-      "is_win": false,
-      "pnl_percent": -0.7987711213517639,
-      "signal": "SHORT",
-      "symbol": "LSKUSDT",
-      "threshold": 0.0,
-      "timestamp": "1762912931"
-    },
-    {
-      "confidence": 0.0,
-      "entry_price": 0.3353,
-      "exit_price": 0.3281,
-      "is_win": true,
-      "pnl_percent": 2.1473307485833537,
-      "signal": "SHORT",
-      "symbol": "LSKUSDT",
-      "threshold": 0.0,
-      "timestamp": "1762915330"
-    },
-    {
-      "confidence": 0.0,
-      "entry_price": 0.325,
-      "exit_price": 0.3281,
-      "is_win": false,
-      "pnl_percent": -0.9538461538461511,
-      "signal": "SHORT",
-      "symbol": "LSKUSDT",
-      "threshold": 0.0,
-      "timestamp": "1762916058"
-    },
-    {
-      "confidence": 0.0,
-      "entry_price": 0.3287,
-      "exit_price": 0.3281,
-      "is_win": true,
-      "pnl_percent": 0.182537268025552,
-      "signal": "SHORT",
-      "symbol": "LSKUSDT",
-      "threshold": 0.0,
-      "timestamp": "1762917389"
-    },
-    {
-      "confidence": 0.0,
       "entry_price": 0.332,
       "exit_price": 0.3363,
       "is_win": false,
@@ -167,36 +57,168 @@
     },
     {
       "confidence": 0.0,
-      "entry_price": 1.5962,
-      "exit_price": 1.6074,
+      "entry_price": 0.34713,
+      "exit_price": 0.34764,
+      "is_win": true,
+      "pnl_percent": 0.14691902169216445,
+      "signal": "LONG",
+      "symbol": "ESPORTSUSDT",
+      "threshold": 0.0,
+      "timestamp": "1762973533"
+    },
+    {
+      "confidence": 0.0,
+      "entry_price": 0.34713,
+      "exit_price": 0.34764,
       "is_win": false,
       "pnl_percent": null,
       "signal": "LONG",
-      "symbol": "XNOUSDT",
+      "symbol": "ESPORTSUSDT",
       "threshold": 0.0,
-      "timestamp": "1762953785"
+      "timestamp": "1762973835"
     },
     {
       "confidence": 0.0,
-      "entry_price": 1.6074,
-      "exit_price": 1.6074,
+      "entry_price": 0.37399208,
+      "exit_price": 0.34764,
       "is_win": false,
-      "pnl_percent": 0.0,
+      "pnl_percent": -7.046159907985217,
       "signal": "LONG",
-      "symbol": "XNOUSDT",
+      "symbol": "ESPORTSUSDT",
       "threshold": 0.0,
-      "timestamp": "1762953795"
+      "timestamp": "1762974740"
     },
     {
       "confidence": 0.0,
-      "entry_price": 1.6074,
-      "exit_price": 1.6074,
+      "entry_price": 0.3654,
+      "exit_price": 0.34764,
       "is_win": false,
-      "pnl_percent": 0.0,
+      "pnl_percent": -4.860426929392446,
       "signal": "LONG",
-      "symbol": "XNOUSDT",
+      "symbol": "ESPORTSUSDT",
       "threshold": 0.0,
-      "timestamp": "1762953809"
+      "timestamp": "1762975946"
+    },
+    {
+      "confidence": 0.0,
+      "entry_price": 0.39424,
+      "exit_price": 0.39172,
+      "is_win": false,
+      "pnl_percent": -0.6392045454545371,
+      "signal": "LONG",
+      "symbol": "ESPORTSUSDT",
+      "threshold": 0.0,
+      "timestamp": "1762979756"
+    },
+    {
+      "confidence": 0.0,
+      "entry_price": 0.38588951,
+      "exit_price": 0.39172,
+      "is_win": true,
+      "pnl_percent": 1.5109221289793604,
+      "signal": "LONG",
+      "symbol": "ESPORTSUSDT",
+      "threshold": 0.0,
+      "timestamp": "1762980360"
+    },
+    {
+      "confidence": 0.0,
+      "entry_price": 0.37470667,
+      "exit_price": 0.39172,
+      "is_win": true,
+      "pnl_percent": 4.540439592388359,
+      "signal": "LONG",
+      "symbol": "ESPORTSUSDT",
+      "threshold": 0.0,
+      "timestamp": "1762980963"
+    },
+    {
+      "confidence": 0.0,
+      "entry_price": 0.35494,
+      "exit_price": 0.39172,
+      "is_win": true,
+      "pnl_percent": 10.3623147574238,
+      "signal": "LONG",
+      "symbol": "ESPORTSUSDT",
+      "threshold": 0.0,
+      "timestamp": "1762981265"
+    },
+    {
+      "confidence": 0.0,
+      "entry_price": 0.38334724,
+      "exit_price": 0.36028,
+      "is_win": false,
+      "pnl_percent": -6.0173225715672265,
+      "signal": "LONG",
+      "symbol": "ESPORTSUSDT",
+      "threshold": 0.0,
+      "timestamp": "1762984281"
+    },
+    {
+      "confidence": 0.0,
+      "entry_price": 0.36897,
+      "exit_price": 0.36028,
+      "is_win": false,
+      "pnl_percent": -2.3552050302192673,
+      "signal": "LONG",
+      "symbol": "ESPORTSUSDT",
+      "threshold": 0.0,
+      "timestamp": "1762984885"
+    },
+    {
+      "confidence": 0.0,
+      "entry_price": 0.35945714,
+      "exit_price": 0.36028,
+      "is_win": true,
+      "pnl_percent": 0.22891741696937246,
+      "signal": "LONG",
+      "symbol": "ESPORTSUSDT",
+      "threshold": 0.0,
+      "timestamp": "1762986394"
+    },
+    {
+      "confidence": 0.0,
+      "entry_price": 0.38682,
+      "exit_price": 0.37705,
+      "is_win": false,
+      "pnl_percent": -2.5257225582958482,
+      "signal": "LONG",
+      "symbol": "ESPORTSUSDT",
+      "threshold": 0.0,
+      "timestamp": "1762994460"
+    },
+    {
+      "confidence": 0.0,
+      "entry_price": 0.36797848,
+      "exit_price": 0.37705,
+      "is_win": true,
+      "pnl_percent": 2.465231118950217,
+      "signal": "LONG",
+      "symbol": "ESPORTSUSDT",
+      "threshold": 0.0,
+      "timestamp": "1762994651"
+    },
+    {
+      "confidence": 0.0,
+      "entry_price": 0.35806,
+      "exit_price": 0.37705,
+      "is_win": true,
+      "pnl_percent": 5.30358040551863,
+      "signal": "LONG",
+      "symbol": "ESPORTSUSDT",
+      "threshold": 0.0,
+      "timestamp": "1762994763"
+    },
+    {
+      "confidence": 0.0,
+      "entry_price": 0.37543,
+      "exit_price": 0.37478,
+      "is_win": false,
+      "pnl_percent": -0.17313480542311058,
+      "signal": "LONG",
+      "symbol": "ESPORTSUSDT",
+      "threshold": 0.0,
+      "timestamp": "1763004987"
     }
   ]
 }
